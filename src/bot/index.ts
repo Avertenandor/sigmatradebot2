@@ -41,6 +41,8 @@ import {
   handleRequestWithdrawal,
   handleWithdrawalAmountInput,
   handleWithdrawalHistory,
+  handleTransactionHistory,
+  handleTransactionHistoryFilter,
   handleReferrals,
   handleReferralLink,
   handleReferralStats,
@@ -143,6 +145,13 @@ export const initializeBot = (): Telegraf => {
   bot.action('request_withdrawal', handleRequestWithdrawal);
   bot.action('withdrawal_history', handleWithdrawalHistory);
   bot.action(/^withdrawal_history_\d+$/, handleWithdrawalHistory);
+
+  /**
+   * Transaction History
+   */
+  bot.action('transaction_history', handleTransactionHistory);
+  bot.action(/^transaction_history_\d+$/, handleTransactionHistory);
+  bot.action(/^transaction_filter_\w+$/, handleTransactionHistoryFilter);
 
   /**
    * Referrals

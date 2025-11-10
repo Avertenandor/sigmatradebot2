@@ -9,4 +9,5 @@ export * from './profile.handler';
 export * from './deposit.handler';
 export * from './withdrawal.handler';
 export * from './referral.handler';
+export * from './transaction.handler';
 export * from './admin.handler';

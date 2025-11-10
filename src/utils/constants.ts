@@ -72,6 +72,7 @@ export enum TransactionStatus {
 // Transaction types
 export enum TransactionType {
   DEPOSIT = 'deposit',
+  WITHDRAWAL = 'withdrawal',
   REFERRAL_REWARD = 'referral_reward',
   SYSTEM_PAYOUT = 'system_payout',
 }
@@ -202,6 +203,7 @@ export const BUTTON_LABELS = {
   DEPOSITS: '💰 Депозиты',
   WITHDRAWALS: '💸 Вывод средств',
   REFERRALS: '🤝 Рефералы',
+  TRANSACTIONS: '📊 История транзакций',
   HELP: '❓ Помощь',
   ADMIN_PANEL: '👑 Админ-панель',
 
