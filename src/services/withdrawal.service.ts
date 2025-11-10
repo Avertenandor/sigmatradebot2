@@ -182,6 +182,112 @@ export class WithdrawalService {
   }
 
   /**
+   * Approve withdrawal (admin only)
+   */
+  async approveWithdrawal(
+    transactionId: number,
+    txHash: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const withdrawal = await this.transactionRepository.findOne({
+        where: {
+          id: transactionId,
+          type: TransactionType.WITHDRAWAL,
+          status: TransactionStatus.PENDING,
+        },
+        relations: ['user'],
+      });
+
+      if (!withdrawal) {
+        return { success: false, error: 'Заявка на вывод не найдена или уже обработана' };
+      }
+
+      // Update withdrawal status
+      withdrawal.status = TransactionStatus.CONFIRMED;
+      withdrawal.tx_hash = txHash;
+      await this.transactionRepository.save(withdrawal);
+
+      logger.info('Withdrawal approved', {
+        transactionId,
+        userId: withdrawal.user_id,
+        amount: withdrawal.amount,
+        txHash,
+      });
+
+      return { success: true };
+    } catch (error) {
+      logger.error('Error approving withdrawal', {
+        transactionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { success: false, error: 'Ошибка при подтверждении заявки' };
+    }
+  }
+
+  /**
+   * Reject withdrawal (admin only)
+   */
+  async rejectWithdrawal(
+    transactionId: number,
+    reason?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const withdrawal = await this.transactionRepository.findOne({
+        where: {
+          id: transactionId,
+          type: TransactionType.WITHDRAWAL,
+          status: TransactionStatus.PENDING,
+        },
+        relations: ['user'],
+      });
+
+      if (!withdrawal) {
+        return { success: false, error: 'Заявка на вывод не найдена или уже обработана' };
+      }
+
+      // Update withdrawal status
+      withdrawal.status = TransactionStatus.FAILED;
+      await this.transactionRepository.save(withdrawal);
+
+      logger.info('Withdrawal rejected', {
+        transactionId,
+        userId: withdrawal.user_id,
+        amount: withdrawal.amount,
+        reason,
+      });
+
+      return { success: true };
+    } catch (error) {
+      logger.error('Error rejecting withdrawal', {
+        transactionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { success: false, error: 'Ошибка при отклонении заявки' };
+    }
+  }
+
+  /**
+   * Get withdrawal by ID (admin only)
+   */
+  async getWithdrawalById(transactionId: number): Promise<Transaction | null> {
+    try {
+      return await this.transactionRepository.findOne({
+        where: {
+          id: transactionId,
+          type: TransactionType.WITHDRAWAL,
+        },
+        relations: ['user'],
+      });
+    } catch (error) {
+      logger.error('Error getting withdrawal by ID', {
+        transactionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  }
+
+  /**
    * Get minimum withdrawal amount
    */
   getMinWithdrawalAmount(): number {

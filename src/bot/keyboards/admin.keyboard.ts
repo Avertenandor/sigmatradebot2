@@ -11,6 +11,7 @@ import { BUTTON_LABELS } from '../../utils/constants';
  */
 export const getAdminPanelKeyboard = () => {
   return Markup.inlineKeyboard([
+    [Markup.button.callback(BUTTON_LABELS.PENDING_WITHDRAWALS, 'admin_pending_withdrawals')],
     [Markup.button.callback(BUTTON_LABELS.BROADCAST_MESSAGE, 'admin_broadcast')],
     [Markup.button.callback(BUTTON_LABELS.SEND_TO_USER, 'admin_send_to_user')],
     [

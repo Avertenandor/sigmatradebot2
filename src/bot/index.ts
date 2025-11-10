@@ -61,6 +61,9 @@ import {
   handleUnbanUserInput,
   handleStartPromoteAdmin,
   handlePromoteAdminInput,
+  handlePendingWithdrawals,
+  handleApproveWithdrawal,
+  handleRejectWithdrawal,
 } from './handlers';
 
 // Context types
@@ -177,6 +180,9 @@ export const initializeBot = (): Telegraf => {
   bot.action('admin_ban_user', handleStartBanUser);
   bot.action('admin_unban_user', handleStartUnbanUser);
   bot.action('admin_promote', handleStartPromoteAdmin);
+  bot.action('admin_pending_withdrawals', handlePendingWithdrawals);
+  bot.action(/^admin_approve_withdrawal_\d+$/, handleApproveWithdrawal);
+  bot.action(/^admin_reject_withdrawal_\d+$/, handleRejectWithdrawal);
 
   /**
    * No-op action (for non-clickable buttons)

@@ -231,6 +231,7 @@ export const BUTTON_LABELS = {
   BAN_USER: '🚫 Забанить пользователя',
   UNBAN_USER: '✅ Разбанить пользователя',
   PROMOTE_ADMIN: '👑 Назначить админа',
+  PENDING_WITHDRAWALS: '💸 Заявки на вывод',
   PLATFORM_STATS: '📊 Статистика платформы',
 
   // Navigation
