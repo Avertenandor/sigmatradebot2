@@ -11,6 +11,7 @@ import { isValidBSCAddress, isValidEmail, isValidPhone } from '../../utils/valid
 import { getCancelButton, getMainKeyboard } from '../keyboards';
 import userService from '../../services/user.service';
 import referralService from '../../services/referral.service';
+import { notificationService } from '../../services/notification.service';
 import { createLogger } from '../../utils/logger.util';
 import { Markup } from 'telegraf';
 
@@ -121,6 +122,15 @@ export const handleWalletInput = async (ctx: Context) => {
         userId: result.user.id,
         referrerId,
       });
+
+      // Notify referrer about new referral
+      const referrerUser = await userService.findById(referrerId);
+      if (referrerUser) {
+        await notificationService.notifyNewReferral(
+          referrerUser.telegram_id,
+          result.user.username
+        );
+      }
     }
   }
 

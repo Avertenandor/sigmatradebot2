@@ -15,6 +15,7 @@ import { User } from '../database/entities/User.entity';
 import { Referral } from '../database/entities/Referral.entity';
 import { TransactionStatus, TransactionType } from '../utils/constants';
 import { blockchainService } from './blockchain.service';
+import { notificationService } from './notification.service';
 import { logger } from '../utils/logger.util';
 
 export class PaymentService {
@@ -168,6 +169,13 @@ export class PaymentService {
         `✅ Payment successful: ${totalAmount} USDT to user ${user.telegram_id} (tx: ${paymentResult.txHash})`
       );
 
+      // Send notification to user about payment
+      await notificationService.notifyPaymentSent(
+        user.telegram_id,
+        totalAmount,
+        paymentResult.txHash!
+      );
+
       return {
         processed: earnings.length,
         successful: earnings.length,
@@ -235,6 +243,13 @@ export class PaymentService {
 
         logger.info(
           `💵 Created earning: ${reward.reward} USDT for user ${referral.referrer.telegram_id} (level ${referral.level})`
+        );
+
+        // Notify referrer about earning
+        await notificationService.notifyReferralEarning(
+          referral.referrer.telegram_id,
+          reward.reward,
+          referral.level
         );
       }
 

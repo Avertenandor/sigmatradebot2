@@ -9,6 +9,7 @@ import { createLogger } from '../utils/logger.util';
 import { DEPOSIT_LEVELS, REQUIRED_REFERRALS_PER_LEVEL, TransactionStatus } from '../utils/constants';
 import userService from './user.service';
 import { paymentService } from './payment.service';
+import { notificationService } from './notification.service';
 
 const logger = createLogger('DepositService');
 
@@ -302,6 +303,20 @@ export class DepositService {
         amount: deposit.amount,
         blockNumber,
       });
+
+      // Get user for notifications
+      const userRepo = AppDataSource.getRepository(User);
+      const user = await userRepo.findOne({ where: { id: deposit.user_id } });
+
+      // Send notification to user
+      if (user) {
+        await notificationService.notifyDepositConfirmed(
+          user.telegram_id,
+          parseFloat(deposit.amount),
+          deposit.level,
+          txHash
+        );
+      }
 
       // Find associated transaction for source_transaction_id
       const transactionRepo = AppDataSource.getRepository(Transaction);

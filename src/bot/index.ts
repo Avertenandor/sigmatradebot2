@@ -6,6 +6,7 @@
 import { Telegraf } from 'telegraf';
 import { config } from '../config';
 import { createLogger } from '../utils/logger.util';
+import { notificationService } from '../services/notification.service';
 
 // Middlewares
 import {
@@ -69,6 +70,9 @@ export type BotContext = AuthContext & SessionContext & AdminContext;
  */
 export const initializeBot = (): Telegraf => {
   const bot = new Telegraf(config.telegram.botToken);
+
+  // Initialize notification service with bot instance
+  notificationService.setBot(bot);
 
   // Apply global middlewares
   bot.use(loggerMiddleware);
