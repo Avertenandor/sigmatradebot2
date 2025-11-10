@@ -15,6 +15,7 @@ import {
   authMiddleware,
   banMiddleware,
   adminMiddleware,
+  requireAuthenticated,
   rateLimitMiddleware,
   registrationRateLimitMiddleware,
 } from './middlewares';
@@ -73,6 +74,13 @@ import {
   handleMasterKeyInput,
   handleAdminLogout,
   handleAdminSession,
+  handleRewardSessions,
+  handleRewardStats,
+  handleCalculateRewards,
+  handleToggleSession,
+  handleDeleteSession,
+  handleStartCreateSession,
+  handleRewardSessionInput,
 } from './handlers';
 
 // Context types
@@ -206,6 +214,16 @@ export const initializeBot = (): Telegraf => {
   bot.action(/^admin_reject_withdrawal_\d+$/, handleRejectWithdrawal);
 
   /**
+   * Reward sessions
+   */
+  bot.action('reward_sessions', handleRewardSessions);
+  bot.action(/^reward_stats_\d+$/, handleRewardStats);
+  bot.action(/^reward_calculate_\d+$/, handleCalculateRewards);
+  bot.action(/^reward_toggle_\d+$/, handleToggleSession);
+  bot.action(/^reward_delete_\d+$/, handleDeleteSession);
+  bot.action('reward_create', handleStartCreateSession);
+
+  /**
    * No-op action (for non-clickable buttons)
    */
   bot.action('noop', async (ctx) => {
@@ -259,6 +277,10 @@ export const initializeBot = (): Telegraf => {
 
       case BotState.AWAITING_ADMIN_MASTER_KEY:
         await handleMasterKeyInput(ctx);
+        break;
+
+      case BotState.AWAITING_REWARD_SESSION_DATA:
+        await handleRewardSessionInput(ctx);
         break;
 
       default:

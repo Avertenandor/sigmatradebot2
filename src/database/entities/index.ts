@@ -11,3 +11,5 @@ export { ReferralEarning } from './ReferralEarning.entity';
 export { Admin } from './Admin.entity';
 export { AdminSession } from './AdminSession.entity';
 export { UserAction } from './UserAction.entity';
+export { RewardSession } from './RewardSession.entity';
+export { DepositReward } from './DepositReward.entity';

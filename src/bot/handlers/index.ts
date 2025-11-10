@@ -12,3 +12,4 @@ export * from './referral.handler';
 export * from './transaction.handler';
 export * from './admin.handler';
 export * from './admin-auth.handler';
+export * from './reward.handler';

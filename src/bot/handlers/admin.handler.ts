@@ -21,8 +21,36 @@ import { Admin } from '../../database/entities';
 import { createLogger, logAdminAction } from '../../utils/logger.util';
 import adminService from '../../services/admin.service';
 import { maskMasterKey } from '../../utils/admin-auth.util';
+import { config } from '../../config';
 
 const logger = createLogger('AdminHandler');
+
+/**
+ * Check if admin is authenticated (or is super admin from config)
+ * Returns true if authenticated, false if not (and sends error message)
+ */
+const requireAuthenticatedAdmin = async (ctx: Context): Promise<boolean> => {
+  const adminCtx = ctx as AdminContext;
+
+  // Super admin from config doesn't need session
+  if (adminCtx.isSuperAdmin && ctx.from?.id === config.telegram.superAdminId) {
+    return true;
+  }
+
+  if (!adminCtx.isAuthenticated) {
+    if (ctx.callbackQuery) {
+      await ctx.answerCbQuery('🔐 Требуется вход. Используйте /admin_login', { show_alert: true });
+    } else {
+      await ctx.reply(
+        '🔐 Требуется аутентификация.\n\n' +
+        'Используйте команду /admin_login для входа с мастер-ключом.'
+      );
+    }
+    return false;
+  }
+
+  return true;
+};
 
 /**
  * Handle admin panel main menu
@@ -32,6 +60,11 @@ export const handleAdminPanel = async (ctx: Context) => {
 
   if (!adminCtx.isAdmin) {
     await ctx.answerCbQuery(ERROR_MESSAGES.ADMIN_ONLY);
+    return;
+  }
+
+  // Require authentication
+  if (!(await requireAuthenticatedAdmin(ctx))) {
     return;
   }
 
@@ -70,6 +103,10 @@ export const handleAdminStats = async (ctx: Context) => {
 
   if (!adminCtx.isAdmin) {
     await ctx.answerCbQuery(ERROR_MESSAGES.ADMIN_ONLY);
+    return;
+  }
+
+  if (!(await requireAuthenticatedAdmin(ctx))) {
     return;
   }
 
@@ -137,6 +174,10 @@ export const handleStartBroadcast = async (ctx: Context) => {
 
   if (!adminCtx.isAdmin) {
     await ctx.answerCbQuery(ERROR_MESSAGES.ADMIN_ONLY);
+    return;
+  }
+
+  if (!(await requireAuthenticatedAdmin(ctx))) {
     return;
   }
 
