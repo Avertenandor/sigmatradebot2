@@ -71,6 +71,32 @@ export class ReferralService {
         (await this.userRepository.findOne({ where: { id: directReferrerId } }))!
       );
 
+      // Detect referral loops: check if new user is already in the referral chain
+      // This prevents circular referral chains (A → B → C → A)
+      const referrerIds = referrers.map((r) => r.id);
+      if (referrerIds.includes(newUserId)) {
+        logger.warn('Referral loop detected', {
+          newUserId,
+          directReferrerId,
+          chainIds: referrerIds,
+        });
+        return {
+          success: false,
+          error: 'Нельзя создать циклическую реферальную цепочку',
+        };
+      }
+
+      // Also check if new user would become their own referrer
+      if (newUserId === directReferrerId) {
+        logger.warn('Self-referral attempt detected', {
+          userId: newUserId,
+        });
+        return {
+          success: false,
+          error: 'Нельзя пригласить самого себя',
+        };
+      }
+
       // Track if direct referrer was notified
       let directReferrerNotified = false;
 
