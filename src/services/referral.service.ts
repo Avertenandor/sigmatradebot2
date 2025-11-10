@@ -159,12 +159,16 @@ export class ReferralService {
 
       return { success: true };
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error creating referral relationships', {
         newUserId,
         directReferrerId,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage,
       });
-      return { success: false, error: 'Ошибка при создании реферальных связей' };
+      return {
+        success: false,
+        error: `Не удалось создать реферальную связь: ${errorMessage.includes('duplicate') ? 'связь уже существует' : errorMessage.includes('not found') ? 'реферер не найден' : 'внутренняя ошибка'}`,
+      };
     }
   }
 

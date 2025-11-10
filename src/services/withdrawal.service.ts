@@ -78,11 +78,14 @@ export class WithdrawalService {
         return { transaction };
       });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error creating withdrawal request', {
         userId: data.userId,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage,
       });
-      return { error: 'Ошибка при создании заявки на вывод' };
+      return {
+        error: `Не удалось создать заявку на вывод: ${errorMessage.includes('balance') ? 'проблема с балансом' : errorMessage.includes('wallet') ? 'проблема с кошельком' : 'внутренняя ошибка'}`,
+      };
     }
   }
 

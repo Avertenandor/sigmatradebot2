@@ -187,11 +187,15 @@ export class UserService {
 
       return { user };
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error creating user', {
         telegramId: data.telegramId,
-        error: error instanceof Error ? error.message : String(error),
+        username: data.username,
+        error: errorMessage,
       });
-      return { error: 'Ошибка при создании пользователя' };
+      return {
+        error: `Не удалось зарегистрировать пользователя: ${errorMessage.includes('duplicate') || errorMessage.includes('unique') ? 'пользователь уже существует' : errorMessage.includes('wallet') ? 'некорректный адрес кошелька' : 'ошибка базы данных'}`,
+      };
     }
   }
 

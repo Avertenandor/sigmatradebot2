@@ -299,11 +299,15 @@ export class DepositService {
 
       return { deposit };
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error creating pending deposit', {
         userId: data.userId,
-        error: error instanceof Error ? error.message : String(error),
+        level: data.level,
+        error: errorMessage,
       });
-      return { error: 'Ошибка при создании депозита' };
+      return {
+        error: `Не удалось создать депозит уровня ${data.level}: ${errorMessage.includes('duplicate') ? 'депозит уже существует' : errorMessage.includes('constraint') ? 'нарушение правил депозита' : 'внутренняя ошибка базы данных'}`,
+      };
     }
   }
 
@@ -393,11 +397,15 @@ export class DepositService {
 
       return { success: true };
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error confirming deposit', {
         txHash,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage,
       });
-      return { success: false, error: 'Ошибка при подтверждении депозита' };
+      return {
+        success: false,
+        error: `Не удалось подтвердить депозит (TX: ${txHash.substring(0, 10)}...): ${errorMessage.includes('not found') ? 'депозит не найден' : errorMessage.includes('already confirmed') ? 'уже подтвержден' : 'ошибка сохранения'}`,
+      };
     }
   }
 
