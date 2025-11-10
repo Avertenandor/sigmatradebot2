@@ -370,6 +370,19 @@ export const handleWithdrawalHistory = async (ctx: Context) => {
 
   const buttons: any[][] = [];
 
+  // Add cancel buttons for pending withdrawals
+  const pendingWithdrawals = withdrawals.filter(w => w.status === 'pending');
+  if (pendingWithdrawals.length > 0) {
+    pendingWithdrawals.forEach((withdrawal) => {
+      buttons.push([
+        Markup.button.callback(
+          `❌ Отменить вывод ${parseFloat(withdrawal.amount).toFixed(2)} USDT`,
+          `cancel_withdrawal_${withdrawal.id}`
+        ),
+      ]);
+    });
+  }
+
   // Add pagination if needed
   if (pages > 1) {
     const navButtons = [];
@@ -416,10 +429,66 @@ export const handleWithdrawalHistory = async (ctx: Context) => {
   });
 };
 
+/**
+ * Handle cancel withdrawal
+ */
+export const handleCancelWithdrawal = async (ctx: Context) => {
+  const authCtx = ctx as AuthContext;
+
+  if (!authCtx.isRegistered || !authCtx.user) {
+    await ctx.answerCbQuery('Пожалуйста, сначала зарегистрируйтесь');
+    return;
+  }
+
+  // Extract withdrawal ID from callback data (e.g., "cancel_withdrawal_123")
+  const callbackData = ctx.callbackQuery && 'data' in ctx.callbackQuery ? ctx.callbackQuery.data : '';
+  const match = callbackData.match(/^cancel_withdrawal_(\d+)$/);
+
+  if (!match) {
+    await ctx.answerCbQuery('❌ Ошибка: неверный формат');
+    return;
+  }
+
+  const withdrawalId = parseInt(match[1], 10);
+
+  // Cancel withdrawal
+  const { success, error } = await withdrawalService.cancelWithdrawal(
+    withdrawalId,
+    authCtx.user.id
+  );
+
+  if (!success) {
+    await ctx.answerCbQuery(`❌ ${error}`);
+    return;
+  }
+
+  await ctx.answerCbQuery('✅ Вывод отменен, средства возвращены на баланс');
+
+  // Update message to show success
+  await ctx.editMessageText(
+    `✅ **Вывод отменён**\n\n` +
+    `Заявка на вывод была успешно отменена.\n` +
+    `Средства возвращены на ваш баланс и доступны для использования.`,
+    {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback('📜 История выводов', 'withdrawal_history')],
+        [Markup.button.callback('🔙 Назад', 'withdrawals')],
+      ]),
+    }
+  );
+
+  logger.info('Withdrawal cancelled by user', {
+    userId: authCtx.user.id,
+    withdrawalId,
+  });
+};
+
 export default {
   handleWithdrawals,
   handleRequestWithdrawal,
   handleWithdrawalAmountInput,
   handleWithdrawalPasswordInput,
   handleWithdrawalHistory,
+  handleCancelWithdrawal,
 };
