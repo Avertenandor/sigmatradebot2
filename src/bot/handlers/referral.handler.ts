@@ -3,7 +3,7 @@
  * Handles referral program actions
  */
 
-import { Context } from 'telegraf';
+import { Context, Markup } from 'telegraf';
 import { AuthContext } from '../middlewares/auth.middleware';
 import {
   getReferralMenuKeyboard,

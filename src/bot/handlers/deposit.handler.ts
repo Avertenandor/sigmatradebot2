@@ -3,7 +3,7 @@
  * Handles deposit-related actions
  */
 
-import { Context } from 'telegraf';
+import { Context, Markup } from 'telegraf';
 import { AuthContext } from '../middlewares/auth.middleware';
 import {
   getDepositLevelsKeyboard,
