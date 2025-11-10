@@ -15,10 +15,32 @@ import { notificationService } from '../notification.service';
 import { ProviderManager } from './provider.manager';
 import { getUsdtDecimals } from './utils';
 import type { DepositService } from '../deposit.service';
+import { logFinancialOperation } from '../../utils/audit-logger.util';
 
 export class DepositProcessor {
   private readonly DEPOSIT_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 24 hours
   private readonly CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+
+  /**
+   * Deposit amount tolerance in USDT
+   *
+   * CRITICAL: This tolerance accounts for blockchain gas fees and minor variations.
+   * Reduced from 0.5 USDT to 0.01 USDT (1 cent) to prevent abuse.
+   *
+   * Previous value (0.5) allowed users to underpay by up to 0.49 USDT per deposit,
+   * resulting in significant financial losses for the platform.
+   *
+   * Current value (0.01) provides minimal tolerance for legitimate gas fee variations
+   * while preventing abuse.
+   */
+  private readonly DEPOSIT_AMOUNT_TOLERANCE = 0.01; // 1 cent tolerance
+
+  /**
+   * Threshold for admin alerts (in USDT)
+   * Deposits within tolerance but above this threshold trigger admin notification
+   */
+  private readonly TOLERANCE_ALERT_THRESHOLD = 0.005; // 0.5 cent
+
   private cleanupInterval?: NodeJS.Timeout;
 
   // Lazy-loaded to avoid circular dependency
@@ -98,19 +120,97 @@ export class DepositProcessor {
 
       // Determine deposit level from amount
       let matchedLevel: number | null = null;
-      const tolerance = 0.5; // 0.5 USDT tolerance
+      let expectedAmount: number | null = null;
+      let actualDifference = 0;
 
       for (const [level, levelAmount] of Object.entries(DEPOSIT_LEVELS)) {
-        if (Math.abs(amount - levelAmount) <= tolerance) {
+        const difference = Math.abs(amount - levelAmount);
+
+        if (difference <= this.DEPOSIT_AMOUNT_TOLERANCE) {
           matchedLevel = parseInt(level);
+          expectedAmount = levelAmount;
+          actualDifference = amount - levelAmount; // Can be negative if underpaid
+
+          // Log if deposit is within tolerance but not exact
+          if (difference > 0) {
+            logger.warn('Deposit amount within tolerance but not exact', {
+              txHash,
+              userId: user.id,
+              telegramId: user.telegram_id,
+              expected: levelAmount,
+              actual: amount,
+              difference: actualDifference,
+              tolerance: this.DEPOSIT_AMOUNT_TOLERANCE,
+              level: matchedLevel,
+            });
+
+            // Log to audit trail for financial compliance
+            logFinancialOperation({
+              category: 'deposit',
+              userId: user.id,
+              action: 'deposit_tolerance_match',
+              amount: amount,
+              success: true,
+              details: {
+                txHash,
+                expected: levelAmount,
+                actual: amount,
+                difference: actualDifference,
+                tolerance: this.DEPOSIT_AMOUNT_TOLERANCE,
+                level: matchedLevel,
+              },
+            });
+
+            // Alert admin if difference is significant
+            if (Math.abs(actualDifference) > this.TOLERANCE_ALERT_THRESHOLD) {
+              logger.error('⚠️ ALERT: Significant deposit amount deviation', {
+                txHash,
+                userId: user.id,
+                telegramId: user.telegram_id,
+                expected: levelAmount,
+                actual: amount,
+                difference: actualDifference,
+                toleranceUsed: this.DEPOSIT_AMOUNT_TOLERANCE,
+                alertThreshold: this.TOLERANCE_ALERT_THRESHOLD,
+              });
+
+              // TODO: Send Telegram notification to super admin
+              // This requires integration with notification service
+              // For now, critical error log will be picked up by monitoring
+            }
+          }
+
           break;
         }
       }
 
       if (!matchedLevel) {
         logger.warn(
-          `⚠️ Amount ${amount} USDT doesn't match any deposit level for user ${user.telegram_id}`
+          `⚠️ Amount ${amount} USDT doesn't match any deposit level for user ${user.telegram_id}`,
+          {
+            txHash,
+            amount,
+            tolerance: this.DEPOSIT_AMOUNT_TOLERANCE,
+            availableLevels: Object.values(DEPOSIT_LEVELS),
+          }
         );
+
+        // Log failed deposit attempt to audit trail
+        logFinancialOperation({
+          category: 'deposit',
+          userId: user.id,
+          action: 'deposit_amount_mismatch',
+          amount: amount,
+          success: false,
+          error: 'Amount does not match any deposit level',
+          details: {
+            txHash,
+            amount,
+            tolerance: this.DEPOSIT_AMOUNT_TOLERANCE,
+            availableLevels: Object.values(DEPOSIT_LEVELS),
+          },
+        });
+
         // Create transaction record for audit
         await transactionRepo.save({
           user_id: user.id,
