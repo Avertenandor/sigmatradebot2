@@ -201,7 +201,7 @@ export class PaymentService {
 
       // Get all referrals for this user (up to 3 levels)
       const referrals = await referralRepo.find({
-        where: { referred_id: userId },
+        where: { referral_id: userId },
         relations: ['referrer'],
         order: { level: 'ASC' },
       });

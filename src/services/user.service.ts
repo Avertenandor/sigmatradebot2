@@ -3,9 +3,11 @@
  * Business logic for user management
  */
 
+import { In } from 'typeorm';
 import { AppDataSource } from '../database/data-source';
-import { User } from '../database/entities';
+import { User, Deposit, Referral, ReferralEarning } from '../database/entities';
 import { createLogger } from '../utils/logger.util';
+import { TransactionStatus } from '../utils/constants';
 import {
   generateFinancialPassword,
   hashPassword,
@@ -287,13 +289,56 @@ export class UserService {
         return null;
       }
 
-      // This will be expanded when we implement deposit and referral services
-      // For now, return empty stats
+      // Get deposit statistics
+      const depositRepo = AppDataSource.getRepository(Deposit);
+      const deposits = await depositRepo.find({
+        where: {
+          user_id: userId,
+          status: TransactionStatus.CONFIRMED,
+        },
+      });
+
+      const totalDeposits = deposits.reduce(
+        (sum, deposit) => sum + parseFloat(deposit.amount),
+        0
+      );
+
+      const activatedLevels = deposits.map(d => d.level).sort((a, b) => a - b);
+
+      // Get referral count (direct referrals only)
+      const referralRepo = AppDataSource.getRepository(Referral);
+      const referralCount = await referralRepo.count({
+        where: {
+          referrer_id: userId,
+          level: 1, // Only direct referrals
+        },
+      });
+
+      // Get referral earnings (all earned from referrals)
+      const referrals = await referralRepo.find({
+        where: { referrer_id: userId },
+      });
+
+      const referralIds = referrals.map(r => r.id);
+
+      let totalEarned = 0;
+      if (referralIds.length > 0) {
+        const earningRepo = AppDataSource.getRepository(ReferralEarning);
+        const earnings = await earningRepo.find({
+          where: { referral_id: In(referralIds) },
+        });
+
+        totalEarned = earnings.reduce(
+          (sum, earning) => sum + parseFloat(earning.amount),
+          0
+        );
+      }
+
       return {
-        totalDeposits: 0,
-        totalEarned: 0,
-        referralCount: 0,
-        activatedLevels: [],
+        totalDeposits,
+        totalEarned,
+        referralCount,
+        activatedLevels,
       };
     } catch (error) {
       logger.error('Error getting user stats', {

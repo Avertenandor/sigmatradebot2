@@ -315,6 +315,14 @@ export class BlockchainService {
         return;
       }
 
+      // Check if deposit already has a transaction hash (race condition protection)
+      if (pendingDeposit.tx_hash) {
+        logger.info(
+          `ℹ️ Deposit ${pendingDeposit.id} already has tx_hash: ${pendingDeposit.tx_hash}`
+        );
+        return;
+      }
+
       // Verify amount matches expected deposit level
       const expectedAmount = parseFloat(pendingDeposit.amount);
       const tolerance = 0.01; // 1% tolerance for gas variations

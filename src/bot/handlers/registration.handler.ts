@@ -10,6 +10,7 @@ import { BotState, BOT_MESSAGES, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../../
 import { isValidBSCAddress, isValidEmail, isValidPhone } from '../../utils/validation.util';
 import { getCancelButton, getMainKeyboard } from '../keyboards';
 import userService from '../../services/user.service';
+import referralService from '../../services/referral.service';
 import { createLogger } from '../../utils/logger.util';
 import { Markup } from 'telegraf';
 
@@ -100,6 +101,28 @@ export const handleWalletInput = async (ctx: Context) => {
     telegramId: result.user.telegram_id,
     hasReferrer: !!referrerId,
   });
+
+  // Create referral relationships if user was referred
+  if (referrerId) {
+    const referralResult = await referralService.createReferralRelationships(
+      result.user.id,
+      referrerId
+    );
+
+    if (!referralResult.success) {
+      logger.error('Failed to create referral relationships', {
+        userId: result.user.id,
+        referrerId,
+        error: referralResult.error,
+      });
+      // Don't fail registration, just log the error
+    } else {
+      logger.info('Referral relationships created', {
+        userId: result.user.id,
+        referrerId,
+      });
+    }
+  }
 
   // Get plain password (only available once)
   const plainPassword = (result.user as any).plainPassword;
