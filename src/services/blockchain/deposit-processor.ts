@@ -88,14 +88,36 @@ export class DepositProcessor {
         `💰 Transfer: ${amount} USDT from ${from} to ${to}`
       );
 
-      // Check if transaction already exists
+      // Check if transaction already exists (fast pre-check to avoid unnecessary processing)
+      // Note: This is not a substitute for database-level UNIQUE constraint
+      // The UNIQUE index on tx_hash provides final protection against duplicates
       const transactionRepo = AppDataSource.getRepository(Transaction);
       const existingTx = await transactionRepo.findOne({
         where: { tx_hash: txHash },
       });
 
       if (existingTx) {
-        logger.info(`ℹ️ Transaction ${txHash} already processed`);
+        logger.info(`ℹ️ Transaction ${txHash} already processed`, {
+          txHash,
+          existingId: existingTx.id,
+          status: existingTx.status,
+        });
+
+        // Log to audit trail for monitoring duplicate attempts
+        logFinancialOperation({
+          category: 'deposit',
+          userId: existingTx.user_id,
+          action: 'duplicate_transaction_attempt',
+          amount,
+          success: false,
+          error: 'Transaction already processed',
+          details: {
+            txHash,
+            existingTransactionId: existingTx.id,
+            existingStatus: existingTx.status,
+          },
+        });
+
         return;
       }
 
@@ -230,7 +252,8 @@ export class DepositProcessor {
       // Use database transaction with pessimistic lock to prevent race conditions
       // This ensures only one concurrent transaction can claim a pending deposit
       // Uses withTransaction for automatic retry on deadlock/serialization errors
-      await withTransaction(async (manager) => {
+      try {
+        await withTransaction(async (manager) => {
         // Find and lock matching pending deposit (SELECT FOR UPDATE)
         // This prevents race conditions when multiple transactions arrive simultaneously
         const pendingDeposit = await manager
@@ -324,17 +347,56 @@ export class DepositProcessor {
         );
       }, TRANSACTION_PRESETS.FINANCIAL); // Use FINANCIAL preset for higher retries and timeout
 
-      // Notify user about detected deposit (pending confirmation)
-      await notificationService.notifyDepositPending(
-        user.telegram_id,
-        amount,
-        matchedLevel!,
-        txHash
-      ).catch((err) => {
-        logger.error('Failed to send deposit pending notification', { error: err });
-      });
+        // Notify user about detected deposit (pending confirmation)
+        await notificationService.notifyDepositPending(
+          user.telegram_id,
+          amount,
+          matchedLevel!,
+          txHash
+        ).catch((err) => {
+          logger.error('Failed to send deposit pending notification', { error: err });
+        });
+
+      } catch (error: any) {
+        // Handle duplicate transaction error (race condition case)
+        if (error.code === '23505' || error.message?.includes('duplicate key')) {
+          logger.warn('Transaction already processed (caught duplicate key violation)', {
+            txHash,
+            errorCode: error.code,
+            errorDetail: error.detail,
+          });
+
+          // Log to audit trail for monitoring
+          logFinancialOperation({
+            category: 'deposit',
+            userId: user?.id || 0,
+            action: 'duplicate_transaction_caught',
+            amount,
+            success: false,
+            error: 'Duplicate transaction prevented by database constraint',
+            details: {
+              txHash,
+              errorCode: error.code,
+            },
+          });
+
+          // This is expected behavior - not an error
+          return;
+        }
+
+        // Other errors are unexpected - log and re-throw
+        logger.error('❌ Error processing Transfer event:', {
+          txHash,
+          amount,
+          from,
+          to,
+          error: error.message,
+          stack: error.stack,
+        });
+        throw error;
+      }
     } catch (error) {
-      logger.error('❌ Error processing Transfer event:', error);
+      logger.error('❌ Unexpected error in handleTransferEvent:', error);
     }
   }
 
