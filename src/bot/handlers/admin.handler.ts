@@ -15,6 +15,7 @@ import depositService from '../../services/deposit.service';
 import referralService from '../../services/referral.service';
 import withdrawalService from '../../services/withdrawal.service';
 import { notificationService } from '../../services/notification.service';
+import { blockchainService } from '../../services/blockchain.service';
 import { AppDataSource } from '../../database/data-source';
 import { Admin } from '../../database/entities';
 import { createLogger, logAdminAction } from '../../utils/logger.util';
@@ -751,10 +752,22 @@ export const handleApproveWithdrawal = async (ctx: Context) => {
       return;
     }
 
-    // For now, we'll simulate sending funds by generating a fake tx hash
-    // In production, this should integrate with payment service
-    const txHash = `0x${Math.random().toString(16).substring(2, 66)}`;
+    // Send real blockchain transaction
+    const paymentResult = await blockchainService.sendPayment(
+      withdrawal.to_address,
+      parseFloat(withdrawal.amount)
+    );
 
+    if (!paymentResult.success) {
+      await ctx.answerCbQuery(`❌ Ошибка отправки: ${paymentResult.error || 'Неизвестная ошибка'}`);
+      logger.error('Failed to send withdrawal payment', {
+        withdrawalId,
+        error: paymentResult.error,
+      });
+      return;
+    }
+
+    const txHash = paymentResult.txHash!;
     const { success, error } = await withdrawalService.approveWithdrawal(withdrawalId, txHash);
 
     if (!success) {
