@@ -44,6 +44,7 @@ export class BlockchainService {
   private readonly RECONNECT_DELAY_MS = 5000;
   private readonly DEPOSIT_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 24 hours
   private readonly WS_HEALTH_CHECK_INTERVAL_MS = 30000; // 30 seconds
+  private readonly HISTORICAL_BLOCKS_LOOKBACK = 2000; // ~100 minutes on BSC (3s per block)
 
   // Health check interval
   private wsHealthCheckInterval?: NodeJS.Timeout;
@@ -204,6 +205,90 @@ export class BlockchainService {
   }
 
   /**
+   * Fetch and process historical Transfer events since last processed block
+   * Called once on startup to catch any deposits made while bot was offline
+   */
+  private async fetchHistoricalEvents(): Promise<void> {
+    try {
+      const transactionRepo = AppDataSource.getRepository(Transaction);
+
+      // Get last processed block number from database
+      const lastTransaction = await transactionRepo.findOne({
+        where: { type: TransactionType.DEPOSIT },
+        order: { block_number: 'DESC' },
+        select: ['block_number'],
+      });
+
+      const currentBlock = await this.httpProvider.getBlockNumber();
+
+      // Start from last processed block, or lookback N blocks if first run
+      const fromBlock = lastTransaction?.block_number
+        ? Number(lastTransaction.block_number) + 1
+        : currentBlock - this.HISTORICAL_BLOCKS_LOOKBACK;
+
+      const toBlock = currentBlock;
+
+      if (fromBlock >= toBlock) {
+        logger.info('✅ No historical blocks to process (already up to date)');
+        return;
+      }
+
+      logger.info(
+        `🔍 Fetching historical Transfer events from block ${fromBlock} to ${toBlock} (${toBlock - fromBlock} blocks)...`
+      );
+
+      // Query historical Transfer events to system wallet
+      const filter = this.usdtContract.filters.Transfer(
+        null,
+        config.blockchain.systemWalletAddress
+      );
+
+      const events = await this.usdtContract.queryFilter(filter, fromBlock, toBlock);
+
+      if (events.length === 0) {
+        logger.info('✅ No historical deposits found');
+        return;
+      }
+
+      logger.info(`📥 Found ${events.length} historical Transfer events, processing...`);
+
+      // Process events sequentially to maintain order
+      let processed = 0;
+      let skipped = 0;
+
+      for (const event of events) {
+        try {
+          if (!event.args) continue;
+
+          const [from, to, value] = event.args;
+
+          // Check if already processed
+          const existing = await transactionRepo.findOne({
+            where: { tx_hash: event.transactionHash },
+          });
+
+          if (existing) {
+            skipped++;
+            continue;
+          }
+
+          await this.handleTransferEvent(from, to, value, event);
+          processed++;
+        } catch (error) {
+          logger.error(`❌ Error processing historical event ${event.transactionHash}:`, error);
+        }
+      }
+
+      logger.info(
+        `✅ Historical events processed: ${processed} new, ${skipped} already processed, ${events.length} total`
+      );
+    } catch (error) {
+      logger.error('❌ Error fetching historical events:', error);
+      // Don't throw - allow monitoring to continue even if historical fetch fails
+    }
+  }
+
+  /**
    * Start monitoring blockchain for deposits
    */
   public async startMonitoring(): Promise<void> {
@@ -239,6 +324,9 @@ export class BlockchainService {
 
       // Start orphaned deposit cleanup job
       this.startCleanupJob();
+
+      // Fetch historical events to catch deposits made while bot was offline
+      await this.fetchHistoricalEvents();
 
       this.isMonitoring = true;
       logger.info('✅ Blockchain monitoring started');
