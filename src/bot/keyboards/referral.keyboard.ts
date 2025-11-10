@@ -14,6 +14,7 @@ export const getReferralMenuKeyboard = () => {
     [Markup.button.callback(BUTTON_LABELS.MY_REFERRAL_LINK, 'referral_link')],
     [Markup.button.callback(BUTTON_LABELS.REFERRAL_STATS, 'referral_stats')],
     [Markup.button.callback(BUTTON_LABELS.REFERRAL_EARNINGS, 'referral_earnings')],
+    [Markup.button.callback(BUTTON_LABELS.REFERRAL_LEADERBOARD, 'referral_leaderboard_referrals')],
     [Markup.button.callback(BUTTON_LABELS.BACK, 'main_menu')],
   ]);
 };

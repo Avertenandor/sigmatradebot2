@@ -493,6 +493,135 @@ export class ReferralService {
       };
     }
   }
+
+  /**
+   * Get referral leaderboard
+   * Returns top users by referral count and earnings
+   */
+  async getReferralLeaderboard(options: {
+    limit?: number;
+    sortBy?: 'referrals' | 'earnings';
+  } = {}): Promise<{
+    byReferrals: Array<{
+      userId: number;
+      username?: string;
+      telegramId: number;
+      referralCount: number;
+      totalEarnings: number;
+      rank: number;
+    }>;
+    byEarnings: Array<{
+      userId: number;
+      username?: string;
+      telegramId: number;
+      referralCount: number;
+      totalEarnings: number;
+      rank: number;
+    }>;
+  }> {
+    const limit = options.limit || 10;
+
+    try {
+      // Get all users with their referral counts
+      const usersWithReferrals = await this.referralRepository
+        .createQueryBuilder('referral')
+        .select('referral.referrer_id', 'userId')
+        .addSelect('COUNT(DISTINCT referral.referred_user_id)', 'referralCount')
+        .addSelect('SUM(CAST(referral.total_earned AS DECIMAL))', 'totalEarnings')
+        .groupBy('referral.referrer_id')
+        .having('COUNT(DISTINCT referral.referred_user_id) > 0')
+        .getRawMany();
+
+      // Get user details for each referrer
+      const leaderboardData = await Promise.all(
+        usersWithReferrals.map(async (item) => {
+          const user = await this.userRepository.findOne({
+            where: { id: parseInt(item.userId) },
+          });
+
+          return {
+            userId: parseInt(item.userId),
+            username: user?.username,
+            telegramId: user?.telegram_id || 0,
+            referralCount: parseInt(item.referralCount || '0'),
+            totalEarnings: parseFloat(item.totalEarnings || '0'),
+          };
+        })
+      );
+
+      // Sort by referral count
+      const byReferrals = [...leaderboardData]
+        .sort((a, b) => b.referralCount - a.referralCount)
+        .slice(0, limit)
+        .map((item, index) => ({
+          ...item,
+          rank: index + 1,
+        }));
+
+      // Sort by earnings
+      const byEarnings = [...leaderboardData]
+        .sort((a, b) => b.totalEarnings - a.totalEarnings)
+        .slice(0, limit)
+        .map((item, index) => ({
+          ...item,
+          rank: index + 1,
+        }));
+
+      logger.debug('Referral leaderboard retrieved', {
+        byReferralsCount: byReferrals.length,
+        byEarningsCount: byEarnings.length,
+      });
+
+      return {
+        byReferrals,
+        byEarnings,
+      };
+    } catch (error) {
+      logger.error('Error getting referral leaderboard', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {
+        byReferrals: [],
+        byEarnings: [],
+      };
+    }
+  }
+
+  /**
+   * Get user's position in leaderboard
+   */
+  async getUserLeaderboardPosition(userId: number): Promise<{
+    referralRank: number | null;
+    earningsRank: number | null;
+    totalUsers: number;
+  }> {
+    try {
+      const leaderboard = await this.getReferralLeaderboard({ limit: 1000 });
+
+      const referralRank = leaderboard.byReferrals.findIndex(
+        (item) => item.userId === userId
+      );
+      const earningsRank = leaderboard.byEarnings.findIndex(
+        (item) => item.userId === userId
+      );
+
+      return {
+        referralRank: referralRank >= 0 ? referralRank + 1 : null,
+        earningsRank: earningsRank >= 0 ? earningsRank + 1 : null,
+        totalUsers: leaderboard.byReferrals.length,
+      };
+    } catch (error) {
+      logger.error('Error getting user leaderboard position', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {
+        referralRank: null,
+        earningsRank: null,
+        totalUsers: 0,
+      };
+    }
+  }
 }
 
 export default new ReferralService();

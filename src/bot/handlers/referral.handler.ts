@@ -244,9 +244,133 @@ export const handleReferralEarnings = async (ctx: Context) => {
   });
 };
 
+/**
+ * Handle referral leaderboard
+ */
+export const handleReferralLeaderboard = async (ctx: Context) => {
+  const authCtx = ctx as AuthContext;
+
+  if (!authCtx.isRegistered || !authCtx.user) {
+    await ctx.answerCbQuery('Пожалуйста, сначала зарегистрируйтесь');
+    return;
+  }
+
+  // Parse view type from callback data
+  let viewType: 'referrals' | 'earnings' = 'referrals';
+  if (ctx.callbackQuery && 'data' in ctx.callbackQuery) {
+    if (ctx.callbackQuery.data === 'referral_leaderboard_earnings') {
+      viewType = 'earnings';
+    }
+  }
+
+  // Get leaderboard data
+  const leaderboard = await referralService.getReferralLeaderboard({ limit: 10 });
+  const userPosition = await referralService.getUserLeaderboardPosition(authCtx.user.id);
+
+  let message = `🏆 **Таблица лидеров**\n\n`;
+
+  if (viewType === 'referrals') {
+    message += `**Топ по количеству рефералов:**\n\n`;
+
+    if (leaderboard.byReferrals.length === 0) {
+      message += 'Пока нет рефералов в системе.\n\n';
+    } else {
+      leaderboard.byReferrals.forEach((leader) => {
+        const medal = leader.rank === 1 ? '🥇' : leader.rank === 2 ? '🥈' : leader.rank === 3 ? '🥉' : `${leader.rank}.`;
+        const username = leader.username ? `@${leader.username}` : `Пользователь #${leader.telegramId}`;
+        const isCurrentUser = leader.userId === authCtx.user.id;
+
+        message += `${medal} ${username}${isCurrentUser ? ' **(вы)**' : ''}\n`;
+        message += `   👥 Рефералов: **${leader.referralCount}**\n`;
+        message += `   💰 Заработано: ${leader.totalEarnings.toFixed(2)} USDT\n\n`;
+      });
+    }
+
+    // Show user's position if not in top 10
+    if (userPosition.referralRank && userPosition.referralRank > 10) {
+      message += `---\n\n`;
+      message += `**Ваша позиция:**\n`;
+      message += `📊 Место: ${userPosition.referralRank} из ${userPosition.totalUsers}\n\n`;
+    } else if (!userPosition.referralRank && userPosition.totalUsers > 0) {
+      message += `---\n\n`;
+      message += `**Ваша позиция:**\n`;
+      message += `У вас пока нет рефералов. Начните приглашать друзей! 🚀\n\n`;
+    }
+  } else {
+    message += `**Топ по заработку:**\n\n`;
+
+    if (leaderboard.byEarnings.length === 0) {
+      message += 'Пока нет доходов в системе.\n\n';
+    } else {
+      leaderboard.byEarnings.forEach((leader) => {
+        const medal = leader.rank === 1 ? '🥇' : leader.rank === 2 ? '🥈' : leader.rank === 3 ? '🥉' : `${leader.rank}.`;
+        const username = leader.username ? `@${leader.username}` : `Пользователь #${leader.telegramId}`;
+        const isCurrentUser = leader.userId === authCtx.user.id;
+
+        message += `${medal} ${username}${isCurrentUser ? ' **(вы)**' : ''}\n`;
+        message += `   💰 Заработано: **${leader.totalEarnings.toFixed(2)} USDT**\n`;
+        message += `   👥 Рефералов: ${leader.referralCount}\n\n`;
+      });
+    }
+
+    // Show user's position if not in top 10
+    if (userPosition.earningsRank && userPosition.earningsRank > 10) {
+      message += `---\n\n`;
+      message += `**Ваша позиция:**\n`;
+      message += `📊 Место: ${userPosition.earningsRank} из ${userPosition.totalUsers}\n\n`;
+    } else if (!userPosition.earningsRank && userPosition.totalUsers > 0) {
+      message += `---\n\n`;
+      message += `**Ваша позиция:**\n`;
+      message += `У вас пока нет реферального дохода. Продолжайте приглашать! 🚀\n\n`;
+    }
+  }
+
+  message += `💡 Приглашайте больше друзей и поднимайтесь в рейтинге!`;
+
+  // Create keyboard with view switcher
+  const buttons: any[] = [];
+
+  // View switcher
+  const switcherRow = [
+    Markup.button.callback(
+      viewType === 'referrals' ? '✅ По рефералам' : 'По рефералам',
+      'referral_leaderboard_referrals'
+    ),
+    Markup.button.callback(
+      viewType === 'earnings' ? '✅ По заработку' : 'По заработку',
+      'referral_leaderboard_earnings'
+    ),
+  ];
+  buttons.push(switcherRow);
+
+  // Back button
+  buttons.push([Markup.button.callback(BUTTON_LABELS.BACK, 'referrals')]);
+
+  const keyboard = Markup.inlineKeyboard(buttons);
+
+  if (ctx.callbackQuery && 'message' in ctx.callbackQuery) {
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      ...keyboard,
+    });
+    await ctx.answerCbQuery();
+  } else {
+    await ctx.reply(message, {
+      parse_mode: 'Markdown',
+      ...keyboard,
+    });
+  }
+
+  logger.debug('Referral leaderboard viewed', {
+    userId: authCtx.user.id,
+    viewType,
+  });
+};
+
 export default {
   handleReferrals,
   handleReferralLink,
   handleReferralStats,
   handleReferralEarnings,
+  handleReferralLeaderboard,
 };

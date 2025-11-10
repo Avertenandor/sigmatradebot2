@@ -47,6 +47,7 @@ import {
   handleReferralLink,
   handleReferralStats,
   handleReferralEarnings,
+  handleReferralLeaderboard,
   handleAdminPanel,
   handleAdminStats,
   handleStartBroadcast,
@@ -162,6 +163,7 @@ export const initializeBot = (): Telegraf => {
   bot.action(/^referral_stats_level_\d+$/, handleReferralStats);
   bot.action('referral_earnings', handleReferralEarnings);
   bot.action(/^referral_earnings_\d+$/, handleReferralEarnings);
+  bot.action(/^referral_leaderboard_(referrals|earnings)$/, handleReferralLeaderboard);
 
   /**
    * Admin panel

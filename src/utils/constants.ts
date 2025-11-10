@@ -223,6 +223,7 @@ export const BUTTON_LABELS = {
   MY_REFERRAL_LINK: '🔗 Моя реферальная ссылка',
   REFERRAL_STATS: '📊 Статистика рефералов',
   REFERRAL_EARNINGS: '💸 Мои доходы',
+  REFERRAL_LEADERBOARD: '🏆 Таблица лидеров',
 
   // Admin
   BROADCAST_MESSAGE: '📢 Рассылка всем',
