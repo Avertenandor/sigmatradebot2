@@ -583,6 +583,16 @@ export class BlockchainService {
           `✅ Deposit tracked: ${amount} USDT for user ${user.telegram_id} (tx: ${txHash})`
         );
       });
+
+      // Notify user about detected deposit (pending confirmation)
+      await notificationService.notifyDepositPending(
+        user.telegram_id,
+        amount,
+        matchedLevel!,
+        txHash
+      ).catch((err) => {
+        logger.error('Failed to send deposit pending notification', { error: err });
+      });
     } catch (error) {
       logger.error('❌ Error processing Transfer event:', error);
     }
