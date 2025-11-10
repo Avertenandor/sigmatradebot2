@@ -203,19 +203,16 @@ export const handleBroadcastMessage = async (ctx: Context) => {
 
   await ctx.reply('📨 Начинаю рассылку...');
 
-  // Get all users
-  const userRepository = AppDataSource.getRepository(userService['userRepository']);
-  const users = await userRepository.find({
-    select: ['telegram_id'],
-  });
+  // Get all user telegram IDs
+  const userTelegramIds = await userService.getAllUserTelegramIds();
 
   let sent = 0;
   let failed = 0;
 
   // Send to all users
-  for (const user of users) {
+  for (const telegramId of userTelegramIds) {
     try {
-      await ctx.telegram.sendMessage(user.telegram_id, message, {
+      await ctx.telegram.sendMessage(telegramId, message, {
         parse_mode: 'Markdown',
       });
       sent++;
@@ -225,7 +222,7 @@ export const handleBroadcastMessage = async (ctx: Context) => {
     } catch (error) {
       failed++;
       logger.warn('Failed to send broadcast to user', {
-        userId: user.telegram_id,
+        userId: telegramId,
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -238,13 +235,13 @@ export const handleBroadcastMessage = async (ctx: Context) => {
     `✅ Рассылка завершена!\n\n` +
     `📨 Отправлено: ${sent}\n` +
     `❌ Не удалось: ${failed}\n` +
-    `👥 Всего: ${users.length}`
+    `👥 Всего: ${userTelegramIds.length}`
   );
 
   // Reset session
   await updateSessionState(ctx.from!.id, BotState.IDLE);
 
-  logAdminAction(ctx.from!.id, 'completed_broadcast', { sent, failed, total: users.length });
+  logAdminAction(ctx.from!.id, 'completed_broadcast', { sent, failed, total: userTelegramIds.length });
 };
 
 /**
@@ -323,9 +320,7 @@ export const handleSendToUserMessage = async (ctx: Context) => {
 
   if (identifier.startsWith('@')) {
     const username = identifier.substring(1);
-    user = await userService['userRepository'].findOne({
-      where: { username },
-    });
+    user = await userService.findByUsername(username);
   } else if (/^\d+$/.test(identifier)) {
     const telegramId = parseInt(identifier, 10);
     user = await userService.findByTelegramId(telegramId);
@@ -420,9 +415,7 @@ export const handleBanUserInput = async (ctx: Context) => {
 
   if (identifier.startsWith('@')) {
     const username = identifier.substring(1);
-    user = await userService['userRepository'].findOne({
-      where: { username },
-    });
+    user = await userService.findByUsername(username);
   } else if (/^\d+$/.test(identifier)) {
     const telegramId = parseInt(identifier, 10);
     user = await userService.findByTelegramId(telegramId);
@@ -510,9 +503,7 @@ export const handleUnbanUserInput = async (ctx: Context) => {
 
   if (identifier.startsWith('@')) {
     const username = identifier.substring(1);
-    user = await userService['userRepository'].findOne({
-      where: { username },
-    });
+    user = await userService.findByUsername(username);
   } else if (/^\d+$/.test(identifier)) {
     const telegramId = parseInt(identifier, 10);
     user = await userService.findByTelegramId(telegramId);

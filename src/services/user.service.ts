@@ -5,9 +5,9 @@
 
 import { In } from 'typeorm';
 import { AppDataSource } from '../database/data-source';
-import { User, Deposit, Referral, ReferralEarning } from '../database/entities';
+import { User, Deposit, Referral, ReferralEarning, Transaction } from '../database/entities';
 import { createLogger } from '../utils/logger.util';
-import { TransactionStatus } from '../utils/constants';
+import { TransactionStatus, TransactionType } from '../utils/constants';
 import {
   generateFinancialPassword,
   hashPassword,
@@ -19,6 +19,7 @@ import {
   isValidBSCAddress,
   isValidEmail,
   isValidPhone,
+  safeParseFloat,
 } from '../utils/validation.util';
 
 const logger = createLogger('UserService');
@@ -78,6 +79,40 @@ export class UserService {
         error: error instanceof Error ? error.message : String(error),
       });
       return null;
+    }
+  }
+
+  /**
+   * Find user by username
+   */
+  async findByUsername(username: string): Promise<User | null> {
+    try {
+      return await this.userRepository.findOne({
+        where: { username: username.replace(/^@/, '').toLowerCase() },
+      });
+    } catch (error) {
+      logger.error('Error finding user by username', {
+        username,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Get all users (for admin broadcast)
+   */
+  async getAllUserTelegramIds(): Promise<number[]> {
+    try {
+      const users = await this.userRepository.find({
+        select: ['telegram_id'],
+      });
+      return users.map(u => u.telegram_id);
+    } catch (error) {
+      logger.error('Error getting all user telegram IDs', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [];
     }
   }
 
@@ -310,14 +345,14 @@ export class UserService {
         });
 
         totalEarned = earnings.reduce(
-          (sum, earning) => sum + parseFloat(earning.amount),
+          (sum, earning) => sum + (safeParseFloat(earning.amount) || 0),
           0
         );
 
         // Get pending earnings (not yet paid)
         const unpaidEarnings = earnings.filter(e => !e.paid);
         pendingEarnings = unpaidEarnings.reduce(
-          (sum, earning) => sum + parseFloat(earning.amount),
+          (sum, earning) => sum + (safeParseFloat(earning.amount) || 0),
           0
         );
       }
@@ -334,12 +369,12 @@ export class UserService {
       // Total confirmed withdrawals (actually paid out)
       const totalPaid = withdrawals
         .filter(tx => tx.status === TransactionStatus.CONFIRMED)
-        .reduce((sum, tx) => sum + parseFloat(tx.amount), 0);
+        .reduce((sum, tx) => sum + (safeParseFloat(tx.amount) || 0), 0);
 
       // Total locked in pending withdrawals
       const pendingWithdrawals = withdrawals
         .filter(tx => tx.status === TransactionStatus.PENDING)
-        .reduce((sum, tx) => sum + parseFloat(tx.amount), 0);
+        .reduce((sum, tx) => sum + (safeParseFloat(tx.amount) || 0), 0);
 
       // Available balance = total earned - confirmed withdrawals - pending withdrawals
       const availableBalance = totalEarned - totalPaid - pendingWithdrawals;
@@ -386,7 +421,7 @@ export class UserService {
       });
 
       const totalDeposits = deposits.reduce(
-        (sum, deposit) => sum + parseFloat(deposit.amount),
+        (sum, deposit) => sum + (safeParseFloat(deposit.amount) || 0),
         0
       );
 

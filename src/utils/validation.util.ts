@@ -330,6 +330,55 @@ export const normalizeTelegramUsername = (username: string): string => {
   return username.replace(/^@/, '').toLowerCase().trim();
 };
 
+/**
+ * Safe parseFloat with validation
+ * Returns null if value is NaN, Infinity, or invalid
+ */
+export const safeParseFloat = (value: string | number): number | null => {
+  const parsed = typeof value === 'string' ? parseFloat(value) : value;
+
+  // Check for invalid values
+  if (isNaN(parsed) || !isFinite(parsed)) {
+    return null;
+  }
+
+  return parsed;
+};
+
+/**
+ * Validate financial amount
+ * Returns validated and rounded amount or null if invalid
+ */
+export const validateFinancialAmount = (
+  amount: string | number,
+  options: {
+    min?: number;
+    max?: number;
+    decimals?: number;
+  } = {}
+): { valid: boolean; value: number | null; error?: string } => {
+  const { min = 0, max = 1000000, decimals = 2 } = options;
+
+  const parsed = safeParseFloat(amount);
+
+  if (parsed === null) {
+    return { valid: false, value: null, error: 'Неверный формат числа' };
+  }
+
+  if (parsed <= min) {
+    return { valid: false, value: null, error: `Сумма должна быть больше ${min}` };
+  }
+
+  if (parsed > max) {
+    return { valid: false, value: null, error: `Сумма не может превышать ${max.toLocaleString()}` };
+  }
+
+  // Round to specified decimal places
+  const rounded = Math.round(parsed * Math.pow(10, decimals)) / Math.pow(10, decimals);
+
+  return { valid: true, value: rounded };
+};
+
 export default {
   validate,
   validateAsync,
@@ -341,4 +390,6 @@ export default {
   validateMessageText,
   normalizeWalletAddress,
   normalizeTelegramUsername,
+  safeParseFloat,
+  validateFinancialAmount,
 };

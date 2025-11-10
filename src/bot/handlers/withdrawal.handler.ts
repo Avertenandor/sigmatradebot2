@@ -157,16 +157,26 @@ export const handleWithdrawalAmountInput = async (ctx: Context) => {
 
   // Parse amount
   const amount = parseFloat(input);
-  if (isNaN(amount) || amount <= 0) {
-    await ctx.reply('Неверный формат суммы. Укажите число больше 0');
+
+  // Validate amount (check for NaN, Infinity, negative, zero, too large)
+  const MAX_AMOUNT = 1000000; // 1 million USDT max per withdrawal
+  if (isNaN(amount) || !isFinite(amount) || amount <= 0 || amount > MAX_AMOUNT) {
+    await ctx.reply(
+      amount > MAX_AMOUNT
+        ? `❌ Максимальная сумма вывода: ${MAX_AMOUNT.toLocaleString()} USDT`
+        : '❌ Неверный формат суммы. Укажите число больше 0'
+    );
     return;
   }
+
+  // Limit decimal precision to 2 places
+  const roundedAmount = Math.round(amount * 100) / 100;
 
   // Validate amount against balance
   const balance = await userService.getUserBalance(authCtx.user.id);
   const minAmount = withdrawalService.getMinWithdrawalAmount();
 
-  if (!balance || balance.availableBalance < amount) {
+  if (!balance || balance.availableBalance < roundedAmount) {
     await ctx.reply(`❌ Недостаточно средств. Доступно: ${balance?.availableBalance.toFixed(2) || 0} USDT`, {
       ...Markup.inlineKeyboard([
         [Markup.button.callback('🔙 Назад', 'withdrawals')],
@@ -176,7 +186,7 @@ export const handleWithdrawalAmountInput = async (ctx: Context) => {
     return;
   }
 
-  if (amount < minAmount) {
+  if (roundedAmount < minAmount) {
     await ctx.reply(`❌ Минимальная сумма вывода: ${minAmount} USDT`, {
       ...Markup.inlineKeyboard([
         [Markup.button.callback('🔙 Назад', 'withdrawals')],
@@ -188,7 +198,7 @@ export const handleWithdrawalAmountInput = async (ctx: Context) => {
 
   // Store amount in session data and request financial password
   if (authCtx.session) {
-    authCtx.session.data = { withdrawalAmount: amount };
+    authCtx.session.data = { withdrawalAmount: roundedAmount };
   }
 
   await updateSessionState(ctx.from!.id, BotState.AWAITING_WITHDRAWAL_FINANCIAL_PASSWORD);
@@ -196,7 +206,7 @@ export const handleWithdrawalAmountInput = async (ctx: Context) => {
   const passwordMessage = `
 🔐 **Подтверждение вывода**
 
-💰 Сумма: ${amount.toFixed(2)} USDT
+💰 Сумма: ${roundedAmount.toFixed(2)} USDT
 💳 Кошелек: \`${authCtx.user.wallet_address}\`
 
 ⚠️ **Для подтверждения операции введите ваш финансовый пароль:**
