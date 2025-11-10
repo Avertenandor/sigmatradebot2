@@ -7,6 +7,18 @@ import { config } from './config';
 import { createLogger } from './utils/logger.util';
 import { initializeDatabase, closeDatabase } from './database/data-source';
 import { initializeBot, startBot, stopBot } from './bot';
+import {
+  initializeQueues,
+  closeQueues,
+  startBlockchainMonitor,
+  stopBlockchainMonitor,
+  startPaymentProcessor,
+  stopPaymentProcessor,
+  startBackupScheduler,
+  stopBackupScheduler,
+  startCleanupScheduler,
+  stopCleanupScheduler,
+} from './jobs';
 
 const logger = createLogger('Main');
 
@@ -33,15 +45,40 @@ async function main() {
     await initializeDatabase();
     logger.info('✅ Database initialized');
 
-    // Step 2: Initialize bot
+    // Step 2: Initialize Bull queues
+    logger.info('Initializing background job queues...');
+    initializeQueues();
+    logger.info('✅ Queues initialized');
+
+    // Step 3: Initialize bot
     logger.info('Initializing Telegram bot...');
     const bot = initializeBot();
     logger.info('✅ Bot initialized');
 
-    // Step 3: Start bot
+    // Step 4: Start bot
     logger.info('Starting bot...');
     await startBot(bot);
     logger.info('✅ Bot started successfully');
+
+    // Step 5: Start blockchain monitor
+    logger.info('Starting blockchain monitor...');
+    await startBlockchainMonitor();
+    logger.info('✅ Blockchain monitor started');
+
+    // Step 6: Start payment processor
+    logger.info('Starting payment processor...');
+    await startPaymentProcessor();
+    logger.info('✅ Payment processor started');
+
+    // Step 7: Start backup scheduler
+    logger.info('Starting backup scheduler...');
+    await startBackupScheduler();
+    logger.info('✅ Backup scheduler started');
+
+    // Step 8: Start cleanup scheduler
+    logger.info('Starting cleanup scheduler...');
+    await startCleanupScheduler();
+    logger.info('✅ Cleanup scheduler started');
 
     console.log(`
 ╔═══════════════════════════════════════════════════════╗
@@ -50,6 +87,9 @@ async function main() {
 ║  Environment: ${config.env.padEnd(40)}║
 ║  Database: Connected                                  ║
 ║  Bot: Active                                          ║
+║  Blockchain Monitor: Active                           ║
+║  Payment Processor: Active                            ║
+║  Background Jobs: Active                              ║
 ║                                                       ║
 ║  Press Ctrl+C to stop                                 ║
 ╚═══════════════════════════════════════════════════════╝
@@ -79,12 +119,34 @@ function setupGracefulShutdown(bot: any) {
     logger.info(`Received ${signal}, shutting down gracefully...`);
 
     try {
-      // Step 1: Stop accepting new updates
+      // Step 1: Stop background jobs
+      logger.info('Stopping blockchain monitor...');
+      await stopBlockchainMonitor();
+      logger.info('✅ Blockchain monitor stopped');
+
+      logger.info('Stopping payment processor...');
+      await stopPaymentProcessor();
+      logger.info('✅ Payment processor stopped');
+
+      logger.info('Stopping backup scheduler...');
+      await stopBackupScheduler();
+      logger.info('✅ Backup scheduler stopped');
+
+      logger.info('Stopping cleanup scheduler...');
+      await stopCleanupScheduler();
+      logger.info('✅ Cleanup scheduler stopped');
+
+      // Step 2: Stop accepting new updates
       logger.info('Stopping bot...');
       await stopBot(bot);
       logger.info('✅ Bot stopped');
 
-      // Step 2: Close database connections
+      // Step 3: Close queues
+      logger.info('Closing job queues...');
+      await closeQueues();
+      logger.info('✅ Queues closed');
+
+      // Step 4: Close database connections
       logger.info('Closing database...');
       await closeDatabase();
       logger.info('✅ Database closed');

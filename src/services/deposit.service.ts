@@ -4,10 +4,11 @@
  */
 
 import { AppDataSource } from '../database/data-source';
-import { Deposit, User } from '../database/entities';
+import { Deposit, User, Transaction } from '../database/entities';
 import { createLogger } from '../utils/logger.util';
 import { DEPOSIT_LEVELS, REQUIRED_REFERRALS_PER_LEVEL, TransactionStatus } from '../utils/constants';
 import userService from './user.service';
+import { paymentService } from './payment.service';
 
 const logger = createLogger('DepositService');
 
@@ -298,8 +299,38 @@ export class DepositService {
         depositId: deposit.id,
         userId: deposit.user_id,
         level: deposit.level,
+        amount: deposit.amount,
         blockNumber,
       });
+
+      // Find associated transaction for source_transaction_id
+      const transactionRepo = AppDataSource.getRepository(Transaction);
+      const transaction = await transactionRepo.findOne({
+        where: { tx_hash: txHash },
+      });
+
+      // Create referral earnings
+      if (transaction) {
+        try {
+          const result = await paymentService.createReferralEarnings(
+            deposit.user_id,
+            parseFloat(deposit.amount),
+            transaction.id
+          );
+
+          logger.info('Referral earnings created', {
+            depositId: deposit.id,
+            created: result.created,
+            totalAmount: result.totalAmount,
+          });
+        } catch (error) {
+          logger.error('Error creating referral earnings', {
+            depositId: deposit.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          // Don't fail the deposit confirmation if referral earnings fail
+        }
+      }
 
       return { success: true };
     } catch (error) {

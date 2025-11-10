@@ -1,0 +1,478 @@
+/**
+ * Payment Service
+ * Handles automated payouts for referral rewards
+ * - Processes pending referral earnings
+ * - Batches payments by user (gas optimization)
+ * - Creates transaction records
+ * - Handles payment failures and retries
+ */
+
+import { In } from 'typeorm';
+import { AppDataSource } from '../database/data-source';
+import { ReferralEarning } from '../database/entities/ReferralEarning.entity';
+import { Transaction } from '../database/entities/Transaction.entity';
+import { User } from '../database/entities/User.entity';
+import { Referral } from '../database/entities/Referral.entity';
+import { TransactionStatus, TransactionType } from '../utils/constants';
+import { blockchainService } from './blockchain.service';
+import { logger } from '../utils/logger.util';
+
+export class PaymentService {
+  private static instance: PaymentService;
+
+  private constructor() {}
+
+  public static getInstance(): PaymentService {
+    if (!PaymentService.instance) {
+      PaymentService.instance = new PaymentService();
+    }
+    return PaymentService.instance;
+  }
+
+  /**
+   * Process pending referral earnings
+   * Called by payment processor job
+   */
+  public async processPendingPayments(): Promise<{
+    processed: number;
+    successful: number;
+    failed: number;
+  }> {
+    try {
+      const earningRepo = AppDataSource.getRepository(ReferralEarning);
+      const userRepo = AppDataSource.getRepository(User);
+
+      // Get all pending earnings
+      const pendingEarnings = await earningRepo.find({
+        where: { paid: false },
+        relations: ['referral', 'referral.referrer'],
+        order: { created_at: 'ASC' },
+      });
+
+      if (pendingEarnings.length === 0) {
+        return { processed: 0, successful: 0, failed: 0 };
+      }
+
+      logger.info(`💸 Processing ${pendingEarnings.length} pending payments...`);
+
+      // Group earnings by user (referrer)
+      const earningsByUser = new Map<number, ReferralEarning[]>();
+
+      for (const earning of pendingEarnings) {
+        const referrerId = earning.referral.referrer_id;
+        if (!earningsByUser.has(referrerId)) {
+          earningsByUser.set(referrerId, []);
+        }
+        earningsByUser.get(referrerId)!.push(earning);
+      }
+
+      let processed = 0;
+      let successful = 0;
+      let failed = 0;
+
+      // Process payments for each user
+      for (const [referrerId, earnings] of earningsByUser) {
+        try {
+          const result = await this.processUserPayments(referrerId, earnings);
+          processed += result.processed;
+          successful += result.successful;
+          failed += result.failed;
+        } catch (error) {
+          logger.error(`❌ Error processing payments for user ${referrerId}:`, error);
+          failed += earnings.length;
+        }
+      }
+
+      logger.info(
+        `✅ Payment processing complete: ${successful} successful, ${failed} failed out of ${processed} total`
+      );
+
+      return { processed, successful, failed };
+    } catch (error) {
+      logger.error('❌ Error processing pending payments:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Process all pending payments for a single user
+   */
+  private async processUserPayments(
+    referrerId: number,
+    earnings: ReferralEarning[]
+  ): Promise<{
+    processed: number;
+    successful: number;
+    failed: number;
+  }> {
+    const userRepo = AppDataSource.getRepository(User);
+    const earningRepo = AppDataSource.getRepository(ReferralEarning);
+    const transactionRepo = AppDataSource.getRepository(Transaction);
+
+    try {
+      // Get user
+      const user = await userRepo.findOne({ where: { id: referrerId } });
+
+      if (!user) {
+        logger.error(`❌ User not found: ${referrerId}`);
+        return { processed: earnings.length, successful: 0, failed: earnings.length };
+      }
+
+      if (!user.wallet_address) {
+        logger.error(`❌ User ${user.telegram_id} has no wallet address`);
+        return { processed: earnings.length, successful: 0, failed: earnings.length };
+      }
+
+      // Calculate total amount to pay
+      const totalAmount = earnings.reduce(
+        (sum, earning) => sum + parseFloat(earning.amount),
+        0
+      );
+
+      logger.info(
+        `💰 Paying ${totalAmount} USDT to user ${user.telegram_id} (${earnings.length} earnings)`
+      );
+
+      // Send payment via blockchain
+      const paymentResult = await blockchainService.sendPayment(
+        user.wallet_address,
+        totalAmount
+      );
+
+      if (!paymentResult.success) {
+        logger.error(
+          `❌ Payment failed for user ${user.telegram_id}: ${paymentResult.error}`
+        );
+        return { processed: earnings.length, successful: 0, failed: earnings.length };
+      }
+
+      // Mark earnings as paid
+      for (const earning of earnings) {
+        earning.paid = true;
+        earning.tx_hash = paymentResult.txHash;
+        await earningRepo.save(earning);
+      }
+
+      // Create transaction record
+      await transactionRepo.save({
+        user_id: user.id,
+        tx_hash: paymentResult.txHash!,
+        type: TransactionType.REFERRAL_REWARD,
+        amount: totalAmount.toString(),
+        from_address: '', // Will be filled by blockchain service
+        to_address: user.wallet_address,
+        status: TransactionStatus.CONFIRMED,
+      });
+
+      logger.info(
+        `✅ Payment successful: ${totalAmount} USDT to user ${user.telegram_id} (tx: ${paymentResult.txHash})`
+      );
+
+      return {
+        processed: earnings.length,
+        successful: earnings.length,
+        failed: 0,
+      };
+    } catch (error) {
+      logger.error(`❌ Error processing user ${referrerId} payments:`, error);
+      return {
+        processed: earnings.length,
+        successful: 0,
+        failed: earnings.length,
+      };
+    }
+  }
+
+  /**
+   * Create referral earnings when a deposit is confirmed
+   * This is called from deposit.service.ts after confirmation
+   */
+  public async createReferralEarnings(
+    userId: number,
+    depositAmount: number,
+    sourceTransactionId: number
+  ): Promise<{
+    created: number;
+    totalAmount: number;
+  }> {
+    try {
+      const referralRepo = AppDataSource.getRepository(Referral);
+      const earningRepo = AppDataSource.getRepository(ReferralEarning);
+
+      // Get all referrals for this user (up to 3 levels)
+      const referrals = await referralRepo.find({
+        where: { referred_id: userId },
+        relations: ['referrer'],
+        order: { level: 'ASC' },
+      });
+
+      if (referrals.length === 0) {
+        logger.info(`ℹ️ User ${userId} has no referrers`);
+        return { created: 0, totalAmount: 0 };
+      }
+
+      const rewards = this.calculateRewards(depositAmount);
+      let created = 0;
+      let totalAmount = 0;
+
+      for (const referral of referrals) {
+        const reward = rewards.find((r) => r.level === referral.level);
+
+        if (!reward || reward.reward <= 0) {
+          continue;
+        }
+
+        // Create earning record
+        await earningRepo.save({
+          referral_id: referral.id,
+          amount: reward.reward.toString(),
+          source_transaction_id: sourceTransactionId,
+          paid: false,
+        });
+
+        created++;
+        totalAmount += reward.reward;
+
+        logger.info(
+          `💵 Created earning: ${reward.reward} USDT for user ${referral.referrer.telegram_id} (level ${referral.level})`
+        );
+      }
+
+      logger.info(
+        `✅ Created ${created} referral earnings totaling ${totalAmount} USDT`
+      );
+
+      return { created, totalAmount };
+    } catch (error) {
+      logger.error('❌ Error creating referral earnings:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Calculate referral rewards based on deposit amount
+   */
+  private calculateRewards(
+    amount: number
+  ): Array<{ level: number; rate: number; reward: number }> {
+    const REFERRAL_RATES = {
+      1: 0.03, // 3%
+      2: 0.02, // 2%
+      3: 0.05, // 5%
+    };
+
+    return [
+      {
+        level: 1,
+        rate: REFERRAL_RATES[1],
+        reward: amount * REFERRAL_RATES[1],
+      },
+      {
+        level: 2,
+        rate: REFERRAL_RATES[2],
+        reward: amount * REFERRAL_RATES[2],
+      },
+      {
+        level: 3,
+        rate: REFERRAL_RATES[3],
+        reward: amount * REFERRAL_RATES[3],
+      },
+    ];
+  }
+
+  /**
+   * Get payment statistics
+   */
+  public async getPaymentStats(): Promise<{
+    pendingEarnings: number;
+    pendingAmount: number;
+    paidEarnings: number;
+    paidAmount: number;
+  }> {
+    try {
+      const earningRepo = AppDataSource.getRepository(ReferralEarning);
+
+      const pending = await earningRepo.find({
+        where: { paid: false },
+      });
+
+      const paid = await earningRepo.find({
+        where: { paid: true },
+      });
+
+      const pendingAmount = pending.reduce(
+        (sum, e) => sum + parseFloat(e.amount),
+        0
+      );
+
+      const paidAmount = paid.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+
+      return {
+        pendingEarnings: pending.length,
+        pendingAmount,
+        paidEarnings: paid.length,
+        paidAmount,
+      };
+    } catch (error) {
+      logger.error('❌ Error getting payment stats:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get pending earnings for a specific user
+   */
+  public async getUserPendingEarnings(userId: number): Promise<{
+    count: number;
+    totalAmount: number;
+    earnings: ReferralEarning[];
+  }> {
+    try {
+      const earningRepo = AppDataSource.getRepository(ReferralEarning);
+      const referralRepo = AppDataSource.getRepository(Referral);
+
+      // Get user's referrals
+      const referrals = await referralRepo.find({
+        where: { referrer_id: userId },
+      });
+
+      if (referrals.length === 0) {
+        return { count: 0, totalAmount: 0, earnings: [] };
+      }
+
+      const referralIds = referrals.map((r) => r.id);
+
+      // Get pending earnings
+      const earnings = await earningRepo.find({
+        where: {
+          referral_id: In(referralIds),
+          paid: false,
+        },
+        relations: ['referral', 'referral.referred'],
+        order: { created_at: 'DESC' },
+      });
+
+      const totalAmount = earnings.reduce(
+        (sum, e) => sum + parseFloat(e.amount),
+        0
+      );
+
+      return {
+        count: earnings.length,
+        totalAmount,
+        earnings,
+      };
+    } catch (error) {
+      logger.error(`❌ Error getting pending earnings for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get paid earnings for a specific user
+   */
+  public async getUserPaidEarnings(userId: number): Promise<{
+    count: number;
+    totalAmount: number;
+    earnings: ReferralEarning[];
+  }> {
+    try {
+      const earningRepo = AppDataSource.getRepository(ReferralEarning);
+      const referralRepo = AppDataSource.getRepository(Referral);
+
+      // Get user's referrals
+      const referrals = await referralRepo.find({
+        where: { referrer_id: userId },
+      });
+
+      if (referrals.length === 0) {
+        return { count: 0, totalAmount: 0, earnings: [] };
+      }
+
+      const referralIds = referrals.map((r) => r.id);
+
+      // Get paid earnings
+      const earnings = await earningRepo.find({
+        where: {
+          referral_id: In(referralIds),
+          paid: true,
+        },
+        relations: ['referral', 'referral.referred'],
+        order: { created_at: 'DESC' },
+      });
+
+      const totalAmount = earnings.reduce(
+        (sum, e) => sum + parseFloat(e.amount),
+        0
+      );
+
+      return {
+        count: earnings.length,
+        totalAmount,
+        earnings,
+      };
+    } catch (error) {
+      logger.error(`❌ Error getting paid earnings for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Retry failed payments (for manual intervention)
+   */
+  public async retryFailedPayments(
+    earningIds: number[]
+  ): Promise<{
+    processed: number;
+    successful: number;
+    failed: number;
+  }> {
+    try {
+      const earningRepo = AppDataSource.getRepository(ReferralEarning);
+
+      const earnings = await earningRepo.find({
+        where: {
+          id: In(earningIds),
+          paid: false,
+        },
+        relations: ['referral', 'referral.referrer'],
+      });
+
+      if (earnings.length === 0) {
+        return { processed: 0, successful: 0, failed: 0 };
+      }
+
+      logger.info(`🔄 Retrying ${earnings.length} failed payments...`);
+
+      // Group by user
+      const earningsByUser = new Map<number, ReferralEarning[]>();
+
+      for (const earning of earnings) {
+        const referrerId = earning.referral.referrer_id;
+        if (!earningsByUser.has(referrerId)) {
+          earningsByUser.set(referrerId, []);
+        }
+        earningsByUser.get(referrerId)!.push(earning);
+      }
+
+      let processed = 0;
+      let successful = 0;
+      let failed = 0;
+
+      for (const [referrerId, userEarnings] of earningsByUser) {
+        const result = await this.processUserPayments(referrerId, userEarnings);
+        processed += result.processed;
+        successful += result.successful;
+        failed += result.failed;
+      }
+
+      return { processed, successful, failed };
+    } catch (error) {
+      logger.error('❌ Error retrying failed payments:', error);
+      throw error;
+    }
+  }
+}
+
+// Export singleton instance
+export const paymentService = PaymentService.getInstance();
