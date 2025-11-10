@@ -16,6 +16,8 @@
     "migration:create": "npm run typeorm migration:create",
     "migration:run": "npm run typeorm migration:run -- -d src/database/data-source.ts",
     "migration:revert": "npm run typeorm migration:revert -- -d src/database/data-source.ts",
+    "migration:show": "ts-node scripts/run-migrations.ts show",
+    "migration:cli": "ts-node scripts/run-migrations.ts",
     "schema:sync": "npm run typeorm schema:sync -- -d src/database/data-source.ts",
     "schema:drop": "npm run typeorm schema:drop -- -d src/database/data-source.ts",
     "test": "jest --config jest.config.js",
