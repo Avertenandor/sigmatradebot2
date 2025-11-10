@@ -28,6 +28,9 @@ export class Admin {
   @Column({ type: 'varchar', length: 20, default: 'admin' })
   role!: string; // admin, super_admin
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  master_key?: string; // Hashed master key for 2FA
+
   @Column({ type: 'integer', nullable: true })
   created_by?: number;
 

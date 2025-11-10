@@ -1,26 +1,53 @@
 /**
  * Admin Middleware
- * Checks if user has admin privileges
+ * Checks if user has admin privileges and validates session
  */
 
 import { Context, MiddlewareFn } from 'telegraf';
 import { AppDataSource } from '../../database/data-source';
-import { Admin } from '../../database/entities';
+import { Admin, AdminSession } from '../../database/entities';
 import { ERROR_MESSAGES } from '../../utils/constants';
 import { config } from '../../config';
 import { createLogger, logSecurityEvent } from '../../utils/logger.util';
+import adminService from '../../services/admin.service';
 
 const logger = createLogger('AdminMiddleware');
+
+// Store session tokens in-memory (telegram_id -> session_token)
+const adminSessions = new Map<number, string>();
 
 // Extend Context with admin status
 export interface AdminContext extends Context {
   admin?: Admin;
+  adminSession?: AdminSession;
   isAdmin: boolean;
   isSuperAdmin: boolean;
+  isAuthenticated: boolean; // Has valid session
 }
 
 /**
- * Admin middleware - checks if user is admin
+ * Store admin session token
+ */
+export function setAdminSession(telegramId: number, sessionToken: string): void {
+  adminSessions.set(telegramId, sessionToken);
+}
+
+/**
+ * Get admin session token
+ */
+export function getAdminSession(telegramId: number): string | undefined {
+  return adminSessions.get(telegramId);
+}
+
+/**
+ * Clear admin session
+ */
+export function clearAdminSession(telegramId: number): void {
+  adminSessions.delete(telegramId);
+}
+
+/**
+ * Admin middleware - checks if user is admin and validates session
  */
 export const adminMiddleware: MiddlewareFn<Context> = async (ctx, next) => {
   const telegramId = ctx.from?.id;
@@ -29,12 +56,18 @@ export const adminMiddleware: MiddlewareFn<Context> = async (ctx, next) => {
     return next();
   }
 
-  // Check if user is super admin from config
+  const adminCtx = ctx as AdminContext;
+  adminCtx.isAuthenticated = false;
+  adminCtx.isAdmin = false;
+  adminCtx.isSuperAdmin = false;
+
+  // Check if user is super admin from config (no session needed)
   const isSuperAdmin = telegramId === config.telegram.superAdminId;
 
   if (isSuperAdmin) {
-    (ctx as AdminContext).isAdmin = true;
-    (ctx as AdminContext).isSuperAdmin = true;
+    adminCtx.isAdmin = true;
+    adminCtx.isSuperAdmin = true;
+    adminCtx.isAuthenticated = true;
     return next();
   }
 
@@ -46,25 +79,45 @@ export const adminMiddleware: MiddlewareFn<Context> = async (ctx, next) => {
       where: { telegram_id: telegramId },
     });
 
-    (ctx as AdminContext).admin = admin || undefined;
-    (ctx as AdminContext).isAdmin = !!admin;
-    (ctx as AdminContext).isSuperAdmin = admin?.isSuperAdmin || false;
+    if (!admin) {
+      return next();
+    }
 
-    if (admin) {
-      logger.debug('Admin loaded', {
-        adminId: admin.id,
-        telegramId: admin.telegram_id,
-        role: admin.role,
-      });
+    adminCtx.admin = admin;
+    adminCtx.isAdmin = true;
+    adminCtx.isSuperAdmin = admin.isSuperAdmin;
+
+    // Check for active session
+    const sessionToken = adminSessions.get(telegramId);
+
+    if (sessionToken) {
+      const { session, error } = await adminService.validateSession(sessionToken);
+
+      if (session && !error) {
+        adminCtx.adminSession = session;
+        adminCtx.isAuthenticated = true;
+
+        logger.debug('Admin session validated', {
+          adminId: admin.id,
+          telegramId: admin.telegram_id,
+          sessionId: session.id,
+          remainingMinutes: session.remainingTimeMinutes,
+        });
+      } else {
+        // Session expired or invalid - clear it
+        adminSessions.delete(telegramId);
+        logger.info('Admin session invalidated', {
+          adminId: admin.id,
+          telegramId: admin.telegram_id,
+          error,
+        });
+      }
     }
   } catch (error) {
     logger.error('Error loading admin', {
       telegramId,
       error: error instanceof Error ? error.message : String(error),
     });
-
-    (ctx as AdminContext).isAdmin = false;
-    (ctx as AdminContext).isSuperAdmin = false;
   }
 
   return next();
@@ -115,6 +168,41 @@ export const requireSuperAdmin: MiddlewareFn<Context> = async (ctx, next) => {
     );
 
     await ctx.reply('❌ Эта команда доступна только главному администратору.');
+    return;
+  }
+
+  return next();
+};
+
+/**
+ * Require authenticated admin middleware
+ * Blocks admins without active session (except super admin)
+ */
+export const requireAuthenticated: MiddlewareFn<Context> = async (ctx, next) => {
+  const adminCtx = ctx as AdminContext;
+
+  // Super admin from config doesn't need session
+  if (adminCtx.isSuperAdmin && ctx.from?.id === config.telegram.superAdminId) {
+    return next();
+  }
+
+  if (!adminCtx.isAuthenticated) {
+    logSecurityEvent(
+      'Unauthenticated admin attempted action',
+      'medium',
+      {
+        telegramId: ctx.from?.id,
+        username: ctx.from?.username,
+        isAdmin: adminCtx.isAdmin,
+        action: 'callbackQuery' in ctx ? ctx.callbackQuery?.data : undefined,
+      }
+    );
+
+    await ctx.reply(
+      '🔐 Требуется аутентификация.\n\n' +
+      'Используйте команду /admin_login для входа с мастер-ключом.\n\n' +
+      'Сессия действует 1 час с момента последней активности.'
+    );
     return;
   }
 

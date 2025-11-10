@@ -15,6 +15,7 @@ import { AppDataSource } from '../database/data-source';
 import { UserAction } from '../database/entities/UserAction.entity';
 import { config } from '../config';
 import { logger } from '../utils/logger.util';
+import adminService from '../services/admin.service';
 
 const execAsync = promisify(exec);
 
@@ -31,6 +32,9 @@ export const performCleanup = async (job: Job<CleanupJobData>): Promise<void> =>
 
     // Clean old user actions (7-day TTL)
     await cleanOldUserActions();
+
+    // Clean expired admin sessions
+    await cleanExpiredAdminSessions();
 
     // Clean old log files
     await cleanOldLogFiles();
@@ -64,6 +68,23 @@ const cleanOldUserActions = async (): Promise<void> => {
     );
   } catch (error) {
     logger.error('❌ Error cleaning old user actions:', error);
+  }
+};
+
+/**
+ * Clean expired admin sessions
+ */
+const cleanExpiredAdminSessions = async (): Promise<void> => {
+  try {
+    const cleaned = await adminService.cleanupExpiredSessions();
+
+    if (cleaned > 0) {
+      logger.info(`🗑️ Deactivated ${cleaned} expired admin sessions`);
+    } else {
+      logger.debug('ℹ️ No expired admin sessions to clean');
+    }
+  } catch (error) {
+    logger.error('❌ Error cleaning expired admin sessions:', error);
   }
 };
 

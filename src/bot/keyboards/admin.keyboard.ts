@@ -18,7 +18,10 @@ export const getAdminPanelKeyboard = () => {
       Markup.button.callback(BUTTON_LABELS.BAN_USER, 'admin_ban_user'),
       Markup.button.callback(BUTTON_LABELS.UNBAN_USER, 'admin_unban_user'),
     ],
-    [Markup.button.callback(BUTTON_LABELS.PROMOTE_ADMIN, 'admin_promote')],
+    [
+      Markup.button.callback(BUTTON_LABELS.PROMOTE_ADMIN, 'admin_promote'),
+      Markup.button.callback('📋 Список админов', 'admin_list_admins'),
+    ],
     [Markup.button.callback(BUTTON_LABELS.PLATFORM_STATS, 'admin_stats')],
     [Markup.button.callback(BUTTON_LABELS.BACK, 'main_menu')],
   ]);

@@ -66,6 +66,13 @@ import {
   handlePendingWithdrawals,
   handleApproveWithdrawal,
   handleRejectWithdrawal,
+  handleListAdmins,
+  handleRemoveAdmin,
+  handleRegenerateMasterKey,
+  handleAdminLogin,
+  handleMasterKeyInput,
+  handleAdminLogout,
+  handleAdminSession,
 } from './handlers';
 
 // Context types
@@ -108,6 +115,13 @@ export const initializeBot = (): Telegraf => {
    * /help command
    */
   bot.command('help', handleHelp);
+
+  /**
+   * Admin authentication commands
+   */
+  bot.command('admin_login', handleAdminLogin);
+  bot.command('admin_logout', handleAdminLogout);
+  bot.command('admin_session', handleAdminSession);
 
   // ==================== CALLBACK QUERIES ====================
 
@@ -184,6 +198,9 @@ export const initializeBot = (): Telegraf => {
   bot.action('admin_ban_user', handleStartBanUser);
   bot.action('admin_unban_user', handleStartUnbanUser);
   bot.action('admin_promote', handleStartPromoteAdmin);
+  bot.action('admin_list_admins', handleListAdmins);
+  bot.action(/^admin_remove_\d+$/, handleRemoveAdmin);
+  bot.action(/^admin_regenerate_key_\d+$/, handleRegenerateMasterKey);
   bot.action('admin_pending_withdrawals', handlePendingWithdrawals);
   bot.action(/^admin_approve_withdrawal_\d+$/, handleApproveWithdrawal);
   bot.action(/^admin_reject_withdrawal_\d+$/, handleRejectWithdrawal);
@@ -238,6 +255,10 @@ export const initializeBot = (): Telegraf => {
 
       case BotState.AWAITING_ADMIN_USER_TO_PROMOTE:
         await handlePromoteAdminInput(ctx);
+        break;
+
+      case BotState.AWAITING_ADMIN_MASTER_KEY:
+        await handleMasterKeyInput(ctx);
         break;
 
       default:
