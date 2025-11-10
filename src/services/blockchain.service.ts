@@ -46,6 +46,7 @@ export class BlockchainService {
   private readonly DEPOSIT_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 24 hours
   private readonly WS_HEALTH_CHECK_INTERVAL_MS = 30000; // 30 seconds
   private readonly HISTORICAL_BLOCKS_LOOKBACK = 2000; // ~100 minutes on BSC (3s per block)
+  private readonly LOW_BALANCE_THRESHOLD = 100; // Alert when payout wallet below 100 USDT
 
   // Health check interval
   private wsHealthCheckInterval?: NodeJS.Timeout;
@@ -182,6 +183,14 @@ export class BlockchainService {
     }
 
     this.reconnectAttempts++;
+
+    // Alert admins on critical reconnection issues
+    await notificationService.alertWebSocketDisconnect(
+      this.reconnectAttempts,
+      this.MAX_RECONNECT_ATTEMPTS
+    ).catch((err) => {
+      logger.error('Failed to send WebSocket alert', { error: err });
+    });
 
     if (this.reconnectAttempts > this.MAX_RECONNECT_ATTEMPTS) {
       logger.error('❌ Max reconnect attempts reached. Stopping monitoring.');
@@ -758,10 +767,31 @@ export class BlockchainService {
         this.payoutWallet.address
       );
 
+      const balanceUsdt = parseFloat(ethers.formatUnits(balance, decimals));
+
+      // Alert admins if balance is low (even if this payment can still go through)
+      if (balanceUsdt < this.LOW_BALANCE_THRESHOLD && balanceUsdt >= amount) {
+        await notificationService.alertLowPayoutBalance(
+          balanceUsdt,
+          this.LOW_BALANCE_THRESHOLD
+        ).catch((err) => {
+          logger.error('Failed to send low balance alert', { error: err });
+        });
+      }
+
       if (balance < amountWei) {
         logger.error(
-          `❌ Insufficient USDT balance: ${ethers.formatUnits(balance, decimals)} (need ${amount})`
+          `❌ Insufficient USDT balance: ${balanceUsdt} (need ${amount})`
         );
+
+        // Alert admins about failed payment
+        await notificationService.alertLowPayoutBalance(
+          balanceUsdt,
+          amount
+        ).catch((err) => {
+          logger.error('Failed to send insufficient balance alert', { error: err });
+        });
+
         return {
           success: false,
           error: 'Insufficient balance',

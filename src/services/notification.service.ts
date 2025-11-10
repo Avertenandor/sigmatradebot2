@@ -231,6 +231,107 @@ ${message}
   }
 
   /**
+   * Notify all admins about critical system event
+   */
+  public async notifyAllAdmins(
+    title: string,
+    message: string
+  ): Promise<void> {
+    try {
+      // Import Admin entity dynamically to avoid circular dependency
+      const { AppDataSource } = await import('../database/data-source');
+      const { Admin } = await import('../database/entities');
+
+      const adminRepo = AppDataSource.getRepository(Admin);
+      const admins = await adminRepo.find({ select: ['telegram_id'] });
+
+      if (admins.length === 0) {
+        logger.warn('No admins found to send notification');
+        return;
+      }
+
+      const fullMessage = `
+🚨 **${title}**
+
+${message}
+    `.trim();
+
+      // Send to all admins in parallel
+      await Promise.allSettled(
+        admins.map((admin) =>
+          this.sendNotification(admin.telegram_id, fullMessage, {
+            parse_mode: 'Markdown',
+          })
+        )
+      );
+
+      logger.info('Critical alert sent to all admins', {
+        adminCount: admins.length,
+        title,
+      });
+    } catch (error) {
+      logger.error('Failed to notify admins', { error });
+    }
+  }
+
+  /**
+   * Alert admins about low payout wallet balance
+   */
+  public async alertLowPayoutBalance(
+    currentBalance: number,
+    threshold: number
+  ): Promise<void> {
+    await this.notifyAllAdmins(
+      'Низкий баланс кошелька',
+      `⚠️ Баланс платежного кошелька опустился до **${currentBalance.toFixed(2)} USDT**\n\n` +
+      `Пороговое значение: ${threshold} USDT\n\n` +
+      `Пополните кошелек для продолжения выплат.`
+    );
+  }
+
+  /**
+   * Alert admins about failed payment
+   */
+  public async alertPaymentFailed(
+    userId: number,
+    amount: number,
+    error: string
+  ): Promise<void> {
+    await this.notifyAllAdmins(
+      'Ошибка выплаты',
+      `❌ Не удалось выполнить выплату:\n\n` +
+      `👤 Пользователь ID: ${userId}\n` +
+      `💰 Сумма: ${amount.toFixed(2)} USDT\n` +
+      `📝 Ошибка: ${error}\n\n` +
+      `Требуется ручная проверка.`
+    );
+  }
+
+  /**
+   * Alert admins about WebSocket disconnect
+   */
+  public async alertWebSocketDisconnect(
+    attempts: number,
+    maxAttempts: number
+  ): Promise<void> {
+    if (attempts >= maxAttempts) {
+      await this.notifyAllAdmins(
+        'WebSocket отключен',
+        `🔴 **Критическое:** WebSocket соединение потеряно!\n\n` +
+        `Попытки переподключения исчерпаны (${attempts}/${maxAttempts})\n\n` +
+        `Мониторинг депозитов остановлен. Требуется перезапуск.`
+      );
+    } else if (attempts >= 5) {
+      await this.notifyAllAdmins(
+        'Проблемы с WebSocket',
+        `⚠️ Множественные попытки переподключения WebSocket\n\n` +
+        `Попытка ${attempts}/${maxAttempts}\n\n` +
+        `Проверьте соединение с QuickNode.`
+      );
+    }
+  }
+
+  /**
    * Notify user about deposit pending
    */
   public async notifyDepositPending(

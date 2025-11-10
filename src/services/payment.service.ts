@@ -144,6 +144,16 @@ export class PaymentService {
         logger.error(
           `❌ Payment failed for user ${user.telegram_id}: ${paymentResult.error}`
         );
+
+        // Alert admins about failed payment
+        await notificationService.alertPaymentFailed(
+          user.id,
+          totalAmount,
+          paymentResult.error || 'Unknown error'
+        ).catch((err) => {
+          logger.error('Failed to send payment failure alert', { error: err });
+        });
+
         return { processed: earnings.length, successful: 0, failed: earnings.length };
       }
 
