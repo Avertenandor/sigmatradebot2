@@ -422,23 +422,51 @@ export class BlockchainService {
         return;
       }
 
-      // Find matching pending deposit by level
+      // Use database transaction with pessimistic lock to prevent race conditions
+      // This ensures only one concurrent transaction can claim a pending deposit
       const depositRepo = AppDataSource.getRepository(Deposit);
-      const pendingDeposit = await depositRepo.findOne({
-        where: {
-          user_id: user.id,
-          level: matchedLevel,
-          status: TransactionStatus.PENDING,
-        },
-        order: { created_at: 'DESC' },
-      });
 
-      if (!pendingDeposit) {
-        logger.warn(
-          `⚠️ No pending deposit found for user ${user.telegram_id} level ${matchedLevel}`
-        );
-        // Create transaction record for manual review
-        await transactionRepo.save({
+      await AppDataSource.transaction(async (transactionalEntityManager) => {
+        // Find and lock matching pending deposit (SELECT FOR UPDATE)
+        // This prevents race conditions when multiple transactions arrive simultaneously
+        const pendingDeposit = await transactionalEntityManager
+          .createQueryBuilder(Deposit, 'deposit')
+          .where('deposit.user_id = :userId', { userId: user.id })
+          .andWhere('deposit.level = :level', { level: matchedLevel })
+          .andWhere('deposit.status = :status', { status: TransactionStatus.PENDING })
+          .andWhere('(deposit.tx_hash IS NULL OR deposit.tx_hash = \'\')')
+          .orderBy('deposit.created_at', 'DESC')
+          .setLock('pessimistic_write') // Row-level lock (SELECT FOR UPDATE)
+          .getOne();
+
+        if (!pendingDeposit) {
+          logger.warn(
+            `⚠️ No pending deposit found for user ${user.telegram_id} level ${matchedLevel}`
+          );
+          // Create transaction record for manual review
+          await transactionalEntityManager.save(Transaction, {
+            user_id: user.id,
+            tx_hash: txHash,
+            type: TransactionType.DEPOSIT,
+            amount: amount.toString(),
+            from_address: from.toLowerCase(),
+            to_address: to.toLowerCase(),
+            block_number: blockNumber,
+            status: TransactionStatus.PENDING,
+          });
+          logger.info(
+            `ℹ️ Transaction recorded for manual review: ${txHash}`
+          );
+          return;
+        }
+
+        // Update deposit with transaction hash (will be confirmed after N blocks)
+        pendingDeposit.tx_hash = txHash;
+        pendingDeposit.block_number = blockNumber;
+        await transactionalEntityManager.save(Deposit, pendingDeposit);
+
+        // Create transaction record
+        await transactionalEntityManager.save(Transaction, {
           user_id: user.id,
           tx_hash: txHash,
           type: TransactionType.DEPOSIT,
@@ -448,40 +476,11 @@ export class BlockchainService {
           block_number: blockNumber,
           status: TransactionStatus.PENDING,
         });
+
         logger.info(
-          `ℹ️ Transaction recorded for manual review: ${txHash}`
+          `✅ Deposit tracked: ${amount} USDT for user ${user.telegram_id} (tx: ${txHash})`
         );
-        return;
-      }
-
-      // Check if deposit already has a transaction hash (race condition protection)
-      if (pendingDeposit.tx_hash) {
-        logger.info(
-          `ℹ️ Deposit ${pendingDeposit.id} already has tx_hash: ${pendingDeposit.tx_hash}`
-        );
-        return;
-      }
-
-      // Update deposit with transaction hash (will be confirmed after N blocks)
-      pendingDeposit.tx_hash = txHash;
-      pendingDeposit.block_number = blockNumber;
-      await depositRepo.save(pendingDeposit);
-
-      // Create transaction record
-      await transactionRepo.save({
-        user_id: user.id,
-        tx_hash: txHash,
-        type: TransactionType.DEPOSIT,
-        amount: amount.toString(),
-        from_address: from.toLowerCase(),
-        to_address: to.toLowerCase(),
-        block_number: blockNumber,
-        status: TransactionStatus.PENDING,
       });
-
-      logger.info(
-        `✅ Deposit tracked: ${amount} USDT for user ${user.telegram_id} (tx: ${txHash})`
-      );
     } catch (error) {
       logger.error('❌ Error processing Transfer event:', error);
     }
