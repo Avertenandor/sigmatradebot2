@@ -14,8 +14,18 @@ import referralService from '../../services/referral.service';
 import { notificationService } from '../../services/notification.service';
 import { createLogger } from '../../utils/logger.util';
 import { Markup } from 'telegraf';
+import Redis from 'ioredis';
+import { config } from '../../config';
 
 const logger = createLogger('RegistrationHandler');
+
+// Redis client for referral ID backup recovery (FIX #5)
+const redis = new Redis({
+  host: config.redis.host,
+  port: config.redis.port,
+  password: config.redis.password,
+  db: config.redis.db,
+});
 
 /**
  * Start registration process
@@ -72,8 +82,22 @@ export const handleWalletInput = async (ctx: Context) => {
     return;
   }
 
-  // Get referrer ID from session
-  const referrerId = authCtx.session.data?.referrerId;
+  // FIX #5: Get referrer ID with fallback mechanism
+  let referrerId = authCtx.session.data?.referrerId;
+
+  // If not in session, check Redis backup
+  if (!referrerId) {
+    const referralKey = `referral:pending:${ctx.from!.id}`;
+    const storedReferrerId = await redis.get(referralKey);
+
+    if (storedReferrerId) {
+      referrerId = parseInt(storedReferrerId, 10);
+      logger.info('Recovered referral ID from backup storage', {
+        userId: ctx.from!.id,
+        referrerId,
+      });
+    }
+  }
 
   // Create user
   const result = await userService.createUser({
@@ -152,8 +176,19 @@ export const handleWalletInput = async (ctx: Context) => {
     parse_mode: 'Markdown',
     ...Markup.inlineKeyboard([
       [Markup.button.callback('✅ Пройти верификацию', 'start_verification')],
+      [Markup.button.callback('🔐 Показать пароль ещё раз', 'show_password_again')],
     ]),
   });
+
+  // FIX #5: Clean up backup storage after successful registration
+  if (referrerId) {
+    const referralKey = `referral:pending:${ctx.from!.id}`;
+    await redis.del(referralKey);
+    logger.debug('Cleaned up referral ID backup storage', {
+      userId: ctx.from!.id,
+      referrerId,
+    });
+  }
 
   // Reset session state
   await updateSessionState(ctx.from!.id, BotState.IDLE);
@@ -406,6 +441,54 @@ export const handleCancelRegistration = async (ctx: Context) => {
   await ctx.answerCbQuery('Отменено');
 };
 
+/**
+ * Show password again (FIX #6)
+ * Retrieves password from Redis backup if available
+ */
+export const handleShowPasswordAgain = async (ctx: Context) => {
+  const authCtx = ctx as AuthContext & SessionContext;
+
+  if (!authCtx.isRegistered || !authCtx.user) {
+    await ctx.answerCbQuery(ERROR_MESSAGES.USER_NOT_REGISTERED);
+    return;
+  }
+
+  // Try to get password from Redis
+  const plainPassword = await userService.getPlainPassword(authCtx.user.id);
+
+  if (!plainPassword) {
+    await ctx.answerCbQuery(
+      '⏰ Время истекло! Пароль доступен только в течение 1 часа после регистрации.',
+      { show_alert: true }
+    );
+    return;
+  }
+
+  // Send password as a separate message (more secure)
+  const passwordMessage = `
+🔐 **Ваш финансовый пароль:**
+
+\`${plainPassword}\`
+
+⚠️ **ВАЖНО:**
+• Сохраните пароль в надежном месте
+• Не передавайте его третьим лицам
+• Пароль доступен только в течение 1 часа после регистрации
+
+После истечения времени вы НЕ сможете восстановить этот пароль!
+  `.trim();
+
+  await ctx.reply(passwordMessage, {
+    parse_mode: 'Markdown',
+  });
+
+  await ctx.answerCbQuery('Пароль отправлен вам в личные сообщения');
+
+  logger.info('User retrieved password again from Redis', {
+    userId: authCtx.user.id,
+  });
+};
+
 export default {
   handleStartRegistration,
   handleWalletInput,
@@ -414,4 +497,5 @@ export default {
   handleContactInfoInput,
   handleSkipContactInfo,
   handleCancelRegistration,
+  handleShowPasswordAgain,
 };

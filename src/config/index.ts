@@ -126,6 +126,9 @@ export const config = {
     paymentProcessor: {
       enabled: process.env.JOB_PAYMENT_PROCESSOR_ENABLED !== 'false',
     },
+    paymentRetryProcessor: {
+      enabled: process.env.JOB_PAYMENT_RETRY_PROCESSOR_ENABLED !== 'false',
+    },
     rewardCalculator: {
       enabled: process.env.JOB_REWARD_CALCULATOR_ENABLED !== 'false',
       intervalMinutes: parseInt(process.env.JOB_REWARD_CALCULATOR_INTERVAL_MINUTES || '60', 10),

@@ -335,6 +335,27 @@ ${message}
   }
 
   /**
+   * Alert admins about payment moved to DLQ (Dead Letter Queue)
+   */
+  public async alertPaymentMovedToDLQ(
+    userId: number,
+    amount: number,
+    attemptCount: number,
+    error: string
+  ): Promise<void> {
+    await this.notifyAllAdmins(
+      'Выплата перемещена в DLQ',
+      `🚨 **Критическое:** Выплата перемещена в очередь неудачных попыток (DLQ)\n\n` +
+      `👤 Пользователь ID: ${userId}\n` +
+      `💰 Сумма: ${amount.toFixed(2)} USDT\n` +
+      `🔄 Попыток: ${attemptCount}\n` +
+      `📝 Последняя ошибка: ${error}\n\n` +
+      `Автоматические попытки исчерпаны. Требуется ручное вмешательство администратора.\n` +
+      `Используйте команду /retry_dlq для повторной попытки.`
+    );
+  }
+
+  /**
    * Alert admins about WebSocket disconnect
    */
   public async alertWebSocketDisconnect(

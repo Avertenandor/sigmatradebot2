@@ -21,6 +21,12 @@ import {
   startCleanupScheduler,
   stopCleanupScheduler,
 } from './jobs';
+import {
+  startPerformanceReporting,
+  stopPerformanceReporting,
+  startMemoryMonitoring,
+  stopMemoryMonitoring,
+} from './utils/performance-monitor.util';
 
 const logger = createLogger('Main');
 
@@ -87,6 +93,12 @@ async function main() {
     await startCleanupScheduler();
     logger.info('✅ Cleanup scheduler started');
 
+    // Step 10: Start performance monitoring
+    logger.info('Starting performance monitoring...');
+    startPerformanceReporting(); // Reports performance stats every hour
+    startMemoryMonitoring(); // Logs memory usage every 5 minutes
+    logger.info('✅ Performance monitoring started');
+
     console.log(`
 ╔═══════════════════════════════════════════════════════╗
 ║        🚀 SigmaTrade Bot is running! 🚀              ║
@@ -98,6 +110,7 @@ async function main() {
 ║  Payment Processor: Active                            ║
 ║  Reward Calculator: Active                            ║
 ║  Background Jobs: Active                              ║
+║  Performance Monitoring: Active                       ║
 ║                                                       ║
 ║  Press Ctrl+C to stop                                 ║
 ╚═══════════════════════════════════════════════════════╝
@@ -148,17 +161,23 @@ function setupGracefulShutdown(bot: any) {
       await stopCleanupScheduler();
       logger.info('✅ Cleanup scheduler stopped');
 
-      // Step 2: Stop accepting new updates
+      // Step 2: Stop performance monitoring
+      logger.info('Stopping performance monitoring...');
+      stopPerformanceReporting();
+      stopMemoryMonitoring();
+      logger.info('✅ Performance monitoring stopped');
+
+      // Step 3: Stop accepting new updates
       logger.info('Stopping bot...');
       await stopBot(bot);
       logger.info('✅ Bot stopped');
 
-      // Step 3: Close queues
+      // Step 4: Close queues
       logger.info('Closing job queues...');
       await closeQueues();
       logger.info('✅ Queues closed');
 
-      // Step 4: Close database connections
+      // Step 5: Close database connections
       logger.info('Closing database...');
       await closeDatabase();
       logger.info('✅ Database closed');

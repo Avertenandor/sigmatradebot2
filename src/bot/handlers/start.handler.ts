@@ -6,12 +6,24 @@
 import { Context } from 'telegraf';
 import { AuthContext } from '../middlewares/auth.middleware';
 import { AdminContext } from '../middlewares/admin.middleware';
-import { BOT_MESSAGES } from '../../utils/constants';
+import { SessionContext } from '../middlewares/session.middleware';
+import { BOT_MESSAGES, BotState } from '../../utils/constants';
 import { getMainKeyboard, getWelcomeKeyboard } from '../keyboards';
+import { updateSessionState } from '../middlewares/session.middleware';
 import userService from '../../services/user.service';
 import { createLogger } from '../../utils/logger.util';
+import Redis from 'ioredis';
+import { config } from '../../config';
 
 const logger = createLogger('StartHandler');
+
+// Redis client for referral ID backup storage (FIX #5)
+const redis = new Redis({
+  host: config.redis.host,
+  port: config.redis.port,
+  password: config.redis.password,
+  db: config.redis.db,
+});
 
 /**
  * Handle /start command
@@ -49,9 +61,39 @@ export const handleStart = async (ctx: Context) => {
     }
   }
 
-  // Store referrer ID in session for later use during registration
-  if (ctx.session && referrerId) {
-    ctx.session.data = { referrerId };
+  // FIX #5: SAFE STORAGE - Multiple fallbacks for referral ID
+  if (referrerId) {
+    const authCtx = ctx as AuthContext & AdminContext & SessionContext;
+
+    // 1. Try to store in session (primary method)
+    if (authCtx.session) {
+      authCtx.session.data = {
+        ...authCtx.session.data,
+        referrerId,
+      };
+      logger.debug('Referral ID stored in session', {
+        userId: ctx.from?.id,
+        referrerId,
+      });
+    } else {
+      logger.warn('Session not available, using fallback storage', {
+        userId: ctx.from?.id,
+        referrerId,
+      });
+    }
+
+    // 2. Store in Redis as backup (separate key) - ALWAYS do this as fallback
+    const referralKey = `referral:pending:${ctx.from!.id}`;
+    await redis.setex(referralKey, 3600, String(referrerId)); // 1 hour TTL
+
+    // 3. Update session state explicitly (creates session if not exists)
+    await updateSessionState(ctx.from!.id, BotState.IDLE, { referrerId });
+
+    logger.info('Referral ID stored with multiple fallbacks', {
+      userId: ctx.from!.id,
+      referrerId,
+      hasSession: !!authCtx.session,
+    });
   }
 
   const welcomeMessage = `${BOT_MESSAGES.WELCOME}

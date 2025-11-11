@@ -17,6 +17,7 @@ import { Referral } from '../database/entities/Referral.entity';
 import { TransactionStatus, TransactionType } from '../utils/constants';
 import { blockchainService } from './blockchain.service';
 import { notificationService } from './notification.service';
+import { paymentRetryService } from './payment-retry.service';
 import { logger } from '../utils/logger.util';
 
 export class PaymentService {
@@ -185,14 +186,19 @@ export class PaymentService {
           `❌ Payment failed for user ${user.telegram_id}: ${paymentResult.error}`
         );
 
-        // Alert admins about failed payment
-        await notificationService.alertPaymentFailed(
-          user.id,
-          totalAmount,
-          paymentResult.error || 'Unknown error'
-        ).catch((err) => {
-          logger.error('Failed to send payment failure alert', { error: err });
+        // Create retry record for automatic retry with exponential backoff
+        const earningIds = earnings.map(e => e.id);
+        await paymentRetryService.createRetryRecord({
+          userId: user.id,
+          amount: totalAmount,
+          paymentType: 'REFERRAL_EARNING',
+          earningIds,
+          error: paymentResult.error || 'Unknown error',
         });
+
+        logger.info(
+          `📝 Created payment retry record for user ${user.telegram_id}, amount: ${totalAmount} USDT`
+        );
 
         return { processed: earnings.length, successful: 0, failed: earnings.length };
       }
@@ -291,14 +297,19 @@ export class PaymentService {
           `❌ Deposit reward payment failed for user ${user.telegram_id}: ${paymentResult.error}`
         );
 
-        // Alert admins about failed payment
-        await notificationService.alertPaymentFailed(
-          user.id,
-          totalAmount,
-          paymentResult.error || 'Unknown error'
-        ).catch((err) => {
-          logger.error('Failed to send payment failure alert', { error: err });
+        // Create retry record for automatic retry with exponential backoff
+        const rewardIds = rewards.map(r => r.id);
+        await paymentRetryService.createRetryRecord({
+          userId: user.id,
+          amount: totalAmount,
+          paymentType: 'DEPOSIT_REWARD',
+          earningIds: rewardIds,
+          error: paymentResult.error || 'Unknown error',
         });
+
+        logger.info(
+          `📝 Created payment retry record for user ${user.telegram_id}, amount: ${totalAmount} USDT`
+        );
 
         return { processed: rewards.length, successful: 0, failed: rewards.length };
       }
