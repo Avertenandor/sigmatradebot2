@@ -11,6 +11,15 @@ import { TransactionType } from '../../utils/constants';
 import { notificationService } from '../notification.service';
 import { ProviderManager } from './provider.manager';
 import { DepositProcessor } from './deposit-processor';
+import Redis from 'ioredis';
+
+// FIX #16: Redis client for tracking historical fetch state
+const redis = new Redis({
+  host: config.redis.host,
+  port: config.redis.port,
+  password: config.redis.password,
+  db: config.redis.db,
+});
 
 export class EventMonitor {
   private isMonitoring = false;
@@ -19,6 +28,13 @@ export class EventMonitor {
   private readonly INITIAL_RECONNECT_DELAY_MS = 1000; // 1 second initial delay
   private readonly MAX_RECONNECT_DELAY_MS = 30000; // 30 seconds max delay
   private readonly HISTORICAL_BLOCKS_LOOKBACK = 2000; // ~100 minutes on BSC (3s per block)
+
+  // FIX #16: Track if historical events were already fetched in this session
+  private hasEverFetched = false;
+
+  // FIX #16: Cooldown to prevent spam fetching on rapid reconnects
+  private readonly FETCH_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+  private readonly LAST_FETCH_KEY = 'blockchain:last_historical_fetch';
 
   constructor(
     private providerManager: ProviderManager,
@@ -70,8 +86,13 @@ export class EventMonitor {
       // Start orphaned deposit cleanup job
       this.depositProcessor.startCleanupJob();
 
-      // Fetch historical events to catch deposits made while bot was offline
-      await this.fetchHistoricalEvents();
+      // FIX #16: Only fetch historical on FIRST start (not reconnects)
+      if (!this.hasEverFetched) {
+        await this.fetchHistoricalEvents();
+        this.hasEverFetched = true;
+      } else {
+        logger.info('⏭️ Skipping historical fetch (reconnect detected)');
+      }
 
       this.isMonitoring = true;
       logger.info('✅ Blockchain monitoring started');
@@ -154,31 +175,62 @@ export class EventMonitor {
   /**
    * Fetch and process historical Transfer events since last processed block
    * Called once on startup to catch any deposits made while bot was offline
+   * FIX #16: Enhanced with Redis tracking and cooldown to prevent spam
    */
   private async fetchHistoricalEvents(): Promise<void> {
     try {
+      // FIX #16: Check cooldown - prevent spam fetching on rapid reconnects
+      const lastFetchTime = await redis.get(`${this.LAST_FETCH_KEY}:time`);
+      if (lastFetchTime) {
+        const timeSinceLastFetch = Date.now() - parseInt(lastFetchTime);
+        if (timeSinceLastFetch < this.FETCH_COOLDOWN_MS) {
+          const remainingMs = this.FETCH_COOLDOWN_MS - timeSinceLastFetch;
+          logger.info('⏸️ Historical fetch on cooldown', {
+            remainingSeconds: Math.round(remainingMs / 1000),
+          });
+          return;
+        }
+      }
+
       const transactionRepo = AppDataSource.getRepository(Transaction);
       const httpProvider = this.providerManager.getHttpProvider();
       const usdtContract = this.providerManager.getUsdtContract();
-
-      // Get last processed block number from database
-      const lastTransaction = await transactionRepo.findOne({
-        where: { type: TransactionType.DEPOSIT },
-        order: { block_number: 'DESC' },
-        select: ['block_number'],
-      });
-
       const currentBlock = await httpProvider.getBlockNumber();
 
-      // Start from last processed block, or lookback N blocks if first run
-      const fromBlock = lastTransaction?.block_number
-        ? Number(lastTransaction.block_number) + 1
-        : currentBlock - this.HISTORICAL_BLOCKS_LOOKBACK;
+      // FIX #16: Get last fetched block from Redis (persists across restarts)
+      // Fallback to database if Redis doesn't have it
+      const lastFetchedBlockRedis = await redis.get(`${this.LAST_FETCH_KEY}:block`);
+      let fromBlock: number;
+
+      if (lastFetchedBlockRedis) {
+        // Use Redis tracked block (most reliable)
+        fromBlock = parseInt(lastFetchedBlockRedis) + 1;
+        logger.debug('Using last fetched block from Redis', { fromBlock: fromBlock - 1 });
+      } else {
+        // Fallback to database
+        const lastTransaction = await transactionRepo.findOne({
+          where: { type: TransactionType.DEPOSIT },
+          order: { block_number: 'DESC' },
+          select: ['block_number'],
+        });
+
+        fromBlock = lastTransaction?.block_number
+          ? Number(lastTransaction.block_number) + 1
+          : currentBlock - this.HISTORICAL_BLOCKS_LOOKBACK;
+
+        logger.debug('Using last block from database fallback', {
+          fromBlock,
+          hasTransaction: !!lastTransaction,
+        });
+      }
 
       const toBlock = currentBlock;
 
       if (fromBlock >= toBlock) {
-        logger.info('✅ No historical blocks to process (already up to date)');
+        logger.info('✅ No historical blocks to process (already up to date)', {
+          currentBlock,
+          lastFetched: fromBlock - 1,
+        });
         return;
       }
 
@@ -196,6 +248,11 @@ export class EventMonitor {
 
       if (events.length === 0) {
         logger.info('✅ No historical deposits found');
+
+        // FIX #16: Still update tracking even if no events
+        await redis.set(`${this.LAST_FETCH_KEY}:block`, String(toBlock));
+        await redis.set(`${this.LAST_FETCH_KEY}:time`, String(Date.now()));
+
         return;
       }
 
@@ -228,8 +285,17 @@ export class EventMonitor {
         }
       }
 
+      // FIX #16: Update last fetched block and time in Redis
+      await redis.set(`${this.LAST_FETCH_KEY}:block`, String(toBlock));
+      await redis.set(`${this.LAST_FETCH_KEY}:time`, String(Date.now()));
+
       logger.info(
-        `✅ Historical events processed: ${processed} new, ${skipped} already processed, ${events.length} total`
+        `✅ Historical events processed: ${processed} new, ${skipped} already processed, ${events.length} total`,
+        {
+          fromBlock,
+          toBlock,
+          blocksFetched: toBlock - fromBlock,
+        }
       );
     } catch (error) {
       logger.error('❌ Error fetching historical events:', error);
