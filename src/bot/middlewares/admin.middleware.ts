@@ -10,11 +10,21 @@ import { ERROR_MESSAGES } from '../../utils/constants';
 import { config } from '../../config';
 import { createLogger, logSecurityEvent } from '../../utils/logger.util';
 import adminService from '../../services/admin.service';
+import Redis from 'ioredis';
 
 const logger = createLogger('AdminMiddleware');
 
-// Store session tokens in-memory (telegram_id -> session_token)
-const adminSessions = new Map<number, string>();
+// FIX #14: Redis client for persistent admin sessions (survives restarts)
+const redis = new Redis({
+  host: config.redis.host,
+  port: config.redis.port,
+  password: config.redis.password,
+  db: config.redis.db,
+});
+
+// FIX #14: Admin session configuration
+const ADMIN_SESSION_PREFIX = 'admin:session:';
+const ADMIN_SESSION_TTL = 3600; // 1 hour (same as database session TTL)
 
 // Extend Context with admin status
 export interface AdminContext extends Context {
@@ -26,24 +36,42 @@ export interface AdminContext extends Context {
 }
 
 /**
- * Store admin session token
+ * Store admin session token in Redis
+ * FIX #14: Persistent storage, survives bot restarts
  */
-export function setAdminSession(telegramId: number, sessionToken: string): void {
-  adminSessions.set(telegramId, sessionToken);
+export async function setAdminSession(
+  telegramId: number,
+  sessionToken: string
+): Promise<void> {
+  const key = `${ADMIN_SESSION_PREFIX}${telegramId}`;
+  await redis.setex(key, ADMIN_SESSION_TTL, sessionToken);
+
+  logger.info('Admin session stored in Redis', {
+    telegramId,
+    ttl: ADMIN_SESSION_TTL,
+  });
 }
 
 /**
- * Get admin session token
+ * Get admin session token from Redis
+ * FIX #14: Persistent storage, survives bot restarts
  */
-export function getAdminSession(telegramId: number): string | undefined {
-  return adminSessions.get(telegramId);
+export async function getAdminSession(
+  telegramId: number
+): Promise<string | null> {
+  const key = `${ADMIN_SESSION_PREFIX}${telegramId}`;
+  return await redis.get(key);
 }
 
 /**
- * Clear admin session
+ * Clear admin session from Redis
+ * FIX #14: Persistent storage, survives bot restarts
  */
-export function clearAdminSession(telegramId: number): void {
-  adminSessions.delete(telegramId);
+export async function clearAdminSession(telegramId: number): Promise<void> {
+  const key = `${ADMIN_SESSION_PREFIX}${telegramId}`;
+  await redis.del(key);
+
+  logger.info('Admin session cleared from Redis', { telegramId });
 }
 
 /**
@@ -87,8 +115,8 @@ export const adminMiddleware: MiddlewareFn<Context> = async (ctx, next) => {
     adminCtx.isAdmin = true;
     adminCtx.isSuperAdmin = admin.isSuperAdmin;
 
-    // Check for active session
-    const sessionToken = adminSessions.get(telegramId);
+    // FIX #14: Check for active session from Redis (not memory)
+    const sessionToken = await getAdminSession(telegramId);
 
     if (sessionToken) {
       const { session, error } = await adminService.validateSession(sessionToken);
@@ -97,6 +125,9 @@ export const adminMiddleware: MiddlewareFn<Context> = async (ctx, next) => {
         adminCtx.adminSession = session;
         adminCtx.isAuthenticated = true;
 
+        // FIX #14: Refresh Redis TTL on activity
+        await setAdminSession(telegramId, sessionToken);
+
         logger.debug('Admin session validated', {
           adminId: admin.id,
           telegramId: admin.telegram_id,
@@ -104,8 +135,8 @@ export const adminMiddleware: MiddlewareFn<Context> = async (ctx, next) => {
           remainingMinutes: session.remainingTimeMinutes,
         });
       } else {
-        // Session expired or invalid - clear it
-        adminSessions.delete(telegramId);
+        // Session expired or invalid - clear it from Redis
+        await clearAdminSession(telegramId);
         logger.info('Admin session invalidated', {
           adminId: admin.id,
           telegramId: admin.telegram_id,

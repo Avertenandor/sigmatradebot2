@@ -103,8 +103,8 @@ export const handleMasterKeyInput = async (ctx: Context) => {
     return;
   }
 
-  // Store session token
-  setAdminSession(ctx.from!.id, session.session_token);
+  // FIX #14: Store session token in Redis (now async)
+  await setAdminSession(ctx.from!.id, session.session_token);
 
   await ctx.reply(
     `✅ **Вход выполнен успешно!**\n\n` +
@@ -141,7 +141,8 @@ export const handleAdminLogout = async (ctx: Context) => {
   const sessionToken = adminCtx.adminSession.session_token;
 
   await adminService.logout(sessionToken);
-  clearAdminSession(ctx.from!.id);
+  // FIX #14: Clear session from Redis (now async)
+  await clearAdminSession(ctx.from!.id);
 
   await ctx.reply('✅ Выход выполнен. Сессия завершена.');
 
