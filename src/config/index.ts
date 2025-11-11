@@ -85,6 +85,9 @@ export const config = {
     startBlock: process.env.BLOCKCHAIN_START_BLOCK || 'latest',
     confirmationBlocks: parseInt(process.env.BLOCKCHAIN_CONFIRMATION_BLOCKS || '12', 10),
     pollIntervalMs: parseInt(process.env.BLOCKCHAIN_POLL_INTERVAL_MS || '3000', 10),
+    // FIX #13: Configurable batch size and concurrency for deposit processing
+    depositBatchSize: parseInt(process.env.DEPOSIT_BATCH_SIZE || '500', 10),
+    depositConcurrency: parseInt(process.env.DEPOSIT_CONCURRENCY || '5', 10),
   },
 
   // Deposit Levels

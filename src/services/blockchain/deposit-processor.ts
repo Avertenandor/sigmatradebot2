@@ -479,9 +479,11 @@ export class DepositProcessor {
       const depositRepo = AppDataSource.getRepository(Deposit);
       const transactionRepo = AppDataSource.getRepository(Transaction);
 
-      // Get pending deposits in batches (pagination to prevent memory issues)
+      // FIX #13: Get pending deposits in configurable batches (default 500, was 100)
       // Process oldest first to ensure timely confirmations
-      const BATCH_SIZE = 100;
+      const BATCH_SIZE = config.blockchain.depositBatchSize;
+      const CONCURRENCY = config.blockchain.depositConcurrency;
+
       const pendingDeposits = await depositRepo.find({
         where: { status: TransactionStatus.PENDING },
         relations: ['user'],
@@ -493,12 +495,24 @@ export class DepositProcessor {
         return;
       }
 
-      logger.info(`🔍 Checking ${pendingDeposits.length} pending deposits (batch of ${BATCH_SIZE})...`);
+      logger.info(
+        `🔍 Checking ${pendingDeposits.length} pending deposits (batch size: ${BATCH_SIZE}, concurrency: ${CONCURRENCY})...`
+      );
 
       // Get current block number
       const currentBlock = await this.providerManager.getHttpProvider().getBlockNumber();
 
-      for (const deposit of pendingDeposits) {
+      // FIX #13: Process deposits in parallel batches for better performance
+      // Split into concurrent batches to avoid overwhelming the blockchain provider
+      let processedCount = 0;
+      let errorCount = 0;
+
+      for (let i = 0; i < pendingDeposits.length; i += CONCURRENCY) {
+        const batch = pendingDeposits.slice(i, i + CONCURRENCY);
+
+        // Process this batch in parallel
+        const results = await Promise.allSettled(
+          batch.map(async (deposit) => {
         try {
           // Check for deposit timeout (24 hours without confirmation)
           const depositAge = Date.now() - deposit.created_at.getTime();
@@ -717,8 +731,30 @@ export class DepositProcessor {
             `❌ Error checking deposit ${deposit.id}:`,
             error
           );
+          throw error; // Re-throw to be caught by Promise.allSettled
         }
+          })
+        );
+
+        // FIX #13: Count successes and failures for this batch
+        results.forEach((result, index) => {
+          processedCount++;
+          if (result.status === 'rejected') {
+            errorCount++;
+            logger.error(`Deposit processing failed in batch:`, {
+              depositId: batch[index].id,
+              error: result.reason,
+            });
+          }
+        });
+
+        logger.debug(`Batch processed: ${batch.length} deposits, ${errorCount} errors so far`);
       }
+
+      // FIX #13: Log summary of parallel processing
+      logger.info(
+        `✅ Pending deposit check complete: ${processedCount} deposits processed, ${errorCount} errors, concurrency: ${CONCURRENCY}`
+      );
     } catch (error) {
       logger.error('❌ Error checking pending deposits:', error);
     }
