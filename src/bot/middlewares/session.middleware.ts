@@ -7,6 +7,7 @@ import { Context, MiddlewareFn } from 'telegraf';
 import Redis from 'ioredis';
 import { config } from '../../config';
 import { BotState } from '../../utils/constants';
+import { logger } from '../../utils/logger.util';
 
 // Initialize Redis client
 const redis = new Redis({
@@ -114,25 +115,35 @@ export const getSession = async (userId: number): Promise<SessionData | null> =>
 
 /**
  * Update session state
+ * FIX #7: Creates session if it doesn't exist
  */
 export const updateSessionState = async (
   userId: number,
   state: BotState,
   data?: Record<string, any>
 ): Promise<void> => {
-  const session = await getSession(userId);
+  let session = await getSession(userId);
 
+  // CREATE SESSION IF NOT EXISTS (FIX #7)
   if (!session) {
-    return;
+    logger.info('Creating new session for state update', { userId, state });
+    session = {
+      state: BotState.IDLE,
+      data: {},
+      lastActivity: Date.now(),
+    };
   }
 
   session.state = state;
   if (data) {
     session.data = { ...session.data, ...data };
   }
+  session.lastActivity = Date.now();
 
   const sessionKey = getSessionKey(userId);
   await redis.setex(sessionKey, 86400, JSON.stringify(session));
+
+  logger.debug('Session state updated', { userId, state, hasData: !!data });
 };
 
 export default sessionMiddleware;

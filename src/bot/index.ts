@@ -20,6 +20,8 @@ import {
   registrationRateLimitMiddleware,
 } from './middlewares';
 import { requestIdMiddleware } from './middlewares/request-id.middleware';
+import { updateSessionState, clearSession } from './middlewares/session.middleware';
+import { BotState } from '../utils/constants';
 
 // Handlers
 import {
@@ -33,6 +35,7 @@ import {
   handleContactInfoInput,
   handleSkipContactInfo,
   handleCancelRegistration,
+  handleShowPasswordAgain,
   handleProfile,
   handleDeposits,
   handleDepositLevel,
@@ -128,6 +131,26 @@ export const initializeBot = (): Telegraf => {
   bot.command('help', handleHelp);
 
   /**
+   * /reset command
+   * FIX #8: Allow users to manually reset their session state
+   */
+  bot.command('reset', async (ctx) => {
+    const userId = ctx.from.id;
+
+    await clearSession(userId);
+
+    await ctx.reply(
+      '🔄 **Сессия сброшена**\n\n' +
+      'Все временные данные очищены.\n' +
+      'Вы можете начать заново.\n\n' +
+      'Используйте /start для входа.',
+      { parse_mode: 'Markdown' }
+    );
+
+    logger.info('User manually reset session', { userId });
+  });
+
+  /**
    * Admin authentication commands
    */
   bot.command('admin_login', handleAdminLogin);
@@ -154,6 +177,7 @@ export const initializeBot = (): Telegraf => {
   bot.action('add_contact_info', handleAddContactInfo);
   bot.action('skip_contact_info', handleSkipContactInfo);
   bot.action('cancel', handleCancelRegistration);
+  bot.action('show_password_again', handleShowPasswordAgain); // FIX #6
 
   /**
    * Profile
@@ -298,19 +322,45 @@ export const initializeBot = (): Telegraf => {
 
   /**
    * Global error handler
+   * FIX #8: Reset session state on error to prevent stuck users
    */
-  bot.catch((err, ctx) => {
+  bot.catch(async (err, ctx) => {
+    const userId = ctx.from?.id;
+
     logger.error('Bot error', {
       error: err instanceof Error ? err.message : String(err),
       stack: err instanceof Error ? err.stack : undefined,
       updateType: ctx.updateType,
-      userId: ctx.from?.id,
+      userId,
     });
 
-    // Try to notify user
-    ctx.reply('❌ Произошла ошибка. Пожалуйста, попробуйте позже.').catch(() => {
-      // Ignore if can't send message
-    });
+    // RESET SESSION STATE TO PREVENT STUCK USERS (FIX #8)
+    if (userId) {
+      try {
+        await updateSessionState(userId, BotState.IDLE);
+        logger.info('Session state reset to IDLE after error', { userId });
+      } catch (stateError) {
+        logger.error('Failed to reset session state', {
+          userId,
+          error: stateError,
+        });
+      }
+    }
+
+    // Send user-friendly error message with recovery instructions
+    try {
+      await ctx.reply(
+        '❌ Произошла ошибка при обработке вашего запроса.\n\n' +
+        '🔄 Состояние сброшено. Вы можете продолжить работу.\n\n' +
+        'Используйте /start для возврата в главное меню или /help для помощи.\n\n' +
+        'Если проблема повторяется, свяжитесь с поддержкой.'
+      );
+    } catch (replyError) {
+      logger.error('Failed to send error message to user', {
+        userId,
+        error: replyError,
+      });
+    }
   });
 
   logger.info('Telegram bot initialized');

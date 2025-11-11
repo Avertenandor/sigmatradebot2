@@ -21,8 +21,18 @@ import {
   isValidPhone,
   safeParseFloat,
 } from '../utils/validation.util';
+import Redis from 'ioredis';
+import { config } from '../config';
 
 const logger = createLogger('UserService');
+
+// Redis client for password recovery storage (FIX #6)
+const redis = new Redis({
+  host: config.redis.host,
+  port: config.redis.port,
+  password: config.redis.password,
+  db: config.redis.db,
+});
 
 export class UserService {
   private userRepository = AppDataSource.getRepository(User);
@@ -184,6 +194,15 @@ export class UserService {
 
       // Attach plain password for returning to user (only this once!)
       (user as any).plainPassword = plainPassword;
+
+      // FIX #6: ALSO STORE IN REDIS for 1 hour (recovery window)
+      const passwordKey = `password:plain:${user.id}`;
+      await redis.setex(passwordKey, 3600, plainPassword); // 1 hour TTL
+
+      logger.info('Plain password stored in Redis for recovery', {
+        userId: user.id,
+        ttl: 3600,
+      });
 
       return { user };
     } catch (error) {
@@ -567,6 +586,31 @@ export class UserService {
         error: error instanceof Error ? error.message : String(error),
       });
       return { success: false, error: 'Ошибка при проверке пароля' };
+    }
+  }
+
+  /**
+   * Retrieve plain password from Redis (FIX #6)
+   * Only available within 1 hour of registration
+   */
+  async getPlainPassword(userId: number): Promise<string | null> {
+    try {
+      const passwordKey = `password:plain:${userId}`;
+      const password = await redis.get(passwordKey);
+
+      if (password) {
+        logger.info('Plain password retrieved from Redis', { userId });
+      } else {
+        logger.warn('Plain password not found in Redis (expired or deleted)', { userId });
+      }
+
+      return password;
+    } catch (error) {
+      logger.error('Error retrieving plain password from Redis', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
     }
   }
 }
