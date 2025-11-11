@@ -7,7 +7,7 @@ import { Context } from 'telegraf';
 import { AuthContext } from '../middlewares/auth.middleware';
 import { SessionContext, updateSessionState } from '../middlewares/session.middleware';
 import { BotState, BOT_MESSAGES, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../../utils/constants';
-import { isValidBSCAddress, isValidEmail, isValidPhone } from '../../utils/validation.util';
+import { isValidBSCAddress, isValidEmail, isValidPhone, hasValidChecksum, normalizeWalletAddress } from '../../utils/validation.util';
 import { getCancelButton, getMainKeyboard } from '../keyboards';
 import userService from '../../services/user.service';
 import referralService from '../../services/referral.service';
@@ -79,7 +79,43 @@ export const handleWalletInput = async (ctx: Context) => {
 
   // Validate wallet address
   if (!isValidBSCAddress(walletAddress)) {
-    await ctx.reply(ERROR_MESSAGES.INVALID_WALLET_ADDRESS);
+    await ctx.reply(
+      '❌ Неверный формат адреса кошелька.\n\n' +
+      'Адрес должен:\n' +
+      '• Начинаться с 0x\n' +
+      '• Содержать 40 символов (итого 42 с префиксом)\n' +
+      '• Иметь корректную контрольную сумму (EIP-55)\n\n' +
+      'Пожалуйста, скопируйте адрес из вашего кошелька.'
+    );
+    return;
+  }
+
+  // FIX #15: Warn if checksum doesn't match (potential typo)
+  if (!hasValidChecksum(walletAddress)) {
+    const checksummedAddress = normalizeWalletAddress(walletAddress);
+
+    // Store wallet address in session for confirmation callback
+    authCtx.session.data = {
+      ...authCtx.session.data,
+      pendingWalletAddress: walletAddress,
+    };
+
+    await ctx.reply(
+      '⚠️ **Предупреждение:** Регистр букв в адресе не соответствует контрольной сумме.\n\n' +
+      'Это может указывать на опечатку, которая приведет к потере средств!\n\n' +
+      '**Ваш адрес:**\n' +
+      `\`${walletAddress}\`\n\n` +
+      '**Правильный формат:**\n' +
+      `\`${checksummedAddress}\`\n\n` +
+      '❓ Продолжить с текущим адресом или ввести заново?',
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('✅ Продолжить', 'confirm_wallet_address')],
+          [Markup.button.callback('🔄 Ввести заново', 'reenter_wallet_address')],
+        ]),
+      }
+    );
     return;
   }
 
@@ -509,9 +545,154 @@ export const handleShowPasswordAgain = async (ctx: Context) => {
   });
 };
 
+/**
+ * FIX #15: Confirm wallet address despite checksum warning
+ * User chose to proceed with the wallet address even though checksum doesn't match
+ */
+export const handleConfirmWalletAddress = async (ctx: Context) => {
+  const authCtx = ctx as AuthContext & SessionContext;
+
+  // Get pending wallet address from session
+  const walletAddress = authCtx.session.data?.pendingWalletAddress;
+
+  if (!walletAddress) {
+    await ctx.answerCbQuery('Ошибка: адрес не найден. Пожалуйста, введите заново.');
+    await updateSessionState(ctx.from!.id, BotState.AWAITING_WALLET_ADDRESS);
+    return;
+  }
+
+  // Clear pending address from session
+  delete authCtx.session.data.pendingWalletAddress;
+
+  await ctx.answerCbQuery('Продолжаем регистрацию...');
+
+  // Proceed with registration (same logic as handleWalletInput after validation)
+  // FIX #5: Get referrer ID with fallback mechanism
+  let referrerId = authCtx.session.data?.referrerId;
+
+  // If not in session, check Redis backup
+  if (!referrerId) {
+    const referralKey = `referral:pending:${ctx.from!.id}`;
+    const storedReferrerId = await redis.get(referralKey);
+
+    if (storedReferrerId) {
+      referrerId = parseInt(storedReferrerId, 10);
+      logger.info('Recovered referral ID from backup storage', {
+        userId: ctx.from!.id,
+        referrerId,
+      });
+    }
+  }
+
+  // FIX #9: WRAP ENTIRE REGISTRATION IN TRANSACTION
+  let user;
+  let plainPassword;
+
+  try {
+    const transactionResult = await withTransaction(async (manager) => {
+      // Create user within transaction
+      const userResult = await userService.createUser({
+        telegramId: ctx.from!.id,
+        username: ctx.from?.username,
+        walletAddress,
+        referrerId,
+      }, manager);
+
+      if (userResult.error || !userResult.user) {
+        throw new Error(userResult.error || 'Failed to create user');
+      }
+
+      // Create referral relationships within same transaction
+      if (referrerId) {
+        const referralResult = await referralService.createReferralRelationships(
+          userResult.user.id,
+          referrerId,
+          manager
+        );
+
+        if (!referralResult.success) {
+          throw new Error(referralResult.error || 'Failed to create referral relationships');
+        }
+      }
+
+      return {
+        user: userResult.user,
+        plainPassword: (userResult.user as any).plainPassword,
+      };
+    }, TRANSACTION_PRESETS.FINANCIAL);
+
+    user = transactionResult.user;
+    plainPassword = transactionResult.plainPassword;
+
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    await ctx.editMessageText(`❌ Ошибка регистрации: ${errorMessage}`);
+    await updateSessionState(ctx.from!.id, BotState.IDLE);
+    return;
+  }
+
+  // Send success message with password
+  const successMessage = `${SUCCESS_MESSAGES.REGISTRATION_COMPLETE}
+
+🔐 **Ваш финансовый пароль:**
+
+\`${plainPassword}\`
+
+⚠️ **ОЧЕНЬ ВАЖНО:**
+• Сохраните этот пароль в надежном месте
+• Пароль нужен для подтверждения финансовых операций
+• Мы НЕ можем восстановить ваш пароль
+• Не передавайте пароль третьим лицам
+
+💡 Пароль также доступен в течение 1 часа через кнопку ниже.`;
+
+  await ctx.editMessageText(successMessage, {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('✅ Пройти верификацию', 'start_verification')],
+      [Markup.button.callback('🔐 Показать пароль ещё раз', 'show_password_again')],
+    ]),
+  });
+
+  await updateSessionState(ctx.from!.id, BotState.IDLE);
+
+  // Notify user about successful registration
+  await notificationService.notifyUserRegistered(user.telegram_id, user.username || 'Пользователь');
+
+  logger.info('User confirmed wallet address with checksum warning', {
+    userId: user.id,
+    telegramId: user.telegram_id,
+    walletAddress,
+  });
+};
+
+/**
+ * FIX #15: Re-enter wallet address after checksum warning
+ */
+export const handleReenterWalletAddress = async (ctx: Context) => {
+  const authCtx = ctx as AuthContext & SessionContext;
+
+  // Clear pending address from session
+  if (authCtx.session.data?.pendingWalletAddress) {
+    delete authCtx.session.data.pendingWalletAddress;
+  }
+
+  await updateSessionState(ctx.from!.id, BotState.AWAITING_WALLET_ADDRESS);
+
+  await ctx.editMessageText(
+    '🔄 Хорошо, введите адрес кошелька заново.\n\n' +
+    '📋 Рекомендуем скопировать адрес непосредственно из вашего кошелька, ' +
+    'чтобы избежать ошибок в регистре символов.'
+  );
+
+  await ctx.answerCbQuery('Введите адрес заново');
+};
+
 export default {
   handleStartRegistration,
   handleWalletInput,
+  handleConfirmWalletAddress,
+  handleReenterWalletAddress,
   handleStartVerification,
   handleAddContactInfo,
   handleContactInfoInput,

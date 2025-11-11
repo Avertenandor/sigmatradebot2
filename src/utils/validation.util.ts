@@ -5,6 +5,10 @@
 
 import Joi from 'joi';
 import { REGEX_PATTERNS, DEPOSIT_LEVELS } from './constants';
+import { getAddress, isAddress } from 'ethers';
+import { createLogger } from './logger.util';
+
+const logger = createLogger('ValidationUtil');
 
 /**
  * Validate BSC wallet address
@@ -246,25 +250,25 @@ export const validateAsync = async <T>(
 
 /**
  * Validate BSC address format with EIP-55 checksum
+ * FIX #15: Strict checksum validation to prevent typos
  */
 export const isValidBSCAddress = (address: string): boolean => {
-  // Basic format check
-  if (!REGEX_PATTERNS.BSC_ADDRESS.test(address)) {
+  if (!address || typeof address !== 'string') {
     return false;
   }
 
-  // EIP-55 checksum validation using ethers
+  // Basic format check (must start with 0x and have 40 hex chars)
+  if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
+    return false;
+  }
+
+  // FIX #15: EIP-55 checksum validation using ethers
+  // This catches typos and invalid addresses
   try {
-    const { ethers } = require('ethers');
-    // getAddress will throw if checksum is invalid
-    ethers.getAddress(address);
+    getAddress(address); // Throws if invalid checksum
     return true;
-  } catch {
-    // If it's all lowercase or uppercase, it's valid but not checksummed
-    if (address === address.toLowerCase() || address === address.toUpperCase()) {
-      return true;
-    }
-    // Invalid checksum
+  } catch (error) {
+    logger.warn('Invalid address checksum', { address });
     return false;
   }
 };
@@ -317,10 +321,31 @@ export const validateMessageText = (text: string): { valid: boolean; message: st
 };
 
 /**
- * Normalize wallet address to lowercase
+ * Normalize wallet address to EIP-55 checksummed format
+ * FIX #15: Returns proper checksummed address
  */
 export const normalizeWalletAddress = (address: string): string => {
-  return address.toLowerCase().trim();
+  try {
+    // getAddress returns the checksummed version
+    return getAddress(address);
+  } catch (error) {
+    // If invalid, return lowercase for backward compatibility
+    logger.warn('Failed to normalize address, returning lowercase', { address });
+    return address.toLowerCase().trim();
+  }
+};
+
+/**
+ * Check if address has correct EIP-55 checksum
+ * FIX #15: Validate that the case matches the checksum
+ */
+export const hasValidChecksum = (address: string): boolean => {
+  try {
+    const checksummed = getAddress(address);
+    return checksummed === address; // Exact match (case-sensitive)
+  } catch {
+    return false;
+  }
 };
 
 /**
@@ -402,6 +427,7 @@ export default {
   sanitizeInput,
   validateMessageText,
   normalizeWalletAddress,
+  hasValidChecksum,
   normalizeTelegramUsername,
   safeParseFloat,
   validateFinancialAmount,

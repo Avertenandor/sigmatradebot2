@@ -30,6 +30,8 @@ import {
   handleHelp,
   handleStartRegistration,
   handleWalletInput,
+  handleConfirmWalletAddress,
+  handleReenterWalletAddress,
   handleStartVerification,
   handleAddContactInfo,
   handleContactInfoInput,
@@ -173,6 +175,8 @@ export const initializeBot = (): Telegraf => {
    * Registration flow
    */
   bot.action('start_registration', registrationRateLimitMiddleware, handleStartRegistration);
+  bot.action('confirm_wallet_address', handleConfirmWalletAddress); // FIX #15
+  bot.action('reenter_wallet_address', handleReenterWalletAddress); // FIX #15
   bot.action('start_verification', handleStartVerification);
   bot.action('add_contact_info', handleAddContactInfo);
   bot.action('skip_contact_info', handleSkipContactInfo);
