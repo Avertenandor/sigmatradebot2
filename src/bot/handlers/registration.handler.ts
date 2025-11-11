@@ -16,6 +16,7 @@ import { createLogger } from '../../utils/logger.util';
 import { Markup } from 'telegraf';
 import Redis from 'ioredis';
 import { config } from '../../config';
+import { withTransaction, TRANSACTION_PRESETS } from '../../database/transaction.util';
 
 const logger = createLogger('RegistrationHandler');
 
@@ -99,72 +100,91 @@ export const handleWalletInput = async (ctx: Context) => {
     }
   }
 
-  // Create user
-  const result = await userService.createUser({
-    telegramId: ctx.from!.id,
-    username: ctx.from?.username,
-    walletAddress,
-    referrerId,
-  });
+  // FIX #9: WRAP ENTIRE REGISTRATION IN TRANSACTION
+  // Ensures user + referral relationships created atomically
+  let user;
+  let plainPassword;
 
-  if (result.error) {
-    await ctx.reply(`❌ Ошибка регистрации: ${result.error}`);
-
-    // Reset state
-    await updateSessionState(ctx.from!.id, BotState.IDLE);
-    return;
-  }
-
-  if (!result.user) {
-    await ctx.reply(ERROR_MESSAGES.INTERNAL_ERROR);
-    await updateSessionState(ctx.from!.id, BotState.IDLE);
-    return;
-  }
-
-  logger.info('User registered successfully', {
-    userId: result.user.id,
-    telegramId: result.user.telegram_id,
-    hasReferrer: !!referrerId,
-  });
-
-  // Create referral relationships if user was referred
-  if (referrerId) {
-    const referralResult = await referralService.createReferralRelationships(
-      result.user.id,
-      referrerId
-    );
-
-    if (!referralResult.success) {
-      logger.error('Failed to create referral relationships', {
-        userId: result.user.id,
+  try {
+    const transactionResult = await withTransaction(async (manager) => {
+      // Create user within transaction
+      const userResult = await userService.createUser({
+        telegramId: ctx.from!.id,
+        username: ctx.from?.username,
+        walletAddress,
         referrerId,
-        error: referralResult.error,
-      });
-      // Don't fail registration, just log the error
-    } else {
-      logger.info('Referral relationships created', {
-        userId: result.user.id,
-        referrerId,
-      });
+      }, manager);
 
-      // Notify referrer about new referral
-      const referrerUser = await userService.findById(referrerId);
-      if (referrerUser) {
-        await notificationService.notifyNewReferral(
-          referrerUser.telegram_id,
-          result.user.username
-        );
+      if (userResult.error || !userResult.user) {
+        throw new Error(userResult.error || 'Failed to create user');
       }
+
+      // Create referral relationships within same transaction
+      if (referrerId) {
+        const referralResult = await referralService.createReferralRelationships(
+          userResult.user.id,
+          referrerId,
+          manager
+        );
+
+        if (!referralResult.success) {
+          // NOW WE FAIL THE ENTIRE REGISTRATION if referrals can't be created
+          throw new Error(referralResult.error || 'Failed to create referral relationships');
+        }
+
+        logger.info('Referral relationships created atomically', {
+          userId: userResult.user.id,
+          referrerId,
+        });
+      }
+
+      return {
+        user: userResult.user,
+        plainPassword: (userResult.user as any).plainPassword,
+      };
+    }, TRANSACTION_PRESETS.FINANCIAL);
+
+    user = transactionResult.user;
+    plainPassword = transactionResult.plainPassword;
+
+    logger.info('User registered successfully with atomic transaction', {
+      userId: user.id,
+      telegramId: user.telegram_id,
+      hasReferrer: !!referrerId,
+    });
+
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error('Registration transaction failed', {
+      telegramId: ctx.from!.id,
+      error: errorMessage,
+    });
+
+    await ctx.reply(`❌ Ошибка регистрации: ${errorMessage}`);
+    await updateSessionState(ctx.from!.id, BotState.IDLE);
+    return;
+  }
+
+  // Notify referrer about new referral (outside transaction - non-critical)
+  if (referrerId) {
+    const referrerUser = await userService.findById(referrerId);
+    if (referrerUser) {
+      await notificationService.notifyNewReferral(
+        referrerUser.telegram_id,
+        user.username
+      ).catch((err) => {
+        logger.error('Failed to notify referrer', {
+          referrerId,
+          error: err,
+        });
+      });
     }
   }
-
-  // Get plain password (only available once)
-  const plainPassword = (result.user as any).plainPassword;
 
   // Success message with financial password
   const successMessage = `${SUCCESS_MESSAGES.REGISTRATION_COMPLETE}
 
-Ваш кошелек: \`${result.user.maskedWallet}\`
+Ваш кошелек: \`${user.maskedWallet}\`
 
 🔐 **Ваш финансовый пароль:** \`${plainPassword}\`
 

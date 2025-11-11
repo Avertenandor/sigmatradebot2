@@ -3,6 +3,7 @@
  * Manages referral chains and relationships
  */
 
+import { EntityManager } from 'typeorm';
 import { AppDataSource } from '../../database/data-source';
 import { Referral, User } from '../../database/entities';
 import { createLogger } from '../../utils/logger.util';
@@ -53,22 +54,40 @@ export class ReferralCoreService {
   /**
    * Create or update referral relationships
    * Called when new user registers with referrer
+   * FIX #9 & #10: Now accepts optional EntityManager for atomic transactions
    */
   async createReferralRelationships(
     newUserId: number,
-    directReferrerId: number
+    directReferrerId: number,
+    transactionManager?: EntityManager
   ): Promise<{ success: boolean; error?: string }> {
+    // FIX #10: Use transaction manager if provided, otherwise use normal repositories
+    const referralRepo = transactionManager
+      ? transactionManager.getRepository(Referral)
+      : this.referralRepository;
+
+    const userRepo = transactionManager
+      ? transactionManager.getRepository(User)
+      : this.userRepository;
+
     try {
       // Get new user info for notification
-      const newUser = await this.userRepository.findOne({ where: { id: newUserId } });
+      const newUser = await userRepo.findOne({ where: { id: newUserId } });
 
       // Get referral chain from direct referrer
       const referrers = await this.getReferralChain(directReferrerId, REFERRAL_DEPTH);
 
       // Add direct referrer as level 1
-      referrers.unshift(
-        (await this.userRepository.findOne({ where: { id: directReferrerId } }))!
-      );
+      // FIX #11: Add null check for direct referrer
+      const directReferrer = await userRepo.findOne({ where: { id: directReferrerId } });
+      if (!directReferrer) {
+        return {
+          success: false,
+          error: 'Реферер не найден',
+        };
+      }
+
+      referrers.unshift(directReferrer);
 
       // Detect referral loops: check if new user is already in the referral chain
       // This prevents circular referral chains (A → B → C → A)
@@ -96,16 +115,22 @@ export class ReferralCoreService {
         };
       }
 
-      // Track if direct referrer was notified
-      let directReferrerNotified = false;
+      // FIX #10: Collect all referrals to create atomically
+      const referralsToCreate: Partial<Referral>[] = [];
 
       // Create referral records for each level
       for (let i = 0; i < referrers.length && i < REFERRAL_DEPTH; i++) {
         const referrer = referrers[i];
         const level = i + 1; // Level 1, 2, 3
 
+        // FIX #11: Add null check for referrer
+        if (!referrer) {
+          logger.warn('Referrer is null at level', { level, newUserId, directReferrerId });
+          continue;
+        }
+
         // Check if relationship already exists
-        const existing = await this.referralRepository.findOne({
+        const existing = await referralRepo.findOne({
           where: {
             referrer_id: referrer.id,
             referral_id: newUserId,
@@ -113,47 +138,30 @@ export class ReferralCoreService {
         });
 
         if (!existing) {
-          const referralRelation = this.referralRepository.create({
+          referralsToCreate.push({
             referrer_id: referrer.id,
             referral_id: newUserId,
             level,
             total_earned: '0',
           });
 
-          await this.referralRepository.save(referralRelation);
-
-          logger.info('Referral relationship created', {
+          logger.debug('Referral relationship prepared for creation', {
             referrerId: referrer.id,
             referralId: newUserId,
             level,
           });
-
-          // Notify direct referrer (level 1 only) about new referral
-          if (level === 1 && !directReferrerNotified && newUser) {
-            try {
-              const username = newUser.username ? `@${newUser.username}` : `ID ${newUser.telegram_id}`;
-              await notificationService.sendNotification(
-                referrer.telegram_id,
-                `🎉 **Новый реферал!**\n\n` +
-                `Пользователь ${username} зарегистрировался по вашей ссылке.\n` +
-                `Вы будете получать вознаграждения от его депозитов.`
-              );
-              directReferrerNotified = true;
-
-              logger.info('Referrer notified about new referral', {
-                referrerId: referrer.id,
-                referralId: newUserId,
-              });
-            } catch (notifError) {
-              // Log but don't fail the referral creation if notification fails
-              logger.error('Failed to notify referrer about new referral', {
-                referrerId: referrer.id,
-                referralId: newUserId,
-                error: notifError instanceof Error ? notifError.message : String(notifError),
-              });
-            }
-          }
         }
+      }
+
+      // FIX #10: Create all referrals at once (atomic)
+      if (referralsToCreate.length > 0) {
+        await referralRepo.save(referralsToCreate);
+
+        logger.info('Referral chain created atomically', {
+          newUserId,
+          directReferrerId,
+          levelsCreated: referralsToCreate.length,
+        });
       }
 
       return { success: true };

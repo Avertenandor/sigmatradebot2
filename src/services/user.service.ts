@@ -3,7 +3,7 @@
  * Business logic for user management
  */
 
-import { In } from 'typeorm';
+import { In, EntityManager } from 'typeorm';
 import { AppDataSource } from '../database/data-source';
 import { User, Deposit, Referral, ReferralEarning, Transaction } from '../database/entities';
 import { createLogger } from '../utils/logger.util';
@@ -128,13 +128,14 @@ export class UserService {
 
   /**
    * Create new user
+   * FIX #9: Now accepts optional EntityManager for atomic transactions
    */
   async createUser(data: {
     telegramId: number;
     username?: string;
     walletAddress: string;
     referrerId?: number;
-  }): Promise<{ user?: User; error?: string }> {
+  }, transactionManager?: EntityManager): Promise<{ user?: User; error?: string }> {
     // Validate wallet address
     if (!isValidBSCAddress(data.walletAddress)) {
       return { error: 'Неверный формат адреса кошелька' };
@@ -171,9 +172,14 @@ export class UserService {
     const plainPassword = generateFinancialPassword();
     const hashedPassword = await hashPassword(plainPassword);
 
+    // FIX #9: Use transaction manager if provided, otherwise use normal repository
+    const userRepo = transactionManager
+      ? transactionManager.getRepository(User)
+      : this.userRepository;
+
     try {
       // Create user
-      const user = this.userRepository.create({
+      const user = userRepo.create({
         telegram_id: data.telegramId,
         username: data.username,
         wallet_address: normalizedAddress,
@@ -183,7 +189,7 @@ export class UserService {
         is_banned: false,
       });
 
-      await this.userRepository.save(user);
+      await userRepo.save(user);
 
       logger.info('User created', {
         userId: user.id,
