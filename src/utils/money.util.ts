@@ -338,3 +338,20 @@ export function min(a: MoneyAmount, b: MoneyAmount): MoneyAmount {
 export function max(a: MoneyAmount, b: MoneyAmount): MoneyAmount {
   return greaterThan(a, b) ? a : b;
 }
+
+/**
+ * Format USDT amount for user-facing messages
+ * Always uses 2 decimal places for consistency
+ * Example: 100.5 -> "100.50", 10 -> "10.00"
+ */
+export function formatUSDT(amount: number): string {
+  return amount.toFixed(2);
+}
+
+/**
+ * Format USDT amount with currency suffix
+ * Example: 100.5 -> "100.50 USDT"
+ */
+export function formatUSDTWithCurrency(amount: number): string {
+  return `${formatUSDT(amount)} USDT`;
+}

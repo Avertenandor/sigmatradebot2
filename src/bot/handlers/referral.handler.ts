@@ -15,6 +15,7 @@ import referralService from '../../services/referral.service';
 import userService from '../../services/user.service';
 import { REFERRAL_RATES, BUTTON_LABELS } from '../../utils/constants';
 import { createLogger } from '../../utils/logger.util';
+import { formatUSDT } from '../../utils/money.util';
 
 const logger = createLogger('ReferralHandler');
 
@@ -41,9 +42,9 @@ export const handleReferrals = async (ctx: Context) => {
 👥 Уровень 3: ${stats.level3Referrals}
 
 💰 **Доходы:**
-💵 Всего заработано: ${stats.totalEarned.toFixed(2)} USDT
-⏳ Ожидает выплаты: ${stats.pendingEarnings.toFixed(2)} USDT
-✅ Выплачено: ${stats.paidEarnings.toFixed(2)} USDT
+💵 Всего заработано: ${formatUSDT(stats.totalEarned)} USDT
+⏳ Ожидает выплаты: ${formatUSDT(stats.pendingEarnings)} USDT
+✅ Выплачено: ${formatUSDT(stats.paidEarnings)} USDT
 
 **Комиссии:**
 • Уровень 1: ${REFERRAL_RATES[1] * 100}% от депозитов прямых партнеров
@@ -177,7 +178,7 @@ export const handleReferralStats = async (ctx: Context) => {
     referrals.forEach((ref, index) => {
       const joinDate = new Date(ref.joinedAt).toLocaleDateString('ru-RU');
       message += `${index + 1}. ${ref.user.displayName}\n`;
-      message += `   💰 Заработано: ${ref.earned.toFixed(2)} USDT\n`;
+      message += `   💰 Заработано: ${formatUSDT(ref.earned)} USDT\n`;
       message += `   📅 Присоединился: ${joinDate}\n\n`;
     });
 
@@ -232,12 +233,12 @@ export const handleReferralEarnings = async (ctx: Context) => {
       const date = new Date(earning.created_at).toLocaleDateString('ru-RU');
       const emoji = earning.paid ? '✅' : '⏳';
 
-      message += `${emoji} ${earning.amountAsNumber.toFixed(2)} USDT\n`;
+      message += `${emoji} ${formatUSDT(earning.amountAsNumber)} USDT\n`;
       message += `Дата: ${date}\n`;
       message += `Статус: ${earning.paid ? 'Выплачено' : 'Ожидает'}\n\n`;
     });
 
-    message += `\n💰 Всего ожидает: ${totalAmount.toFixed(2)} USDT`;
+    message += `\n💰 Всего ожидает: ${formatUSDT(totalAmount)} USDT`;
     message += `\n📊 Всего записей: ${total}`;
   }
 
@@ -296,7 +297,7 @@ export const handleReferralLeaderboard = async (ctx: Context) => {
 
         message += `${medal} ${username}${isCurrentUser ? ' **(вы)**' : ''}\n`;
         message += `   👥 Рефералов: **${leader.referralCount}**\n`;
-        message += `   💰 Заработано: ${leader.totalEarnings.toFixed(2)} USDT\n\n`;
+        message += `   💰 Заработано: ${formatUSDT(leader.totalEarnings)} USDT\n\n`;
       });
     }
 
@@ -322,7 +323,7 @@ export const handleReferralLeaderboard = async (ctx: Context) => {
         const isCurrentUser = leader.userId === authCtx.user.id;
 
         message += `${medal} ${username}${isCurrentUser ? ' **(вы)**' : ''}\n`;
-        message += `   💰 Заработано: **${leader.totalEarnings.toFixed(2)} USDT**\n`;
+        message += `   💰 Заработано: **${formatUSDT(leader.totalEarnings)} USDT**\n`;
         message += `   👥 Рефералов: ${leader.referralCount}\n\n`;
       });
     }

@@ -15,6 +15,7 @@ import depositService from '../../services/deposit.service';
 import { DEPOSIT_LEVELS, REQUIRED_REFERRALS_PER_LEVEL } from '../../utils/constants';
 import { createLogger } from '../../utils/logger.util';
 import { config } from '../../config';
+import { formatUSDT } from '../../utils/money.util';
 
 const logger = createLogger('DepositHandler');
 
@@ -131,15 +132,15 @@ export const handleDepositLevel = async (ctx: Context) => {
         roiProgressText = `
 **🎯 Ваш ROI Прогресс:**
 📊 ${progressBar} ${roiProgress.roiPercent?.toFixed(1)}%
-✅ Получено: ${roiProgress.roiPaid?.toFixed(2)} / ${roiProgress.roiCap?.toFixed(2)} USDT
-⏳ Осталось: ${roiProgress.roiRemaining?.toFixed(2)} USDT
+✅ Получено: ${formatUSDT(roiProgress.roiPaid || 0)} / ${formatUSDT(roiProgress.roiCap || 0)} USDT
+⏳ Осталось: ${formatUSDT(roiProgress.roiRemaining || 0)} USDT
 
 `;
       } else {
         roiProgressText = `
 **🎯 ROI Завершён:**
 ✅ Достигнут максимум 500%!
-💰 Получено: ${roiProgress.roiPaid?.toFixed(2)} USDT
+💰 Получено: ${formatUSDT(roiProgress.roiPaid || 0)} USDT
 📌 Создайте новый депозит 10 USDT
 
 `;

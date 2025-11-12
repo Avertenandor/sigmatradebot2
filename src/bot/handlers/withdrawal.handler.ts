@@ -13,6 +13,7 @@ import userService from '../../services/user.service';
 import withdrawalService from '../../services/withdrawal.service';
 import { notificationService } from '../../services/notification.service';
 import { createLogger } from '../../utils/logger.util';
+import { formatUSDT } from '../../utils/money.util';
 
 const logger = createLogger('WithdrawalHandler');
 
@@ -36,9 +37,9 @@ export const handleWithdrawals = async (ctx: Context) => {
 💸 **Вывод средств**
 
 **Ваш баланс:**
-💰 Доступно для вывода: **${balance?.availableBalance.toFixed(2) || 0} USDT**
-⏳ В ожидании выплаты: ${balance?.pendingEarnings.toFixed(2) || 0} USDT
-${balance && balance.pendingWithdrawals > 0 ? `🔒 Заблокировано в выводах: ${balance.pendingWithdrawals.toFixed(2)} USDT\n` : ''}
+💰 Доступно для вывода: **${formatUSDT(balance?.availableBalance || 0)} USDT**
+⏳ В ожидании выплаты: ${formatUSDT(balance?.pendingEarnings || 0)} USDT
+${balance && balance.pendingWithdrawals > 0 ? `🔒 Заблокировано в выводах: ${formatUSDT(balance.pendingWithdrawals)} USDT\n` : ''}
 **Условия вывода:**
 • Минимальная сумма: ${minAmount} USDT
 • Вывод на ваш кошелек: \`${authCtx.user.wallet_address}\`
@@ -114,7 +115,7 @@ export const handleRequestWithdrawal = async (ctx: Context) => {
   const message = `
 💸 **Запрос на вывод**
 
-Доступно для вывода: **${balance.availableBalance.toFixed(2)} USDT**
+Доступно для вывода: **${formatUSDT(balance.availableBalance)} USDT**
 Минимальная сумма: ${minAmount} USDT
 
 Укажите сумму для вывода (в USDT):
@@ -178,7 +179,7 @@ export const handleWithdrawalAmountInput = async (ctx: Context) => {
   const minAmount = withdrawalService.getMinWithdrawalAmount();
 
   if (!balance || balance.availableBalance < roundedAmount) {
-    await ctx.reply(`❌ Недостаточно средств. Доступно: ${balance?.availableBalance.toFixed(2) || 0} USDT`, {
+    await ctx.reply(`❌ Недостаточно средств. Доступно: ${formatUSDT(balance?.availableBalance || 0)} USDT`, {
       ...Markup.inlineKeyboard([
         [Markup.button.callback('🔙 Назад', 'withdrawals')],
       ]),
@@ -207,7 +208,7 @@ export const handleWithdrawalAmountInput = async (ctx: Context) => {
   const passwordMessage = `
 🔐 **Подтверждение вывода**
 
-💰 Сумма: ${roundedAmount.toFixed(2)} USDT
+💰 Сумма: ${formatUSDT(roundedAmount)} USDT
 💳 Кошелек: \`${authCtx.user.wallet_address}\`
 
 ⚠️ **Для подтверждения операции введите ваш финансовый пароль:**
@@ -307,7 +308,7 @@ export const handleWithdrawalPasswordInput = async (ctx: Context) => {
   const successMessage = `
 ✅ **Заявка на вывод создана!**
 
-💰 Сумма: ${amount.toFixed(2)} USDT
+💰 Сумма: ${formatUSDT(amount)} USDT
 🆔 ID заявки: ${transaction?.id}
 💳 Кошелек: \`${authCtx.user.wallet_address}\`
 
@@ -373,7 +374,7 @@ export const handleWithdrawalHistory = async (ctx: Context) => {
           : '❌';
       const date = new Date(withdrawal.created_at).toLocaleDateString('ru-RU');
 
-      message += `${emoji} **${parseFloat(withdrawal.amount).toFixed(2)} USDT**\n`;
+      message += `${emoji} **${formatUSDT(parseFloat(withdrawal.amount))} USDT**\n`;
       message += `Дата: ${date}\n`;
       message += `Статус: ${withdrawal.status}\n`;
 
@@ -395,7 +396,7 @@ export const handleWithdrawalHistory = async (ctx: Context) => {
     pendingWithdrawals.forEach((withdrawal) => {
       buttons.push([
         Markup.button.callback(
-          `❌ Отменить вывод ${parseFloat(withdrawal.amount).toFixed(2)} USDT`,
+          `❌ Отменить вывод ${formatUSDT(parseFloat(withdrawal.amount))} USDT`,
           `cancel_withdrawal_${withdrawal.id}`
         ),
       ]);
