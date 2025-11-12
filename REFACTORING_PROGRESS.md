@@ -507,10 +507,34 @@ jobs.notificationRetryProcessor.enabled: true (default)
 ---
 
 ### Phase 11: Production Hardening (COMPLETED ✅)
-**Duration:** ~5 hours
+**Duration:** ~8 hours
 **Status:** All critical (P0) and important (P1) production fixes implemented
 
-#### Реализованные критичные фиксы (из code review):
+#### P0 Критичные фиксы (обязательны для production):
+
+**P0 #1: Webhook секрет обязателен в production**
+- ✅ env.validator.ts: refine() для обязательности TELEGRAM_WEBHOOK_SECRET в production
+- ✅ webhook-secret.middleware.ts: 503 error если секрета нет в production
+- **Решает:** Защита от поддельных webhook requests, атаки невозможны
+
+**P0 #2: Бэкапы БД НЕ пушатся в git**
+- ✅ OPERATIONS.md: удалены git add/commit/push из backup скрипта
+- ✅ Только GCS хранение с retention policy и шифрованием
+- **Решает:** Предотвращает утечку PII/secrets через git history
+
+**P0 #3: Deploy.sh использует Secret Manager в production**
+- ✅ scripts/deploy.sh: .env проверяется только для development
+- ✅ Production читает секреты из GCP Secret Manager/CI variables
+- **Решает:** Предотвращает утечку секретов на диск/в Docker образ
+
+**P0 #4: Деньги НЕ через parseFloat (точная арифметика)**
+- ✅ src/utils/money.util.ts (380 строк) - bigint arithmetic
+- ✅ deposit-processor.ts: все суммы через MoneyAmount
+- ✅ blockchain/utils.ts: getBalancePrecise() с bigint
+- ✅ DEPOSIT_AMOUNT_TOLERANCE вынесен в env конфиг
+- **Решает:** Нет потери точности, нет финансовых losses от float округлений
+
+#### P0/P1 Реализованные компоненты (из предыдущих code reviews):
 
 1. ✅ **ENV Validator** (src/config/env.validator.ts)
    - Fail-fast валидация при старте приложения
@@ -684,6 +708,8 @@ npm install zod bottleneck  # zod - ENV validator, bottleneck - RPC limiter
 
 Recent commits on branch `claude/project-exploration-011CUzxPR2oSUcyCnUd4oR1Q`:
 
+- **8f7d2f9** 🚨 P0 CRITICAL FIXES: Production security and money precision
+- **c27cbe7** Update REFACTORING_PROGRESS.md - add Phase 11: Production Hardening with P1 fixes
 - **92fc74e** P1 fixes: PII Encryption, RPC Rate Limiter, Log Redaction
 - **2000b19** Production-ready fixes: ENV validator, Webhook security, Health checks
 - **4beb877** Phase 10: Add comprehensive operations documentation
@@ -692,8 +718,6 @@ Recent commits on branch `claude/project-exploration-011CUzxPR2oSUcyCnUd4oR1Q`:
 - **7eca2fc** Phase 9: Add comprehensive integration tests (1,692 lines, 50+ tests)
 - **4680b0a** Update REFACTORING_PROGRESS.md - document completion of Phases 3-9
 - **26a7232** Phase 9: Add comprehensive EIP-55 checksum validation tests (39 tests)
-- **24d162c** Add Phase 8 documentation (MIGRATIONS.md, CHANGELOG.md, DEPLOYMENT_GUIDE.md)
-- **5247301** FIX #17 Part 2: Background job and queue integration
 
 ---
 
