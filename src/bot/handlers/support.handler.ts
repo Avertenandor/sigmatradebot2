@@ -262,19 +262,27 @@ export async function handleSupportSubmit(ctx: AppContext) {
       // Notify specific on-duty admin and assign to them
       await supportService.assignToSelf(ticket.id, onDutyAdminId);
 
-      await notificationService.notifyAdmin(
-        onDutyAdminId,
-        `🆘 Новое обращение #${ticket.id}\n\n` +
+      // Get admin telegram_id for notification
+      const { AppDataSource } = await import('../../database/data-source');
+      const { Admin } = await import('../../database/entities');
+      const adminRepo = AppDataSource.getRepository(Admin);
+      const admin = await adminRepo.findOne({ where: { id: onDutyAdminId } });
+
+      if (admin) {
+        await notificationService.notifyAdmin(
+          admin.telegram_id,
+          `Новое обращение #${ticket.id}`,
           `От: ${ctx.user.username || ctx.user.telegram_id}\n` +
-          `Категория: ${getCategoryName(ticket.category)}\n\n` +
-          `Обращение автоматически назначено на вас (вы на дежурстве).\n\n` +
-          `Используйте /admin → Техподдержка для ответа.`
-      );
+            `Категория: ${getCategoryName(ticket.category)}\n\n` +
+            `Обращение автоматически назначено на вас (вы на дежурстве).\n\n` +
+            `Используйте /admin → Техподдержка для ответа.`
+        );
+      }
     } else {
       // Notify all admins
       await notificationService.notifyAllAdmins(
-        `🆘 Новое обращение #${ticket.id}\n\n` +
-          `От: ${ctx.user.username || ctx.user.telegram_id}\n` +
+        `Новое обращение #${ticket.id}`,
+        `От: ${ctx.user.username || ctx.user.telegram_id}\n` +
           `Категория: ${getCategoryName(ticket.category)}\n\n` +
           `Используйте /admin → Техподдержка для ответа.`
       );

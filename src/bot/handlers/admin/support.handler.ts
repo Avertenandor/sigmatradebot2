@@ -219,8 +219,8 @@ export async function handleAdminSupportClose(ctx: AppContext) {
     await supportService.addSystemMessage(ticketId, 'Обращение закрыто администратором.');
 
     // Notify user
-    await notificationService.notifyUser(
-      ticket.user_id,
+    await notificationService.sendCustomMessage(
+      ticket.user.telegram_id,
       `🔒 Ваше обращение #${ticketId} закрыто.\n\n` +
         'Если у вас остались вопросы, вы можете создать новое обращение через меню Техподдержка.'
     );
@@ -254,8 +254,8 @@ export async function handleAdminSupportReopen(ctx: AppContext) {
     await supportService.addSystemMessage(ticketId, 'Обращение переоткрыто администратором.');
 
     // Notify user
-    await notificationService.notifyUser(
-      ticket.user_id,
+    await notificationService.sendCustomMessage(
+      ticket.user.telegram_id,
       `🔓 Ваше обращение #${ticketId} переоткрыто.\n\n` + 'Администратор продолжит работу над вашим вопросом.'
     );
 
@@ -461,7 +461,7 @@ export async function handleAdminSupportSendReply(ctx: AppContext) {
       notificationText += combinedText;
     }
 
-    await notificationService.notifyUser(ticket.user_id, notificationText);
+    await notificationService.sendCustomMessage(ticket.user.telegram_id, notificationText);
 
     // Send attachments to user
     if (attachments.length > 0) {
