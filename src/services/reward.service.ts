@@ -7,6 +7,7 @@ import { AppDataSource } from '../database/data-source';
 import { RewardSession, DepositReward, Deposit } from '../database/entities';
 import { createLogger } from '../utils/logger.util';
 import { Between, LessThanOrEqual, MoreThanOrEqual, IsNull } from 'typeorm';
+import { fromDbString, fromUsdtString, toUsdtString, sum as sumMoney, type MoneyAmount } from '../utils/money.util';
 
 const logger = createLogger('RewardService');
 
@@ -220,7 +221,7 @@ export class RewardService {
       });
 
       let rewardsCalculated = 0;
-      let totalRewardAmount = 0;
+      const totalRewardAmounts: MoneyAmount[] = [];  // Collect for precise summation
 
       for (const deposit of deposits) {
         // Check if reward already calculated for this deposit in this session
@@ -250,9 +251,17 @@ export class RewardService {
           continue;
         }
 
-        // Calculate reward amount
-        const depositAmount = parseFloat(deposit.amount);
-        const rewardAmount = (depositAmount * rewardRate) / 100;
+        // CRITICAL: Use precise money calculation for deposit amount
+        const depositAmountMoney: MoneyAmount = fromDbString(deposit.amount);
+
+        // Calculate reward amount with percentage
+        // For decimal rate percentage, convert to display string for calculation
+        const depositAmountValue = parseFloat(toUsdtString(depositAmountMoney));
+        const rewardAmountValue = (depositAmountValue * rewardRate) / 100;
+        const rewardAmountStr = rewardAmountValue.toFixed(6);  // 6 decimals for USDT precision
+
+        // Convert reward to MoneyAmount for precise summation
+        const rewardAmountMoney = fromUsdtString(rewardAmountStr);
 
         // Create reward record
         const reward = this.depositRewardRepository.create({
@@ -262,21 +271,25 @@ export class RewardService {
           deposit_level: deposit.level,
           deposit_amount: deposit.amount,
           reward_rate: rewardRate.toString(),
-          reward_amount: rewardAmount.toString(),
+          reward_amount: rewardAmountStr,
           paid: false,
         });
 
         await this.depositRewardRepository.save(reward);
 
         rewardsCalculated++;
-        totalRewardAmount += rewardAmount;
+        totalRewardAmounts.push(rewardAmountMoney);  // Collect for precise summation
 
         logger.debug('Reward calculated', {
           rewardId: reward.id,
           depositId: deposit.id,
-          rewardAmount,
+          rewardAmount: rewardAmountStr,
         });
       }
+
+      // CRITICAL: Use precise money summation instead of float accumulation
+      const totalRewardMoney = sumMoney(totalRewardAmounts);
+      const totalRewardAmount = parseFloat(toUsdtString(totalRewardMoney));  // Convert for return value
 
       logger.info('Rewards calculation completed', {
         sessionId,
@@ -333,13 +346,18 @@ export class RewardService {
       .andWhere('reward.paid = :paid', { paid: false })
       .getRawOne();
 
+    // CRITICAL: Use precise money conversion (no parseFloat!)
+    const totalAmountMoney = fromDbString(totalAmountResult?.total || '0');
+    const paidAmountMoney = fromDbString(paidAmountResult?.total || '0');
+    const pendingAmountMoney = fromDbString(pendingAmountResult?.total || '0');
+
     return {
       totalRewards: total,
-      totalAmount: parseFloat(totalAmountResult?.total || '0'),
+      totalAmount: parseFloat(toUsdtString(totalAmountMoney)),  // Convert for return value
       paidRewards: paid,
-      paidAmount: parseFloat(paidAmountResult?.total || '0'),
+      paidAmount: parseFloat(toUsdtString(paidAmountMoney)),  // Convert for return value
       pendingRewards: pending,
-      pendingAmount: parseFloat(pendingAmountResult?.total || '0'),
+      pendingAmount: parseFloat(toUsdtString(pendingAmountMoney)),  // Convert for return value
     };
   }
 

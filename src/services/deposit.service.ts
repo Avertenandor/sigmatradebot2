@@ -10,6 +10,7 @@ import { DEPOSIT_LEVELS, REQUIRED_REFERRALS_PER_LEVEL, TransactionStatus } from 
 import userService from './user.service';
 import { paymentService } from './payment.service';
 import { notificationService } from './notification.service';
+import { fromDbString, toUsdtString, sum as sumMoney, type MoneyAmount } from '../utils/money.util';
 
 const logger = createLogger('DepositService');
 
@@ -348,11 +349,14 @@ export class DepositService {
       const userRepo = AppDataSource.getRepository(User);
       const user = await userRepo.findOne({ where: { id: deposit.user_id } });
 
+      // CRITICAL: Use precise money calculation
+      const depositAmountMoney = fromDbString(deposit.amount);
+
       // Send notification to user
       if (user) {
         await notificationService.notifyDepositConfirmed(
           user.telegram_id,
-          parseFloat(deposit.amount),
+          parseFloat(toUsdtString(depositAmountMoney)),  // Convert for notification
           deposit.level,
           txHash
         );
@@ -377,7 +381,7 @@ export class DepositService {
         try {
           const result = await paymentService.createReferralEarnings(
             deposit.user_id,
-            parseFloat(deposit.amount),
+            parseFloat(toUsdtString(depositAmountMoney)),  // Convert for payment service
             transaction.id
           );
 
@@ -421,7 +425,9 @@ export class DepositService {
         },
       });
 
-      return deposits.reduce((sum, d) => sum + parseFloat(d.amount), 0);
+      // CRITICAL: Use precise money summation
+      const totalMoney = sumMoney(deposits.map(d => fromDbString(d.amount)));
+      return parseFloat(toUsdtString(totalMoney));  // Convert for return value
     } catch (error) {
       logger.error('Error getting total deposited', {
         userId,
@@ -445,10 +451,9 @@ export class DepositService {
         where: { status: TransactionStatus.CONFIRMED },
       });
 
-      const totalAmount = deposits.reduce(
-        (sum, d) => sum + parseFloat(d.amount),
-        0
-      );
+      // CRITICAL: Use precise money summation
+      const totalAmountMoney = sumMoney(deposits.map(d => fromDbString(d.amount)));
+      const totalAmount = parseFloat(toUsdtString(totalAmountMoney));  // Convert for return value
 
       const depositsByLevel: Record<number, number> = {
         1: 0,
