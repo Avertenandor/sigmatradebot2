@@ -95,6 +95,11 @@ import {
   handleDepositSettings,
   handleSetMaxLevel,
   handleRoiStats,
+  handleBlacklistMenu,
+  handleStartBlacklistAdd,
+  handleBlacklistAddInput,
+  handleStartBlacklistRemove,
+  handleBlacklistRemoveInput,
 } from './handlers';
 
 // Context types
@@ -263,6 +268,9 @@ export const initializeBot = (): Telegraf => {
   bot.action('admin_deposit_settings', handleDepositSettings);
   bot.action(/^admin_set_max_level_\d+$/, handleSetMaxLevel);
   bot.action('admin_roi_stats', handleRoiStats);
+  bot.action('admin_blacklist', handleBlacklistMenu);
+  bot.action('admin_blacklist_add', handleStartBlacklistAdd);
+  bot.action('admin_blacklist_remove', handleStartBlacklistRemove);
 
   /**
    * Reward sessions
@@ -332,6 +340,14 @@ export const initializeBot = (): Telegraf => {
 
       case BotState.AWAITING_REWARD_SESSION_DATA:
         await handleRewardSessionInput(ctx);
+        break;
+
+      case BotState.AWAITING_ADMIN_BLACKLIST_ADD:
+        await handleBlacklistAddInput(ctx);
+        break;
+
+      case BotState.AWAITING_ADMIN_BLACKLIST_REMOVE:
+        await handleBlacklistRemoveInput(ctx);
         break;
 
       default:

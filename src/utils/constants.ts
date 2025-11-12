@@ -315,6 +315,8 @@ export enum BotState {
   AWAITING_ADMIN_USER_TO_PROMOTE = 'awaiting_admin_user_to_promote',
   AWAITING_ADMIN_MASTER_KEY = 'awaiting_admin_master_key',
   AWAITING_REWARD_SESSION_DATA = 'awaiting_reward_session_data',
+  AWAITING_ADMIN_BLACKLIST_ADD = 'awaiting_admin_blacklist_add',
+  AWAITING_ADMIN_BLACKLIST_REMOVE = 'awaiting_admin_blacklist_remove',
 }
 
 // Cache TTL (Redis)
