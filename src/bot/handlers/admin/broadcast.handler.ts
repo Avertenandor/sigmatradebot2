@@ -60,7 +60,11 @@ export const handleStartBroadcast = async (ctx: Context) => {
 
 ⚠️ Сообщение получат все зарегистрированные пользователи.
 
-Поддерживается Markdown форматирование.
+**Поддерживается:**
+• Текст (Markdown форматирование)
+• Фото (с caption)
+• Голосовые сообщения (с caption)
+• Аудио файлы (с caption)
   `.trim();
 
   await ctx.editMessageText(message, {
@@ -161,15 +165,21 @@ export const handleStartSendToUser = async (ctx: Context) => {
   const message = `
 ✉️ **Отправка сообщения пользователю**
 
-Отправьте сообщение в формате:
-
+**Для текста:** Отправьте сообщение в формате:
 \`@username Текст сообщения\`
-
 или
-
 \`123456789 Текст сообщения\`
 
+**Для медиа:** Прикрепите фото/голос/аудио, а в caption укажите:
+\`@username Текст сообщения\`
+
 Где первое слово - username или Telegram ID пользователя.
+
+**Поддерживается:**
+• Текст (Markdown форматирование)
+• Фото (с caption)
+• Голосовые сообщения (с caption)
+• Аудио файлы (с caption)
   `.trim();
 
   await ctx.editMessageText(message, {

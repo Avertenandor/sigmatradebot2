@@ -17,3 +17,4 @@ export { PaymentRetry } from './PaymentRetry.entity'; // FIX #4
 export { FailedNotification } from './FailedNotification.entity'; // FIX #17
 export { FinancialPasswordRecovery } from './FinancialPasswordRecovery.entity';
 export { SystemSetting } from './SystemSetting.entity';
+export { Blacklist } from './Blacklist.entity'; // Pre-registration ban list

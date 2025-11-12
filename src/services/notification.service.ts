@@ -48,6 +48,162 @@ export class NotificationService {
   }
 
   /**
+   * Send photo message to user
+   */
+  public async sendPhotoMessage(
+    telegramId: number,
+    fileIdOrUrl: string,
+    caption?: string,
+    options?: { parse_mode?: 'Markdown' | 'HTML' }
+  ): Promise<boolean> {
+    if (!this.bot) {
+      logger.error('Bot not initialized in NotificationService');
+      return false;
+    }
+
+    try {
+      await this.bot.telegram.sendPhoto(telegramId, fileIdOrUrl, {
+        caption,
+        parse_mode: options?.parse_mode,
+      });
+      return true;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('Error sending photo message', {
+        telegramId,
+        error: errorMessage,
+      });
+
+      // Track failed notification
+      try {
+        const failedRepo = AppDataSource.getRepository(FailedNotification);
+        await failedRepo.save({
+          user_telegram_id: telegramId,
+          notification_type: 'photo_message',
+          message: `Photo: ${fileIdOrUrl}${caption ? ` | Caption: ${caption}` : ''}`,
+          metadata: { fileIdOrUrl, caption },
+          attempt_count: 1,
+          last_error: errorMessage,
+          last_attempt_at: new Date(),
+          critical: false,
+        });
+      } catch (dbError) {
+        logger.error('Failed to save failed photo notification', {
+          telegramId,
+          error: dbError instanceof Error ? dbError.message : String(dbError),
+        });
+      }
+
+      return false;
+    }
+  }
+
+  /**
+   * Send voice message to user
+   */
+  public async sendVoiceMessage(
+    telegramId: number,
+    fileId: string,
+    caption?: string,
+    options?: { parse_mode?: 'Markdown' | 'HTML' }
+  ): Promise<boolean> {
+    if (!this.bot) {
+      logger.error('Bot not initialized in NotificationService');
+      return false;
+    }
+
+    try {
+      await this.bot.telegram.sendVoice(telegramId, fileId, {
+        caption,
+        parse_mode: options?.parse_mode,
+      });
+      return true;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('Error sending voice message', {
+        telegramId,
+        error: errorMessage,
+      });
+
+      // Track failed notification
+      try {
+        const failedRepo = AppDataSource.getRepository(FailedNotification);
+        await failedRepo.save({
+          user_telegram_id: telegramId,
+          notification_type: 'voice_message',
+          message: `Voice: ${fileId}${caption ? ` | Caption: ${caption}` : ''}`,
+          metadata: { fileId, caption },
+          attempt_count: 1,
+          last_error: errorMessage,
+          last_attempt_at: new Date(),
+          critical: false,
+        });
+      } catch (dbError) {
+        logger.error('Failed to save failed voice notification', {
+          telegramId,
+          error: dbError instanceof Error ? dbError.message : String(dbError),
+        });
+      }
+
+      return false;
+    }
+  }
+
+  /**
+   * Send audio message to user
+   */
+  public async sendAudioMessage(
+    telegramId: number,
+    fileId: string,
+    caption?: string,
+    options?: { parse_mode?: 'Markdown' | 'HTML' }
+  ): Promise<boolean> {
+    if (!this.bot) {
+      logger.error('Bot not initialized in NotificationService');
+      return false;
+    }
+
+    try {
+      await this.bot.telegram.sendAudio(telegramId, fileId, {
+        caption,
+        parse_mode: options?.parse_mode,
+      });
+      return true;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('Error sending audio message', {
+        telegramId,
+        error: errorMessage,
+      });
+
+      // Track failed notification
+      try {
+        const failedRepo = AppDataSource.getRepository(FailedNotification);
+        await failedRepo.save({
+          user_telegram_id: telegramId,
+          notification_type: 'audio_message',
+          message: `Audio: ${fileId}${caption ? ` | Caption: ${caption}` : ''}`,
+          metadata: { fileId, caption },
+          attempt_count: 1,
+          last_error: errorMessage,
+          last_attempt_at: new Date(),
+          critical: false,
+        });
+      } catch (dbError) {
+        logger.error('Failed to save failed audio notification', {
+          telegramId,
+          error: dbError instanceof Error ? dbError.message : String(dbError),
+        });
+      }
+
+      return false;
+    }
+  }
+
+  /**
    * Send notification to user with failure tracking
    * FIX #17: Track and retry failed notifications
    */

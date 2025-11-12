@@ -13,7 +13,7 @@ import {
 } from '../keyboards';
 import referralService from '../../services/referral.service';
 import userService from '../../services/user.service';
-import { REFERRAL_RATES } from '../../utils/constants';
+import { REFERRAL_RATES, BUTTON_LABELS } from '../../utils/constants';
 import { createLogger } from '../../utils/logger.util';
 
 const logger = createLogger('ReferralHandler');
@@ -83,6 +83,20 @@ export const handleReferralLink = async (ctx: Context) => {
 
   if (!authCtx.isRegistered || !authCtx.user) {
     await ctx.answerCbQuery('Пожалуйста, сначала зарегистрируйтесь');
+    return;
+  }
+
+  // Check if user is banned - referral link should be deactivated
+  if (authCtx.user.is_banned) {
+    await ctx.answerCbQuery('Реферальная ссылка деактивирована', { show_alert: true });
+    await ctx.editMessageText(
+      '🚫 **Реферальная ссылка деактивирована**\n\n' +
+      'Ваша реферальная ссылка была деактивирована администратором.',
+      {
+        parse_mode: 'Markdown',
+        ...getBackButton('referrals'),
+      }
+    );
     return;
   }
 

@@ -342,6 +342,231 @@ export const initializeBot = (): Telegraf => {
     }
   });
 
+  // ==================== MULTIMEDIA MESSAGES ====================
+
+  /**
+   * Handle photo messages for admin broadcast and send-to-user
+   */
+  bot.on('photo', async (ctx) => {
+    const sessionCtx = ctx as SessionContext;
+    const adminCtx = ctx as AdminContext;
+
+    if (sessionCtx.session.state === BotState.AWAITING_ADMIN_BROADCAST_MESSAGE) {
+      if (!adminCtx.isAdmin) return;
+
+      const photo = ctx.message.photo[ctx.message.photo.length - 1];
+      const caption = ctx.message.caption || '';
+
+      await ctx.reply('📨 Начинаю рассылку фото...');
+
+      const userTelegramIds = await (await import('../services/user.service')).default.getAllUserTelegramIds();
+
+      let sent = 0;
+      let failed = 0;
+
+      for (const telegramId of userTelegramIds) {
+        const success = await notificationService.sendPhotoMessage(telegramId, photo.file_id, caption, { parse_mode: 'Markdown' });
+        if (success) sent++;
+        else failed++;
+
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+
+      await ctx.reply(
+        `✅ Рассылка завершена!\n\n📨 Отправлено: ${sent}\n❌ Не удалось: ${failed}\n👥 Всего: ${userTelegramIds.length}`
+      );
+
+      await updateSessionState(ctx.from!.id, BotState.IDLE);
+    } else if (sessionCtx.session.state === BotState.AWAITING_ADMIN_USER_MESSAGE) {
+      if (!adminCtx.isAdmin) return;
+
+      const photo = ctx.message.photo[ctx.message.photo.length - 1];
+      const caption = ctx.message.caption || '';
+
+      // Parse username/id from caption
+      const parts = caption.split(' ');
+      if (parts.length < 2) {
+        await ctx.reply('❌ Неверный формат. Используйте caption: @username Текст');
+        return;
+      }
+
+      const identifier = parts[0];
+      const message = parts.slice(1).join(' ');
+
+      const userService = (await import('../services/user.service')).default;
+      let user;
+
+      if (identifier.startsWith('@')) {
+        user = await userService.findByUsername(identifier.substring(1));
+      } else if (/^\d+$/.test(identifier)) {
+        user = await userService.findByTelegramId(parseInt(identifier, 10));
+      }
+
+      if (!user) {
+        await ctx.reply('❌ Пользователь не найден');
+        return;
+      }
+
+      const success = await notificationService.sendPhotoMessage(user.telegram_id, photo.file_id, message, { parse_mode: 'Markdown' });
+
+      if (success) {
+        await ctx.reply(`✅ Фото отправлено пользователю ${user.displayName}`);
+      } else {
+        await ctx.reply('❌ Ошибка при отправке фото');
+      }
+
+      await updateSessionState(ctx.from!.id, BotState.IDLE);
+    }
+  });
+
+  /**
+   * Handle voice messages for admin broadcast and send-to-user
+   */
+  bot.on('voice', async (ctx) => {
+    const sessionCtx = ctx as SessionContext;
+    const adminCtx = ctx as AdminContext;
+
+    if (sessionCtx.session.state === BotState.AWAITING_ADMIN_BROADCAST_MESSAGE) {
+      if (!adminCtx.isAdmin) return;
+
+      const voice = ctx.message.voice;
+      const caption = ctx.message.caption || '';
+
+      await ctx.reply('📨 Начинаю рассылку голосового сообщения...');
+
+      const userTelegramIds = await (await import('../services/user.service')).default.getAllUserTelegramIds();
+
+      let sent = 0;
+      let failed = 0;
+
+      for (const telegramId of userTelegramIds) {
+        const success = await notificationService.sendVoiceMessage(telegramId, voice.file_id, caption);
+        if (success) sent++;
+        else failed++;
+
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+
+      await ctx.reply(
+        `✅ Рассылка завершена!\n\n📨 Отправлено: ${sent}\n❌ Не удалось: ${failed}\n👥 Всего: ${userTelegramIds.length}`
+      );
+
+      await updateSessionState(ctx.from!.id, BotState.IDLE);
+    } else if (sessionCtx.session.state === BotState.AWAITING_ADMIN_USER_MESSAGE) {
+      if (!adminCtx.isAdmin) return;
+
+      const voice = ctx.message.voice;
+      const caption = ctx.message.caption || '';
+
+      const parts = caption.split(' ');
+      if (parts.length < 2) {
+        await ctx.reply('❌ Неверный формат. Используйте caption: @username Текст');
+        return;
+      }
+
+      const identifier = parts[0];
+      const message = parts.slice(1).join(' ');
+
+      const userService = (await import('../services/user.service')).default;
+      let user;
+
+      if (identifier.startsWith('@')) {
+        user = await userService.findByUsername(identifier.substring(1));
+      } else if (/^\d+$/.test(identifier)) {
+        user = await userService.findByTelegramId(parseInt(identifier, 10));
+      }
+
+      if (!user) {
+        await ctx.reply('❌ Пользователь не найден');
+        return;
+      }
+
+      const success = await notificationService.sendVoiceMessage(user.telegram_id, voice.file_id, message);
+
+      if (success) {
+        await ctx.reply(`✅ Голосовое сообщение отправлено пользователю ${user.displayName}`);
+      } else {
+        await ctx.reply('❌ Ошибка при отправке голосового сообщения');
+      }
+
+      await updateSessionState(ctx.from!.id, BotState.IDLE);
+    }
+  });
+
+  /**
+   * Handle audio messages for admin broadcast and send-to-user
+   */
+  bot.on('audio', async (ctx) => {
+    const sessionCtx = ctx as SessionContext;
+    const adminCtx = ctx as AdminContext;
+
+    if (sessionCtx.session.state === BotState.AWAITING_ADMIN_BROADCAST_MESSAGE) {
+      if (!adminCtx.isAdmin) return;
+
+      const audio = ctx.message.audio;
+      const caption = ctx.message.caption || '';
+
+      await ctx.reply('📨 Начинаю рассылку аудио...');
+
+      const userTelegramIds = await (await import('../services/user.service')).default.getAllUserTelegramIds();
+
+      let sent = 0;
+      let failed = 0;
+
+      for (const telegramId of userTelegramIds) {
+        const success = await notificationService.sendAudioMessage(telegramId, audio.file_id, caption);
+        if (success) sent++;
+        else failed++;
+
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+
+      await ctx.reply(
+        `✅ Рассылка завершена!\n\n📨 Отправлено: ${sent}\n❌ Не удалось: ${failed}\n👥 Всего: ${userTelegramIds.length}`
+      );
+
+      await updateSessionState(ctx.from!.id, BotState.IDLE);
+    } else if (sessionCtx.session.state === BotState.AWAITING_ADMIN_USER_MESSAGE) {
+      if (!adminCtx.isAdmin) return;
+
+      const audio = ctx.message.audio;
+      const caption = ctx.message.caption || '';
+
+      const parts = caption.split(' ');
+      if (parts.length < 2) {
+        await ctx.reply('❌ Неверный формат. Используйте caption: @username Текст');
+        return;
+      }
+
+      const identifier = parts[0];
+      const message = parts.slice(1).join(' ');
+
+      const userService = (await import('../services/user.service')).default;
+      let user;
+
+      if (identifier.startsWith('@')) {
+        user = await userService.findByUsername(identifier.substring(1));
+      } else if (/^\d+$/.test(identifier)) {
+        user = await userService.findByTelegramId(parseInt(identifier, 10));
+      }
+
+      if (!user) {
+        await ctx.reply('❌ Пользователь не найден');
+        return;
+      }
+
+      const success = await notificationService.sendAudioMessage(user.telegram_id, audio.file_id, message);
+
+      if (success) {
+        await ctx.reply(`✅ Аудио отправлено пользователю ${user.displayName}`);
+      } else {
+        await ctx.reply('❌ Ошибка при отправке аудио');
+      }
+
+      await updateSessionState(ctx.from!.id, BotState.IDLE);
+    }
+  });
+
   // ==================== ERROR HANDLING ====================
 
   /**
