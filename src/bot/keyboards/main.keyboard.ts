@@ -24,6 +24,9 @@ export const getMainKeyboard = (isAdmin: boolean = false) => {
       Markup.button.callback(BUTTON_LABELS.TRANSACTIONS, 'transaction_history'),
     ],
     [
+      Markup.button.callback(BUTTON_LABELS.SUPPORT, 'support'),
+    ],
+    [
       Markup.button.callback(BUTTON_LABELS.HELP, 'help'),
     ],
   ];

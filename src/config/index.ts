@@ -155,7 +155,7 @@ export const config = {
     dir: process.env.BACKUP_DIR || './backups',
     retentionDays: parseInt(process.env.BACKUP_RETENTION_DAYS || '90', 10),
     gitRemote: process.env.BACKUP_GIT_REMOTE || 'origin',
-    gitBranch: process.env.BACKUP_GIT_BRANCH || 'main',
+    gitBranch: process.env.BACKUP_GIT_BRANCH || 'backups/sanitized', // Default: separate branch for sanitized backups (no secrets)
     gcsBackupBucket: process.env.GCS_BACKUP_BUCKET,
   },
 

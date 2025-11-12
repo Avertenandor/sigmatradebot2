@@ -105,6 +105,25 @@ import {
   handleBlacklistRemoveInput,
 } from './handlers';
 
+// Support handlers
+import {
+  handleSupportMenu,
+  handleSupportChooseCategory,
+  captureSupportInput,
+  handleSupportSubmit,
+} from './handlers/support.handler';
+import {
+  handleAdminSupportMenu,
+  handleAdminSupportList,
+  handleAdminSupportView,
+  handleAdminSupportAssign,
+  handleAdminSupportClose,
+  handleAdminSupportReopen,
+  handleAdminSupportReplyStart,
+  handleAdminSupportReplyInput,
+  handleAdminSupportSendReply,
+} from './handlers/admin/support.handler';
+
 // Context types
 import { AuthContext } from './middlewares/auth.middleware';
 import { SessionContext } from './middlewares/session.middleware';
@@ -253,6 +272,13 @@ export const initializeBot = (): Telegraf => {
   bot.action(/^referral_leaderboard_(referrals|earnings)$/, handleReferralLeaderboard);
 
   /**
+   * Support (User)
+   */
+  bot.action('support', handleSupportMenu);
+  bot.action(/^support_cat_\w+$/, handleSupportChooseCategory);
+  bot.action('support_submit', handleSupportSubmit);
+
+  /**
    * Admin panel
    */
   bot.action('admin_panel', handleAdminPanel);
@@ -279,6 +305,18 @@ export const initializeBot = (): Telegraf => {
   bot.action('admin_blacklist', handleBlacklistMenu);
   bot.action('admin_blacklist_add', handleStartBlacklistAdd);
   bot.action('admin_blacklist_remove', handleStartBlacklistRemove);
+
+  /**
+   * Support (Admin)
+   */
+  bot.action('admin_support', handleAdminSupportMenu);
+  bot.action('admin_support_list', handleAdminSupportList);
+  bot.action(/^admin_support_view_\d+$/, handleAdminSupportView);
+  bot.action(/^admin_support_assign_\d+$/, handleAdminSupportAssign);
+  bot.action(/^admin_support_close_\d+$/, handleAdminSupportClose);
+  bot.action(/^admin_support_reopen_\d+$/, handleAdminSupportReopen);
+  bot.action(/^admin_support_reply_\d+$/, handleAdminSupportReplyStart);
+  bot.action(/^admin_support_send_reply_\d+$/, handleAdminSupportSendReply);
 
   /**
    * Reward sessions
@@ -358,6 +396,16 @@ export const initializeBot = (): Telegraf => {
         await handleBlacklistRemoveInput(ctx);
         break;
 
+      case BotState.AWAITING_SUPPORT_INPUT:
+        // User is creating support ticket - capture input via middleware
+        await captureSupportInput(ctx, async () => {});
+        break;
+
+      case BotState.AWAITING_ADMIN_SUPPORT_REPLY:
+        // Admin is replying to support ticket - capture input via middleware
+        await handleAdminSupportReplyInput(ctx, async () => {});
+        break;
+
       default:
         // Unknown text message
         await ctx.reply(
@@ -374,6 +422,18 @@ export const initializeBot = (): Telegraf => {
   bot.on('photo', async (ctx) => {
     const sessionCtx = ctx as SessionContext;
     const adminCtx = ctx as AdminContext;
+
+    // Check for support ticket input first
+    if (sessionCtx.session.state === BotState.AWAITING_SUPPORT_INPUT) {
+      await captureSupportInput(ctx, async () => {});
+      return;
+    }
+
+    // Check for admin support reply input
+    if (sessionCtx.session.state === BotState.AWAITING_ADMIN_SUPPORT_REPLY) {
+      await handleAdminSupportReplyInput(ctx, async () => {});
+      return;
+    }
 
     if (sessionCtx.session.state === BotState.AWAITING_ADMIN_BROADCAST_MESSAGE) {
       if (!adminCtx.isAdmin) return;
@@ -478,6 +538,18 @@ export const initializeBot = (): Telegraf => {
     const sessionCtx = ctx as SessionContext;
     const adminCtx = ctx as AdminContext;
 
+    // Check for support ticket input first
+    if (sessionCtx.session.state === BotState.AWAITING_SUPPORT_INPUT) {
+      await captureSupportInput(ctx, async () => {});
+      return;
+    }
+
+    // Check for admin support reply input
+    if (sessionCtx.session.state === BotState.AWAITING_ADMIN_SUPPORT_REPLY) {
+      await handleAdminSupportReplyInput(ctx, async () => {});
+      return;
+    }
+
     if (sessionCtx.session.state === BotState.AWAITING_ADMIN_BROADCAST_MESSAGE) {
       if (!adminCtx.isAdmin) return;
 
@@ -580,6 +652,18 @@ export const initializeBot = (): Telegraf => {
     const sessionCtx = ctx as SessionContext;
     const adminCtx = ctx as AdminContext;
 
+    // Check for support ticket input first
+    if (sessionCtx.session.state === BotState.AWAITING_SUPPORT_INPUT) {
+      await captureSupportInput(ctx, async () => {});
+      return;
+    }
+
+    // Check for admin support reply input
+    if (sessionCtx.session.state === BotState.AWAITING_ADMIN_SUPPORT_REPLY) {
+      await handleAdminSupportReplyInput(ctx, async () => {});
+      return;
+    }
+
     if (sessionCtx.session.state === BotState.AWAITING_ADMIN_BROADCAST_MESSAGE) {
       if (!adminCtx.isAdmin) return;
 
@@ -673,6 +757,29 @@ export const initializeBot = (): Telegraf => {
 
       await updateSessionState(ctx.from!.id, BotState.IDLE);
     }
+  });
+
+  /**
+   * Handle document messages for support tickets
+   */
+  bot.on('document', async (ctx) => {
+    const sessionCtx = ctx as SessionContext;
+    const adminCtx = ctx as AdminContext;
+
+    // Check for support ticket input first
+    if (sessionCtx.session.state === BotState.AWAITING_SUPPORT_INPUT) {
+      await captureSupportInput(ctx, async () => {});
+      return;
+    }
+
+    // Check for admin support reply input
+    if (sessionCtx.session.state === BotState.AWAITING_ADMIN_SUPPORT_REPLY) {
+      await handleAdminSupportReplyInput(ctx, async () => {});
+      return;
+    }
+
+    // Note: Document messages are not supported for broadcast/send-to-user
+    // Only for support tickets
   });
 
   // ==================== ERROR HANDLING ====================

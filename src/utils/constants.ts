@@ -202,6 +202,7 @@ export const BUTTON_LABELS = {
   WITHDRAWALS: '💸 Вывод средств',
   REFERRALS: '🤝 Рефералы',
   TRANSACTIONS: '📊 История транзакций',
+  SUPPORT: '🆘 Техподдержка',
   HELP: '❓ Помощь',
   ADMIN_PANEL: '👑 Админ-панель',
 
@@ -317,6 +318,9 @@ export enum BotState {
   AWAITING_REWARD_SESSION_DATA = 'awaiting_reward_session_data',
   AWAITING_ADMIN_BLACKLIST_ADD = 'awaiting_admin_blacklist_add',
   AWAITING_ADMIN_BLACKLIST_REMOVE = 'awaiting_admin_blacklist_remove',
+  AWAITING_SUPPORT_CATEGORY = 'awaiting_support_category',
+  AWAITING_SUPPORT_INPUT = 'awaiting_support_input',
+  AWAITING_ADMIN_SUPPORT_REPLY = 'awaiting_admin_support_reply',
 }
 
 // Cache TTL (Redis)

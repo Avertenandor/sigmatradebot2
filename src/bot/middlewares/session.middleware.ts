@@ -26,6 +26,12 @@ export interface SessionData {
   state: BotState;
   data?: Record<string, any>;
   lastActivity: number;
+  // Support ticket fields
+  supportCategory?: string;
+  supportMessages?: Array<{ type: string; text?: string; file_id?: string; caption?: string }>;
+  // Admin support reply fields
+  supportReplyTicketId?: number;
+  supportReplyMessages?: Array<{ type: string; text?: string; file_id?: string; caption?: string }>;
 }
 
 // Extend Context with session

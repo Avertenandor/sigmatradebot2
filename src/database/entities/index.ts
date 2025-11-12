@@ -18,3 +18,5 @@ export { FailedNotification } from './FailedNotification.entity'; // FIX #17
 export { FinancialPasswordRecovery } from './FinancialPasswordRecovery.entity';
 export { SystemSetting } from './SystemSetting.entity';
 export { Blacklist } from './Blacklist.entity'; // Pre-registration ban list
+export { SupportTicket } from './SupportTicket.entity';
+export { SupportMessage } from './SupportMessage.entity';
