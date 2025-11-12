@@ -10,6 +10,7 @@ import { DEPOSIT_LEVELS, REQUIRED_REFERRALS_PER_LEVEL, TransactionStatus } from 
 import userService from './user.service';
 import { paymentService } from './payment.service';
 import { notificationService } from './notification.service';
+import { settingsService } from './settings.service';
 import { fromDbString, toUsdtString, sum as sumMoney, type MoneyAmount } from '../utils/money.util';
 
 const logger = createLogger('DepositService');
@@ -43,6 +44,31 @@ export class DepositService {
   }
 
   /**
+   * Get active Level 1 ROI cycle for user
+   * Returns the active Level 1 deposit that hasn't completed its 500% ROI
+   */
+  async getActiveLevel1Cycle(userId: number): Promise<Deposit | null> {
+    try {
+      const activeL1 = await this.depositRepository.findOne({
+        where: {
+          user_id: userId,
+          level: 1,
+          status: TransactionStatus.CONFIRMED,
+          is_roi_completed: false,
+        },
+      });
+
+      return activeL1 || null;
+    } catch (error) {
+      logger.error('Error getting active L1 cycle', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  }
+
+  /**
    * Check if user can activate specific level
    */
   async canActivateLevel(
@@ -54,16 +80,32 @@ export class DepositService {
       return { canActivate: false, reason: 'Неверный уровень депозита' };
     }
 
+    // CRITICAL: Check if level is open (admin can restrict levels)
+    const maxOpenLevel = await settingsService.getMaxOpenLevel();
+    if (level > maxOpenLevel) {
+      return {
+        canActivate: false,
+        reason: `Этот уровень пока не открыт. Доступны уровни 1-${maxOpenLevel}`,
+      };
+    }
+
+    // CRITICAL: For Level 1, check if user has active ROI cycle
+    if (level === 1) {
+      const activeL1 = await this.getActiveLevel1Cycle(userId);
+      if (activeL1) {
+        return {
+          canActivate: false,
+          reason: 'У вас уже есть активный депозит уровня 1. Дождитесь завершения 500% ROI',
+        };
+      }
+      return { canActivate: true };
+    }
+
     // Check if already activated
     const activatedLevels = await this.getActivatedLevels(userId);
 
     if (activatedLevels.includes(level)) {
       return { canActivate: false, reason: 'Этот уровень уже активирован' };
-    }
-
-    // Level 1 can be activated without restrictions
-    if (level === 1) {
-      return { canActivate: true };
     }
 
     // Check if previous level is activated
@@ -96,7 +138,10 @@ export class DepositService {
   async getAvailableLevels(userId: number): Promise<number[]> {
     const available: number[] = [];
 
-    for (let level = 1; level <= 5; level++) {
+    // CRITICAL: Only show levels up to maxOpenLevel
+    const maxOpenLevel = await settingsService.getMaxOpenLevel();
+
+    for (let level = 1; level <= maxOpenLevel; level++) {
       const { canActivate } = await this.canActivateLevel(userId, level);
       if (canActivate) {
         available.push(level);
@@ -246,6 +291,16 @@ export class DepositService {
         }
       }
 
+      // CRITICAL: For Level 1, check if user has active ROI cycle
+      if (data.level === 1) {
+        const activeL1 = await this.getActiveLevel1Cycle(data.userId);
+        if (activeL1) {
+          return {
+            error: 'У вас уже есть активный депозит 10 USDT. Дождитесь завершения 500% ROI, затем создайте новый депозит',
+          };
+        }
+      }
+
       // Check if user already has pending deposit for this level
       const existingPending = await this.depositRepository.findOne({
         where: {
@@ -284,7 +339,7 @@ export class DepositService {
         user_id: data.userId,
         level: data.level,
         amount: data.amount.toString(),
-        tx_hash: data.txHash || null,
+        tx_hash: data.txHash || undefined,
         status: TransactionStatus.PENDING,
       });
 
@@ -334,6 +389,25 @@ export class DepositService {
       deposit.status = TransactionStatus.CONFIRMED;
       deposit.block_number = blockNumber;
       deposit.confirmed_at = new Date();
+
+      // CRITICAL: For Level 1, initialize ROI cap (500% = 5x amount)
+      if (deposit.level === 1) {
+        const depositAmountMoney = fromDbString(deposit.amount);
+        const roiCapMoney: MoneyAmount = {
+          value: depositAmountMoney.value * BigInt(5),
+          decimals: depositAmountMoney.decimals,
+        };
+
+        deposit.roi_cap_amount = toUsdtString(roiCapMoney);
+        deposit.roi_paid_amount = '0';
+        deposit.is_roi_completed = false;
+
+        logger.info('ROI cap initialized for Level 1 deposit', {
+          depositId: deposit.id,
+          amount: deposit.amount,
+          roiCap: deposit.roi_cap_amount,
+        });
+      }
 
       await this.depositRepository.save(deposit);
 
@@ -414,6 +488,53 @@ export class DepositService {
   }
 
   /**
+   * Get ROI progress for user's active Level 1 deposit
+   */
+  async getLevel1RoiProgress(userId: number): Promise<{
+    hasActiveDeposit: boolean;
+    depositAmount?: number;
+    roiCap?: number;
+    roiPaid?: number;
+    roiRemaining?: number;
+    roiPercent?: number;
+    isCompleted?: boolean;
+  }> {
+    try {
+      const activeL1 = await this.getActiveLevel1Cycle(userId);
+
+      if (!activeL1 || !activeL1.roi_cap_amount) {
+        return { hasActiveDeposit: false };
+      }
+
+      const depositAmountMoney = fromDbString(activeL1.amount);
+      const roiCapMoney = fromDbString(activeL1.roi_cap_amount);
+      const roiPaidMoney = fromDbString(activeL1.roi_paid_amount || '0');
+
+      const depositAmount = parseFloat(toUsdtString(depositAmountMoney));
+      const roiCap = parseFloat(toUsdtString(roiCapMoney));
+      const roiPaid = parseFloat(toUsdtString(roiPaidMoney));
+      const roiRemaining = Math.max(roiCap - roiPaid, 0);
+      const roiPercent = roiCap > 0 ? (roiPaid / roiCap) * 100 : 0;
+
+      return {
+        hasActiveDeposit: true,
+        depositAmount,
+        roiCap,
+        roiPaid,
+        roiRemaining,
+        roiPercent: Math.min(roiPercent, 100),
+        isCompleted: activeL1.is_roi_completed,
+      };
+    } catch (error) {
+      logger.error('Error getting L1 ROI progress', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { hasActiveDeposit: false };
+    }
+  }
+
+  /**
    * Get total deposited by user
    */
   async getTotalDeposited(userId: number): Promise<number> {
@@ -434,6 +555,118 @@ export class DepositService {
         error: error instanceof Error ? error.message : String(error),
       });
       return 0;
+    }
+  }
+
+  /**
+   * Get ROI statistics for admins
+   */
+  async getRoiStatistics(): Promise<{
+    totalActiveL1Deposits: number;
+    totalCompletedL1Cycles: number;
+    totalL1Deposited: number;
+    totalL1RoiPaid: number;
+    averageRoiProgress: number;
+    nearingCompletion: Array<{
+      userId: number;
+      telegramId: number;
+      depositAmount: number;
+      roiPaid: number;
+      roiRemaining: number;
+      roiPercent: number;
+    }>;
+  }> {
+    try {
+      // Get all Level 1 deposits
+      const allL1Deposits = await this.depositRepository.find({
+        where: {
+          level: 1,
+          status: TransactionStatus.CONFIRMED,
+        },
+        relations: ['user'],
+      });
+
+      // Active deposits (not completed)
+      const activeL1 = allL1Deposits.filter((d) => !d.is_roi_completed && d.roi_cap_amount);
+
+      // Completed deposits
+      const completedL1 = allL1Deposits.filter((d) => d.is_roi_completed);
+
+      // Calculate totals
+      let totalL1Deposited = 0;
+      let totalL1RoiPaid = 0;
+      let totalRoiProgress = 0;
+
+      for (const deposit of allL1Deposits) {
+        if (deposit.roi_cap_amount) {
+          const depositAmountMoney = fromDbString(deposit.amount);
+          const roiPaidMoney = fromDbString(deposit.roi_paid_amount || '0');
+
+          totalL1Deposited += parseFloat(toUsdtString(depositAmountMoney));
+          totalL1RoiPaid += parseFloat(toUsdtString(roiPaidMoney));
+        }
+      }
+
+      // Calculate average progress for active deposits
+      for (const deposit of activeL1) {
+        const roiCapMoney = fromDbString(deposit.roi_cap_amount!);
+        const roiPaidMoney = fromDbString(deposit.roi_paid_amount || '0');
+
+        const roiCap = parseFloat(toUsdtString(roiCapMoney));
+        const roiPaid = parseFloat(toUsdtString(roiPaidMoney));
+
+        totalRoiProgress += roiCap > 0 ? (roiPaid / roiCap) * 100 : 0;
+      }
+
+      const averageRoiProgress = activeL1.length > 0 ? totalRoiProgress / activeL1.length : 0;
+
+      // Find deposits nearing completion (>80% ROI)
+      const nearingCompletion = activeL1
+        .filter((deposit) => deposit.user) // Filter out deposits without user relation
+        .map((deposit) => {
+          const depositAmountMoney = fromDbString(deposit.amount);
+          const roiCapMoney = fromDbString(deposit.roi_cap_amount!);
+          const roiPaidMoney = fromDbString(deposit.roi_paid_amount || '0');
+
+          const depositAmount = parseFloat(toUsdtString(depositAmountMoney));
+          const roiCap = parseFloat(toUsdtString(roiCapMoney));
+          const roiPaid = parseFloat(toUsdtString(roiPaidMoney));
+          const roiRemaining = Math.max(roiCap - roiPaid, 0);
+          const roiPercent = roiCap > 0 ? (roiPaid / roiCap) * 100 : 0;
+
+          return {
+            userId: deposit.user_id,
+            telegramId: deposit.user!.telegram_id, // Safe after filter
+            depositAmount,
+            roiPaid,
+            roiRemaining,
+            roiPercent,
+          };
+        })
+        .filter((d) => d.roiPercent >= 80)
+        .sort((a, b) => b.roiPercent - a.roiPercent)
+        .slice(0, 10);
+
+      return {
+        totalActiveL1Deposits: activeL1.length,
+        totalCompletedL1Cycles: completedL1.length,
+        totalL1Deposited,
+        totalL1RoiPaid,
+        averageRoiProgress,
+        nearingCompletion,
+      };
+    } catch (error) {
+      logger.error('Error getting ROI statistics', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {
+        totalActiveL1Deposits: 0,
+        totalCompletedL1Cycles: 0,
+        totalL1Deposited: 0,
+        totalL1RoiPaid: 0,
+        averageRoiProgress: 0,
+        nearingCompletion: [],
+      };
     }
   }
 
@@ -529,7 +762,7 @@ export class DepositService {
           if (deposit.user_id) {
             const user = await userService.findById(deposit.user_id);
             if (user) {
-              await notificationService.sendNotification(
+              await notificationService.sendCustomMessage(
                 user.telegram_id,
                 `⏱️ Ваш запрос на депозит уровня ${deposit.level} истёк.\n\n` +
                 `Депозит был создан более 24 часов назад, но средства не были отправлены.\n\n` +

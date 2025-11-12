@@ -43,6 +43,11 @@ ${activatedLevels.length > 0 ? activatedLevels.map((l) => `✅ Уровень ${
 ${availableLevels.length > 0 ? availableLevels.map((l) => `💵 Уровень ${l}: ${DEPOSIT_LEVELS[l as keyof typeof DEPOSIT_LEVELS]} USDT`).join('\n') : 'Нет доступных уровней'}
 
 📌 Активируйте уровни последовательно, снизу вверх.
+
+⚠️ **Важная информация:**
+• Депозит НЕ возвращается
+• Максимальный доход: 500% (5x)
+• После достижения 500% ROI нужно внести новый депозит
   `.trim();
 
   const keyboard = getDepositLevelsKeyboard(activatedLevels, availableLevels);
@@ -110,6 +115,38 @@ export const handleDepositLevel = async (ctx: Context) => {
   // Get referral count
   const referralCount = await depositService.getDirectReferralCount(authCtx.user.id);
 
+  // Get ROI progress if level 1
+  let roiProgressText = '';
+  if (level === 1 && isActivated) {
+    const roiProgress = await depositService.getLevel1RoiProgress(authCtx.user.id);
+    if (roiProgress.hasActiveDeposit) {
+      const createProgressBar = (percent: number, length: number = 10): string => {
+        const filled = Math.round((percent / 100) * length);
+        const empty = length - filled;
+        return '█'.repeat(filled) + '░'.repeat(empty);
+      };
+
+      if (!roiProgress.isCompleted) {
+        const progressBar = createProgressBar(roiProgress.roiPercent || 0);
+        roiProgressText = `
+**🎯 Ваш ROI Прогресс:**
+📊 ${progressBar} ${roiProgress.roiPercent?.toFixed(1)}%
+✅ Получено: ${roiProgress.roiPaid?.toFixed(2)} / ${roiProgress.roiCap?.toFixed(2)} USDT
+⏳ Осталось: ${roiProgress.roiRemaining?.toFixed(2)} USDT
+
+`;
+      } else {
+        roiProgressText = `
+**🎯 ROI Завершён:**
+✅ Достигнут максимум 500%!
+💰 Получено: ${roiProgress.roiPaid?.toFixed(2)} USDT
+📌 Создайте новый депозит 10 USDT
+
+`;
+      }
+    }
+  }
+
   const message = `
 💰 **Уровень ${level}**
 
@@ -121,7 +158,7 @@ export const handleDepositLevel = async (ctx: Context) => {
 
 ${!canActivate && reason ? `❌ ${reason}` : ''}
 
-${canActivate && !isActivated ? `
+${roiProgressText}${canActivate && !isActivated ? `
 **Как активировать:**
 1. Отправьте ${depositInfo.amount} USDT на адрес:
 \`${config.blockchain.systemWalletAddress}\`
@@ -131,6 +168,14 @@ ${canActivate && !isActivated ? `
 3. Уровень будет автоматически активирован
 
 ⚠️ **Важно:** Отправляйте точную сумму ${depositInfo.amount} USDT через сеть BSC (BEP-20)
+
+${level === 1 ? `
+🎯 **ROI система:**
+• Максимальный доход: 500% (5x = ${depositInfo.amount * 5} USDT)
+• Депозит НЕ возвращается (чистый доход)
+• После достижения 500% ROI нужно внести новый депозит 10 USDT
+• У вас может быть только ОДИН активный депозит уровня 1
+` : ''}
 ` : ''}
   `.trim();
 

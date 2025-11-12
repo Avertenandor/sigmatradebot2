@@ -224,6 +224,17 @@ export class RewardService {
       const totalRewardAmounts: MoneyAmount[] = [];  // Collect for precise summation
 
       for (const deposit of deposits) {
+        // CRITICAL: Skip rewards if user has earnings blocked (finpass recovery)
+        if (deposit.user.earnings_blocked) {
+          logger.warn('Skipped deposit reward - earnings blocked during finpass recovery', {
+            userId: deposit.user_id,
+            depositId: deposit.id,
+            telegram_id: deposit.user.telegram_id,
+            reason: 'finpass_recovery_in_progress',
+          });
+          continue;
+        }
+
         // Check if reward already calculated for this deposit in this session
         const existingReward = await this.depositRewardRepository.findOne({
           where: {
@@ -238,6 +249,50 @@ export class RewardService {
             sessionId,
           });
           continue;
+        }
+
+        // CRITICAL: For Level 1, check ROI cap (500% limit)
+        if (deposit.level === 1 && deposit.roi_cap_amount) {
+          if (deposit.is_roi_completed) {
+            logger.info('Skipped reward - ROI cap already reached', {
+              depositId: deposit.id,
+              userId: deposit.user_id,
+              roiCap: deposit.roi_cap_amount,
+              roiPaid: deposit.roi_paid_amount,
+            });
+            continue;
+          }
+
+          // Calculate remaining ROI space
+          const roiCapMoney = fromDbString(deposit.roi_cap_amount);
+          const roiPaidMoney = fromDbString(deposit.roi_paid_amount || '0');
+
+          const roiCapValue = parseFloat(toUsdtString(roiCapMoney));
+          const roiPaidValue = parseFloat(toUsdtString(roiPaidMoney));
+          const roiRemainingValue = roiCapValue - roiPaidValue;
+
+          if (roiRemainingValue <= 0) {
+            // Mark as completed if not already
+            if (!deposit.is_roi_completed) {
+              deposit.is_roi_completed = true;
+              deposit.roi_completed_at = new Date();
+              await this.depositRepository.save(deposit);
+
+              logger.info('ROI cap reached during reward calculation', {
+                depositId: deposit.id,
+                userId: deposit.user_id,
+                roiCap: deposit.roi_cap_amount,
+              });
+            }
+            continue;
+          }
+
+          logger.debug('Level 1 deposit ROI check', {
+            depositId: deposit.id,
+            roiCap: roiCapValue,
+            roiPaid: roiPaidValue,
+            roiRemaining: roiRemainingValue,
+          });
         }
 
         // Get reward rate for deposit level
@@ -257,7 +312,28 @@ export class RewardService {
         // Calculate reward amount with percentage
         // For decimal rate percentage, convert to display string for calculation
         const depositAmountValue = parseFloat(toUsdtString(depositAmountMoney));
-        const rewardAmountValue = (depositAmountValue * rewardRate) / 100;
+        let rewardAmountValue = (depositAmountValue * rewardRate) / 100;
+
+        // CRITICAL: For Level 1, cap reward to remaining ROI space
+        if (deposit.level === 1 && deposit.roi_cap_amount) {
+          const roiCapMoney = fromDbString(deposit.roi_cap_amount);
+          const roiPaidMoney = fromDbString(deposit.roi_paid_amount || '0');
+
+          const roiCapValue = parseFloat(toUsdtString(roiCapMoney));
+          const roiPaidValue = parseFloat(toUsdtString(roiPaidMoney));
+          const roiRemainingValue = roiCapValue - roiPaidValue;
+
+          if (rewardAmountValue > roiRemainingValue) {
+            logger.warn('Reward capped to remaining ROI space', {
+              depositId: deposit.id,
+              originalReward: rewardAmountValue,
+              cappedReward: roiRemainingValue,
+              roiRemaining: roiRemainingValue,
+            });
+            rewardAmountValue = roiRemainingValue;
+          }
+        }
+
         const rewardAmountStr = rewardAmountValue.toFixed(6);  // 6 decimals for USDT precision
 
         // Convert reward to MoneyAmount for precise summation

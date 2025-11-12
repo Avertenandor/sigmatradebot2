@@ -14,11 +14,13 @@ import { DepositReward } from '../database/entities/DepositReward.entity';
 import { Transaction } from '../database/entities/Transaction.entity';
 import { User } from '../database/entities/User.entity';
 import { Referral } from '../database/entities/Referral.entity';
+import { Deposit } from '../database/entities/Deposit.entity';
 import { TransactionStatus, TransactionType } from '../utils/constants';
 import { blockchainService } from './blockchain.service';
 import { notificationService } from './notification.service';
 import { paymentRetryService } from './payment-retry.service';
 import { logger } from '../utils/logger.util';
+import { fromDbString, toUsdtString, sum as sumMoney, type MoneyAmount } from '../utils/money.util';
 
 export class PaymentService {
   private static instance: PaymentService;
@@ -322,6 +324,70 @@ export class PaymentService {
         await rewardRepo.save(reward);
       }
 
+      // CRITICAL: Update ROI progress for Level 1 deposits
+      const depositRepo = AppDataSource.getRepository(Deposit);
+      const depositIds = [...new Set(rewards.map(r => r.deposit_id))];
+      const deposits = await depositRepo.find({
+        where: { id: In(depositIds) },
+      });
+
+      for (const deposit of deposits) {
+        // Only track ROI for Level 1 deposits with ROI cap
+        if (deposit.level === 1 && deposit.roi_cap_amount) {
+          // Get all rewards for this deposit
+          const depositRewards = rewards.filter(r => r.deposit_id === deposit.id);
+          const depositRewardAmounts: MoneyAmount[] = depositRewards.map(r =>
+            fromDbString(r.reward_amount)
+          );
+          const depositRewardTotal = sumMoney(depositRewardAmounts);
+          const depositRewardValue = parseFloat(toUsdtString(depositRewardTotal));
+
+          // Update roi_paid_amount
+          const currentPaidMoney = fromDbString(deposit.roi_paid_amount || '0');
+          const newPaidMoney = sumMoney([currentPaidMoney, depositRewardTotal]);
+          deposit.roi_paid_amount = toUsdtString(newPaidMoney);
+
+          // Check if ROI cap reached
+          const roiCapMoney = fromDbString(deposit.roi_cap_amount);
+          const roiCapValue = parseFloat(toUsdtString(roiCapMoney));
+          const roiPaidValue = parseFloat(toUsdtString(newPaidMoney));
+
+          if (roiPaidValue >= roiCapValue && !deposit.is_roi_completed) {
+            deposit.is_roi_completed = true;
+            deposit.roi_completed_at = new Date();
+
+            logger.info('ROI cap reached for Level 1 deposit', {
+              depositId: deposit.id,
+              userId: deposit.user_id,
+              roiCap: roiCapValue,
+              roiPaid: roiPaidValue,
+            });
+
+            // Notify user about ROI completion
+            await notificationService.notifyRoiCompleted(
+              user.telegram_id,
+              deposit.level,
+              roiCapValue
+            ).catch(err => {
+              logger.error('Failed to send ROI completion notification', {
+                error: err,
+                depositId: deposit.id,
+              });
+            });
+          }
+
+          await depositRepo.save(deposit);
+
+          logger.debug('ROI progress updated', {
+            depositId: deposit.id,
+            rewardAmount: depositRewardValue,
+            roiPaid: roiPaidValue,
+            roiCap: roiCapValue,
+            isCompleted: deposit.is_roi_completed,
+          });
+        }
+      }
+
       // Create transaction record
       await transactionRepo.save({
         user_id: user.id,
@@ -395,6 +461,19 @@ export class PaymentService {
         const reward = rewards.find((r) => r.level === referral.level);
 
         if (!reward || reward.reward <= 0) {
+          continue;
+        }
+
+        // CRITICAL: Skip earnings if referrer has earnings blocked (finpass recovery)
+        if (referral.referrer.earnings_blocked) {
+          logger.warn(
+            `⚠️ Skipped earning for user ${referral.referrer.telegram_id} (level ${referral.level}) - earnings blocked during finpass recovery`,
+            {
+              referrer_id: referral.referrer.id,
+              amount: reward.reward,
+              reason: 'finpass_recovery_in_progress',
+            }
+          );
           continue;
         }
 

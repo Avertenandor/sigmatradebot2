@@ -16,3 +16,4 @@ export { DepositReward } from './DepositReward.entity';
 export { PaymentRetry } from './PaymentRetry.entity'; // FIX #4
 export { FailedNotification } from './FailedNotification.entity'; // FIX #17
 export { FinancialPasswordRecovery } from './FinancialPasswordRecovery.entity';
+export { SystemSetting } from './SystemSetting.entity';
