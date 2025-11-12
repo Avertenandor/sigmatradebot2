@@ -18,6 +18,7 @@ export const getAdminPanelKeyboard = () => {
       Markup.button.callback(BUTTON_LABELS.PLATFORM_STATS, 'admin_stats'),
     ],
     [Markup.button.callback('⚙️ Депозиты', 'admin_deposit_settings')],
+    [Markup.button.callback('🛑 Чёрный список', 'admin_blacklist')],
     [Markup.button.callback(BUTTON_LABELS.BROADCAST_MESSAGE, 'admin_broadcast')],
     [Markup.button.callback(BUTTON_LABELS.SEND_TO_USER, 'admin_send_to_user')],
     [

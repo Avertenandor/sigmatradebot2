@@ -8,6 +8,7 @@ import { BUTTON_LABELS, DEPOSIT_LEVELS } from '../../utils/constants';
 
 /**
  * Get deposit levels keyboard
+ * Shows ONLY activated + available levels (hides closed levels completely)
  * @param activatedLevels - Array of already activated levels
  * @param availableLevels - Array of levels available for activation
  */
@@ -17,18 +18,15 @@ export const getDepositLevelsKeyboard = (
 ) => {
   const buttons: any[][] = [];
 
-  // Create button for each level
-  for (let level = 1; level <= 5; level++) {
-    const amount = DEPOSIT_LEVELS[level as keyof typeof DEPOSIT_LEVELS];
-    let buttonText = ``;
+  // Combine activated and available levels (show only these)
+  const shownLevels = Array.from(new Set([...activatedLevels, ...availableLevels])).sort((a, b) => a - b);
 
-    if (activatedLevels.includes(level)) {
-      buttonText = `✅ Уровень ${level}: ${amount} USDT`;
-    } else if (availableLevels.includes(level)) {
-      buttonText = `💵 Уровень ${level}: ${amount} USDT`;
-    } else {
-      buttonText = `🔒 Уровень ${level}: ${amount} USDT`;
-    }
+  // Create buttons only for shown levels
+  for (const level of shownLevels) {
+    const amount = DEPOSIT_LEVELS[level as keyof typeof DEPOSIT_LEVELS];
+    const buttonText = activatedLevels.includes(level)
+      ? `✅ Уровень ${level}: ${amount} USDT`
+      : `💵 Уровень ${level}: ${amount} USDT`;
 
     buttons.push([
       Markup.button.callback(buttonText, `deposit_level_${level}`),

@@ -56,6 +56,15 @@ export {
   handleRoiStats,
 } from './deposit-settings.handler';
 
+// Blacklist Management (Pre-registration Ban)
+export {
+  handleBlacklistMenu,
+  handleStartBlacklistAdd,
+  handleBlacklistAddInput,
+  handleStartBlacklistRemove,
+  handleBlacklistRemoveInput,
+} from './blacklist.handler';
+
 // Import for default export
 import * as panelHandler from './panel.handler';
 import * as broadcastHandler from './broadcast.handler';
