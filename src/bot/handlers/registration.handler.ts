@@ -17,6 +17,8 @@ import { Markup } from 'telegraf';
 import Redis from 'ioredis';
 import { config } from '../../config';
 import { withTransaction, TRANSACTION_PRESETS } from '../../database/transaction.util';
+import { AppDataSource } from '../../database/data-source';
+import { Blacklist } from '../../database/entities';
 
 const logger = createLogger('RegistrationHandler');
 
@@ -37,6 +39,34 @@ export const handleStartRegistration = async (ctx: Context) => {
   // Check if already registered
   if (authCtx.isRegistered) {
     await ctx.answerCbQuery('Вы уже зарегистрированы');
+    return;
+  }
+
+  // CRITICAL: Check if user is in blacklist (pre-registration ban)
+  const blacklistRepo = AppDataSource.getRepository(Blacklist);
+  const blacklistEntry = await blacklistRepo.findOne({
+    where: { telegram_id: ctx.from!.id },
+  });
+
+  if (blacklistEntry) {
+    const rejectionMessage = `
+Здравствуйте, мы провели проверку и обнаружили, что действующие участники нашего сообщества против вашей регистрации.
+Вам отказано в регистрации.
+    `.trim();
+
+    await ctx.answerCbQuery('Регистрация недоступна');
+
+    if (ctx.callbackQuery && 'message' in ctx.callbackQuery) {
+      await ctx.editMessageText(rejectionMessage);
+    } else {
+      await ctx.reply(rejectionMessage);
+    }
+
+    logger.info('Registration blocked: user in blacklist', {
+      telegramId: ctx.from!.id,
+      reason: blacklistEntry.reason,
+    });
+
     return;
   }
 
