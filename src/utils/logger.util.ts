@@ -139,6 +139,7 @@ transports.push(
     datePattern: 'YYYY-MM-DD',
     maxSize: '20m',
     maxFiles: '14d',
+    zippedArchive: true, // Compress rotated logs to save disk space
     format: fileFormat,
     level: 'debug',
   })
@@ -151,6 +152,7 @@ transports.push(
     datePattern: 'YYYY-MM-DD',
     maxSize: '20m',
     maxFiles: '30d',
+    zippedArchive: true, // Compress rotated logs to save disk space
     format: fileFormat,
     level: 'error',
   })
@@ -163,6 +165,7 @@ transports.push(
     datePattern: 'YYYY-MM-DD',
     maxSize: '20m',
     maxFiles: '14d',
+    zippedArchive: true, // Compress rotated logs to save disk space
     format: fileFormat,
     level: 'info',
   })
@@ -181,6 +184,7 @@ const logger = winston.createLogger({
       datePattern: 'YYYY-MM-DD',
       maxSize: '20m',
       maxFiles: '30d',
+      zippedArchive: true, // Compress rotated logs to save disk space
       format: fileFormat,
     }),
   ],
@@ -190,6 +194,7 @@ const logger = winston.createLogger({
       datePattern: 'YYYY-MM-DD',
       maxSize: '20m',
       maxFiles: '30d',
+      zippedArchive: true, // Compress rotated logs to save disk space
       format: fileFormat,
     }),
   ],

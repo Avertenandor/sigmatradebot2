@@ -11,3 +11,4 @@ export * from './reward-calculator.job';
 export * from './backup.job';
 export * from './cleanup.job';
 export * from './broadcast.processor';
+export * from './disk-guard.job';

@@ -22,6 +22,8 @@ import {
   stopCleanupScheduler,
   startBroadcastProcessor,
   stopBroadcastProcessor,
+  startDiskGuardScheduler,
+  stopDiskGuardScheduler,
 } from './jobs';
 import {
   startPerformanceReporting,
@@ -95,12 +97,17 @@ async function main() {
     await startCleanupScheduler();
     logger.info('✅ Cleanup scheduler started');
 
-    // Step 10: Start broadcast processor
+    // Step 10: Start disk guard scheduler
+    logger.info('Starting disk guard scheduler...');
+    await startDiskGuardScheduler();
+    logger.info('✅ Disk guard scheduler started');
+
+    // Step 11: Start broadcast processor
     logger.info('Starting broadcast processor...');
     await startBroadcastProcessor();
     logger.info('✅ Broadcast processor started');
 
-    // Step 11: Start performance monitoring
+    // Step 12: Start performance monitoring
     logger.info('Starting performance monitoring...');
     startPerformanceReporting(); // Reports performance stats every hour
     startMemoryMonitoring(); // Logs memory usage every 5 minutes
@@ -167,6 +174,10 @@ function setupGracefulShutdown(bot: any) {
       logger.info('Stopping cleanup scheduler...');
       await stopCleanupScheduler();
       logger.info('✅ Cleanup scheduler stopped');
+
+      logger.info('Stopping disk guard scheduler...');
+      await stopDiskGuardScheduler();
+      logger.info('✅ Disk guard scheduler stopped');
 
       logger.info('Stopping broadcast processor...');
       await stopBroadcastProcessor();

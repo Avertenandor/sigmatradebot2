@@ -167,6 +167,7 @@ const auditLogger = winston.createLogger({
       datePattern: 'YYYY-MM-DD',
       maxSize: '50m',
       maxFiles: '90d', // Keep for 90 days (compliance)
+      zippedArchive: true, // Compress rotated audit logs to save disk space
       level: 'audit',
     }),
 
@@ -176,6 +177,7 @@ const auditLogger = winston.createLogger({
       datePattern: 'YYYY-MM-DD',
       maxSize: '50m',
       maxFiles: '365d', // Keep for 1 year (financial records)
+      zippedArchive: true, // Compress rotated audit logs to save disk space
       level: 'financial',
     }),
 
@@ -185,6 +187,7 @@ const auditLogger = winston.createLogger({
       datePattern: 'YYYY-MM-DD',
       maxSize: '50m',
       maxFiles: '180d', // Keep for 6 months
+      zippedArchive: true, // Compress rotated audit logs to save disk space
       level: 'security',
     }),
 
@@ -194,6 +197,7 @@ const auditLogger = winston.createLogger({
       datePattern: 'YYYY-MM-DD',
       maxSize: '50m',
       maxFiles: '365d',
+      zippedArchive: true, // Compress rotated audit logs to save disk space
       level: 'critical',
     }),
   ],

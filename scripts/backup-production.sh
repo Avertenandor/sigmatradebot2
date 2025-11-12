@@ -298,6 +298,37 @@ if [ "$NO_ROTATION" = false ]; then
   DELETED_COUNT=$(find "${BACKUP_DAILY_DIR}" -name "sigmatrade_*.sql.gz" -type f -mtime +${KEEP_DAYS} -delete -print 2>/dev/null | wc -l)
   log_info "Deleted ${DELETED_COUNT} old daily backup(s)"
 
+  # Size-based rotation for daily backups (enforce max size cap)
+  MAX_GB="${BACKUP_LOCAL_MAX_GB:-2}"  # Default 2GB max for daily backups
+  MAX_KB=$((MAX_GB * 1024 * 1024))
+
+  if [ -d "${BACKUP_DAILY_DIR}" ]; then
+    CURRENT_SIZE=$(du -s "${BACKUP_DAILY_DIR}" 2>/dev/null | awk '{print $1}')
+
+    if [ "${CURRENT_SIZE}" -gt "${MAX_KB}" ]; then
+      log_info "Daily backups exceed ${MAX_GB}GB limit (current: $((CURRENT_SIZE / 1024 / 1024))GB)"
+      log_info "Removing oldest daily backups to stay under limit..."
+
+      SIZE_DELETED=0
+      while [ "$(du -s "${BACKUP_DAILY_DIR}" 2>/dev/null | awk '{print $1}')" -gt "${MAX_KB}" ]; do
+        # Find oldest backup file
+        OLDEST=$(find "${BACKUP_DAILY_DIR}" -name "sigmatrade_*.sql.gz" -type f -printf '%T@ %p\n' 2>/dev/null | sort -n | head -1 | cut -d' ' -f2-)
+
+        if [ -z "${OLDEST}" ]; then
+          break  # No more files to delete
+        fi
+
+        log_info "Size cap: removing oldest backup: $(basename "${OLDEST}")"
+        rm -f "${OLDEST}"
+        SIZE_DELETED=$((SIZE_DELETED + 1))
+      done
+
+      FINAL_SIZE=$(du -s "${BACKUP_DAILY_DIR}" 2>/dev/null | awk '{print $1}')
+      log_info "Size-based cleanup complete: removed ${SIZE_DELETED} backup(s)"
+      log_info "Daily backups size: $((FINAL_SIZE / 1024 / 1024))GB / ${MAX_GB}GB"
+    fi
+  fi
+
   # Remove monthly backups older than KEEP_MONTHLY months
   log_info "Removing monthly backups older than ${KEEP_MONTHLY} months..."
   MONTHS_AGO_DATE=$(date -d "${KEEP_MONTHLY} months ago" +%Y%m)
