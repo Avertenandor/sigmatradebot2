@@ -585,6 +585,18 @@ export class UserService {
         userId,
       });
 
+      // CRITICAL: Unblock earnings if user was in finpass recovery
+      // This proves user has possession of new password and can resume earnings
+      if (user.earnings_blocked) {
+        user.earnings_blocked = false;
+        await this.userRepository.save(user);
+
+        logger.warn('Earnings unblocked after successful finpass use', {
+          userId,
+          telegram_id: user.telegram_id,
+        });
+      }
+
       return { success: true };
     } catch (error) {
       logger.error('Error verifying financial password', {

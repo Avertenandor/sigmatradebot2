@@ -398,6 +398,19 @@ export class PaymentService {
           continue;
         }
 
+        // CRITICAL: Skip earnings if referrer has earnings blocked (finpass recovery)
+        if (referral.referrer.earnings_blocked) {
+          logger.warn(
+            `⚠️ Skipped earning for user ${referral.referrer.telegram_id} (level ${referral.level}) - earnings blocked during finpass recovery`,
+            {
+              referrer_id: referral.referrer.id,
+              amount: reward.reward,
+              reason: 'finpass_recovery_in_progress',
+            }
+          );
+          continue;
+        }
+
         // Create earning record
         await earningRepo.save({
           referral_id: referral.id,

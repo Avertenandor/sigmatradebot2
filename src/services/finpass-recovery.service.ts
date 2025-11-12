@@ -5,14 +5,26 @@
  * SLA: 3-5 business days for manual admin processing
  *
  * Process:
- * 1. User creates request → notifies all admins
- * 2. Admin reviews → changes status to 'in_review'
- * 3. Admin approves → generates new password, sends to user
- * 4. User receives new password via bot (1-hour TTL for repeat view)
+ * 1. User creates request → BLOCKS ALL EARNINGS → notifies all admins
+ * 2. Admin conducts video verification OUTSIDE bot (Telegram/WhatsApp/etc)
+ * 3. Admin reviews → changes status to 'in_review'
+ * 4. Admin approves → generates new password, sends to user
+ * 5. User receives new password via bot (1-hour TTL for repeat view)
+ * 6. User successfully uses new password → UNBLOCKS EARNINGS
+ *
+ * CRITICAL Security:
+ * - ALL earnings blocked from request creation until first successful password use
+ * - Prevents unauthorized withdrawals during recovery period
+ * - User must prove possession of new password before earnings resume
  *
  * Anti-abuse:
  * - Unique constraint: only one open request per user
  * - Optional: Add cooldown period (e.g., 30 days between requests)
+ *
+ * Video Verification:
+ * - Conducted OUTSIDE bot via external channels (Telegram DM, WhatsApp, etc)
+ * - Fields video_required/video_verified are admin markers only
+ * - Bot does not handle video upload/storage
  */
 
 import { AppDataSource } from '../database/data-source';
@@ -41,6 +53,9 @@ export class FinpassRecoveryService {
    * Create recovery request from user
    * Prevents duplicate open requests via unique constraint
    *
+   * CRITICAL: Blocks ALL earnings for user during recovery period
+   * Earnings will be unblocked only after user successfully uses new password
+   *
    * @returns requestId if successful
    */
   async createRequest(userId: number): Promise<{ success: boolean; error?: string; requestId?: number }> {
@@ -64,11 +79,25 @@ export class FinpassRecoveryService {
         return { success: true, requestId: existing.id };
       }
 
+      // CRITICAL: Block earnings during recovery period
+      const user = await this.userRepo.findOne({ where: { id: userId } });
+      if (!user) {
+        return { success: false, error: 'Пользователь не найден' };
+      }
+
+      user.earnings_blocked = true;
+      await this.userRepo.save(user);
+
+      logger.warn('Earnings blocked for user during finpass recovery', {
+        userId,
+        telegram_id: user.telegram_id,
+      });
+
       // Create new request
       const request = this.repo.create({
         user_id: userId,
         status: 'pending',
-        video_required: true,
+        video_required: true, // Note: video verification conducted outside bot
         video_verified: false,
       });
 

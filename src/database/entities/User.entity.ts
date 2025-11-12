@@ -57,6 +57,10 @@ export class User {
   @Column({ type: 'boolean', default: false })
   is_banned!: boolean;
 
+  @Column({ type: 'boolean', default: false })
+  @Index()
+  earnings_blocked!: boolean; // Block earnings during finpass recovery
+
   @CreateDateColumn()
   created_at!: Date;
 

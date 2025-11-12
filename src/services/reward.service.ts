@@ -224,6 +224,17 @@ export class RewardService {
       const totalRewardAmounts: MoneyAmount[] = [];  // Collect for precise summation
 
       for (const deposit of deposits) {
+        // CRITICAL: Skip rewards if user has earnings blocked (finpass recovery)
+        if (deposit.user.earnings_blocked) {
+          logger.warn('Skipped deposit reward - earnings blocked during finpass recovery', {
+            userId: deposit.user_id,
+            depositId: deposit.id,
+            telegram_id: deposit.user.telegram_id,
+            reason: 'finpass_recovery_in_progress',
+          });
+          continue;
+        }
+
         // Check if reward already calculated for this deposit in this session
         const existingReward = await this.depositRewardRepository.findOne({
           where: {
