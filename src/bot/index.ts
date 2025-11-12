@@ -94,6 +94,7 @@ import {
   handleFinpassReject,
   handleDepositSettings,
   handleSetMaxLevel,
+  handleRoiStats,
 } from './handlers';
 
 // Context types
@@ -261,6 +262,7 @@ export const initializeBot = (): Telegraf => {
   bot.action(/^admin_finpass_reject_\d+$/, handleFinpassReject);
   bot.action('admin_deposit_settings', handleDepositSettings);
   bot.action(/^admin_set_max_level_\d+$/, handleSetMaxLevel);
+  bot.action('admin_roi_stats', handleRoiStats);
 
   /**
    * Reward sessions

@@ -7,8 +7,8 @@ import { Context } from 'telegraf';
 import { AuthContext } from '../middlewares/auth.middleware';
 import { getBackButton } from '../keyboards';
 import userService from '../../services/user.service';
+import depositService from '../../services/deposit.service';
 import { createLogger } from '../../utils/logger.util';
-import { config } from '../../config';
 
 const logger = createLogger('ProfileHandler');
 
@@ -31,9 +31,42 @@ export const handleProfile = async (ctx: Context) => {
   // Get user balance
   const balance = await userService.getUserBalance(user.id);
 
+  // Get ROI progress
+  const roiProgress = await depositService.getLevel1RoiProgress(user.id);
+
   // Get referral link
   const botUsername = (await ctx.telegram.getMe()).username;
   const referralLink = userService.generateReferralLink(user.id, botUsername);
+
+  // Create ROI progress bar
+  const createProgressBar = (percent: number, length: number = 10): string => {
+    const filled = Math.round((percent / 100) * length);
+    const empty = length - filled;
+    return '█'.repeat(filled) + '░'.repeat(empty);
+  };
+
+  // ROI section
+  let roiSection = '';
+  if (roiProgress.hasActiveDeposit && !roiProgress.isCompleted) {
+    const progressBar = createProgressBar(roiProgress.roiPercent || 0);
+    roiSection = `
+**🎯 ROI Прогресс (Уровень 1):**
+💵 Депозит: ${roiProgress.depositAmount?.toFixed(2)} USDT
+📊 Прогресс: ${progressBar} ${roiProgress.roiPercent?.toFixed(1)}%
+✅ Получено: ${roiProgress.roiPaid?.toFixed(2)} USDT
+⏳ Осталось: ${roiProgress.roiRemaining?.toFixed(2)} USDT
+🎯 Цель: ${roiProgress.roiCap?.toFixed(2)} USDT (500%)
+
+`;
+  } else if (roiProgress.hasActiveDeposit && roiProgress.isCompleted) {
+    roiSection = `
+**🎯 ROI Завершён (Уровень 1):**
+✅ Достигнут максимум 500%!
+💰 Получено: ${roiProgress.roiPaid?.toFixed(2)} USDT
+📌 Создайте новый депозит 10 USDT чтобы продолжить
+
+`;
+  }
 
   // Format profile message
   const profileMessage = `
@@ -55,7 +88,7 @@ ${user.is_banned ? '🚫 Аккаунт заблокирован' : '✅ Акк�
 ⏳ В ожидании выплаты: ${balance?.pendingEarnings.toFixed(2) || 0} USDT
 ${balance && balance.pendingWithdrawals > 0 ? `🔒 Заблокировано в выводах: ${balance.pendingWithdrawals.toFixed(2)} USDT\n` : ''}✅ Уже выплачено: ${balance?.totalPaid.toFixed(2) || 0} USDT
 
-**Депозиты и рефералы:**
+${roiSection}**Депозиты и рефералы:**
 💰 Всего депозитов: ${stats?.totalDeposits.toFixed(2) || 0} USDT
 👥 Рефералов: ${stats?.referralCount || 0}
 📊 Активных уровней: ${stats?.activatedLevels.length || 0}/5

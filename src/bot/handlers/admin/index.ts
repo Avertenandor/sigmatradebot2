@@ -53,6 +53,7 @@ export {
 export {
   handleDepositSettings,
   handleSetMaxLevel,
+  handleRoiStats,
 } from './deposit-settings.handler';
 
 // Import for default export
@@ -85,4 +86,5 @@ export default {
   handleRegenerateMasterKey: managementHandler.handleRegenerateMasterKey,
   handleDepositSettings: depositSettingsHandler.handleDepositSettings,
   handleSetMaxLevel: depositSettingsHandler.handleSetMaxLevel,
+  handleRoiStats: depositSettingsHandler.handleRoiStats,
 };

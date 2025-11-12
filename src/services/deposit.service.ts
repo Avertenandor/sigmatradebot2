@@ -488,6 +488,53 @@ export class DepositService {
   }
 
   /**
+   * Get ROI progress for user's active Level 1 deposit
+   */
+  async getLevel1RoiProgress(userId: number): Promise<{
+    hasActiveDeposit: boolean;
+    depositAmount?: number;
+    roiCap?: number;
+    roiPaid?: number;
+    roiRemaining?: number;
+    roiPercent?: number;
+    isCompleted?: boolean;
+  }> {
+    try {
+      const activeL1 = await this.getActiveLevel1Cycle(userId);
+
+      if (!activeL1 || !activeL1.roi_cap_amount) {
+        return { hasActiveDeposit: false };
+      }
+
+      const depositAmountMoney = fromDbString(activeL1.amount);
+      const roiCapMoney = fromDbString(activeL1.roi_cap_amount);
+      const roiPaidMoney = fromDbString(activeL1.roi_paid_amount || '0');
+
+      const depositAmount = parseFloat(toUsdtString(depositAmountMoney));
+      const roiCap = parseFloat(toUsdtString(roiCapMoney));
+      const roiPaid = parseFloat(toUsdtString(roiPaidMoney));
+      const roiRemaining = Math.max(roiCap - roiPaid, 0);
+      const roiPercent = roiCap > 0 ? (roiPaid / roiCap) * 100 : 0;
+
+      return {
+        hasActiveDeposit: true,
+        depositAmount,
+        roiCap,
+        roiPaid,
+        roiRemaining,
+        roiPercent: Math.min(roiPercent, 100),
+        isCompleted: activeL1.is_roi_completed,
+      };
+    } catch (error) {
+      logger.error('Error getting L1 ROI progress', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { hasActiveDeposit: false };
+    }
+  }
+
+  /**
    * Get total deposited by user
    */
   async getTotalDeposited(userId: number): Promise<number> {
@@ -508,6 +555,119 @@ export class DepositService {
         error: error instanceof Error ? error.message : String(error),
       });
       return 0;
+    }
+  }
+
+  /**
+   * Get ROI statistics for admins
+   */
+  async getRoiStatistics(): Promise<{
+    totalActiveL1Deposits: number;
+    totalCompletedL1Cycles: number;
+    totalL1Deposited: number;
+    totalL1RoiPaid: number;
+    averageRoiProgress: number;
+    nearingCompletion: Array<{
+      userId: number;
+      telegramId: number;
+      depositAmount: number;
+      roiPaid: number;
+      roiRemaining: number;
+      roiPercent: number;
+    }>;
+  }> {
+    try {
+      const userRepo = AppDataSource.getRepository(User);
+
+      // Get all Level 1 deposits
+      const allL1Deposits = await this.depositRepository.find({
+        where: {
+          level: 1,
+          status: TransactionStatus.CONFIRMED,
+        },
+        relations: ['user'],
+      });
+
+      // Active deposits (not completed)
+      const activeL1 = allL1Deposits.filter((d) => !d.is_roi_completed && d.roi_cap_amount);
+
+      // Completed deposits
+      const completedL1 = allL1Deposits.filter((d) => d.is_roi_completed);
+
+      // Calculate totals
+      let totalL1Deposited = 0;
+      let totalL1RoiPaid = 0;
+      let totalRoiProgress = 0;
+
+      for (const deposit of allL1Deposits) {
+        if (deposit.roi_cap_amount) {
+          const depositAmountMoney = fromDbString(deposit.amount);
+          const roiPaidMoney = fromDbString(deposit.roi_paid_amount || '0');
+
+          totalL1Deposited += parseFloat(toUsdtString(depositAmountMoney));
+          totalL1RoiPaid += parseFloat(toUsdtString(roiPaidMoney));
+        }
+      }
+
+      // Calculate average progress for active deposits
+      for (const deposit of activeL1) {
+        const roiCapMoney = fromDbString(deposit.roi_cap_amount!);
+        const roiPaidMoney = fromDbString(deposit.roi_paid_amount || '0');
+
+        const roiCap = parseFloat(toUsdtString(roiCapMoney));
+        const roiPaid = parseFloat(toUsdtString(roiPaidMoney));
+
+        totalRoiProgress += roiCap > 0 ? (roiPaid / roiCap) * 100 : 0;
+      }
+
+      const averageRoiProgress = activeL1.length > 0 ? totalRoiProgress / activeL1.length : 0;
+
+      // Find deposits nearing completion (>80% ROI)
+      const nearingCompletion = activeL1
+        .map((deposit) => {
+          const depositAmountMoney = fromDbString(deposit.amount);
+          const roiCapMoney = fromDbString(deposit.roi_cap_amount!);
+          const roiPaidMoney = fromDbString(deposit.roi_paid_amount || '0');
+
+          const depositAmount = parseFloat(toUsdtString(depositAmountMoney));
+          const roiCap = parseFloat(toUsdtString(roiCapMoney));
+          const roiPaid = parseFloat(toUsdtString(roiPaidMoney));
+          const roiRemaining = Math.max(roiCap - roiPaid, 0);
+          const roiPercent = roiCap > 0 ? (roiPaid / roiCap) * 100 : 0;
+
+          return {
+            userId: deposit.user_id,
+            telegramId: deposit.user.telegram_id,
+            depositAmount,
+            roiPaid,
+            roiRemaining,
+            roiPercent,
+          };
+        })
+        .filter((d) => d.roiPercent >= 80)
+        .sort((a, b) => b.roiPercent - a.roiPercent)
+        .slice(0, 10);
+
+      return {
+        totalActiveL1Deposits: activeL1.length,
+        totalCompletedL1Cycles: completedL1.length,
+        totalL1Deposited,
+        totalL1RoiPaid,
+        averageRoiProgress,
+        nearingCompletion,
+      };
+    } catch (error) {
+      logger.error('Error getting ROI statistics', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {
+        totalActiveL1Deposits: 0,
+        totalCompletedL1Cycles: 0,
+        totalL1Deposited: 0,
+        totalL1RoiPaid: 0,
+        averageRoiProgress: 0,
+        nearingCompletion: [],
+      };
     }
   }
 
