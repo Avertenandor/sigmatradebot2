@@ -13,6 +13,7 @@ export {
 export {
   handleStartBroadcast,
   handleBroadcastMessage,
+  handleBroadcastStatus,
   handleStartSendToUser,
   handleSendToUserMessage,
 } from './broadcast.handler';
@@ -79,6 +80,7 @@ export default {
   handleAdminStats: panelHandler.handleAdminStats,
   handleStartBroadcast: broadcastHandler.handleStartBroadcast,
   handleBroadcastMessage: broadcastHandler.handleBroadcastMessage,
+  handleBroadcastStatus: broadcastHandler.handleBroadcastStatus,
   handleStartSendToUser: broadcastHandler.handleStartSendToUser,
   handleSendToUserMessage: broadcastHandler.handleSendToUserMessage,
   handleStartBanUser: usersHandler.handleStartBanUser,

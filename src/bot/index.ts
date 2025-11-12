@@ -7,6 +7,8 @@ import { Telegraf } from 'telegraf';
 import { config } from '../config';
 import { createLogger } from '../utils/logger.util';
 import { notificationService } from '../services/notification.service';
+import { getQueue, QueueName } from '../jobs/queue.config';
+import { BroadcastJobData } from '../jobs/broadcast.processor';
 
 // Middlewares
 import {
@@ -62,6 +64,7 @@ import {
   handleAdminStats,
   handleStartBroadcast,
   handleBroadcastMessage,
+  handleBroadcastStatus,
   handleStartSendToUser,
   handleSendToUserMessage,
   handleStartBanUser,
@@ -171,6 +174,11 @@ export const initializeBot = (): Telegraf => {
   bot.command('admin_login', handleAdminLogin);
   bot.command('admin_logout', handleAdminLogout);
   bot.command('admin_session', handleAdminSession);
+
+  /**
+   * Admin broadcast commands
+   */
+  bot.command('broadcast_status', handleBroadcastStatus);
 
   // ==================== CALLBACK QUERIES ====================
 
@@ -373,24 +381,52 @@ export const initializeBot = (): Telegraf => {
       const photo = ctx.message.photo[ctx.message.photo.length - 1];
       const caption = ctx.message.caption || '';
 
-      await ctx.reply('📨 Начинаю рассылку фото...');
+      await ctx.reply('📨 Ставлю рассылку фото в очередь...');
 
       const userTelegramIds = await (await import('../services/user.service')).default.getAllUserTelegramIds();
 
-      let sent = 0;
-      let failed = 0;
-
-      for (const telegramId of userTelegramIds) {
-        const success = await notificationService.sendPhotoMessage(telegramId, photo.file_id, caption, { parse_mode: 'Markdown' });
-        if (success) sent++;
-        else failed++;
-
-        await new Promise((resolve) => setTimeout(resolve, 50));
+      if (userTelegramIds.length === 0) {
+        await ctx.reply('❌ Нет пользователей для рассылки');
+        await updateSessionState(ctx.from!.id, BotState.IDLE);
+        return;
       }
 
-      await ctx.reply(
-        `✅ Рассылка завершена!\n\n📨 Отправлено: ${sent}\n❌ Не удалось: ${failed}\n👥 Всего: ${userTelegramIds.length}`
-      );
+      const broadcastId = `broadcast_photo_${ctx.from!.id}_${Date.now()}`;
+      const broadcastQueue = getQueue(QueueName.BROADCAST);
+
+      try {
+        const jobs = userTelegramIds.map((telegramId, index) => ({
+          name: 'send-message',
+          data: {
+            type: 'photo',
+            telegramId,
+            adminId: ctx.from!.id,
+            broadcastId,
+            fileId: photo.file_id,
+            caption,
+            totalUsers: userTelegramIds.length,
+            currentIndex: index,
+          } as BroadcastJobData,
+          opts: {
+            attempts: 3,
+            backoff: { type: 'exponential' as const, delay: 2000 },
+            removeOnComplete: 100,
+            removeOnFail: false,
+          },
+        }));
+
+        await broadcastQueue.addBulk(jobs);
+
+        await ctx.reply(
+          `✅ Рассылка фото запущена!\n\n` +
+          `👥 Всего: ${userTelegramIds.length}\n` +
+          `⏱ Примерное время: ${Math.ceil(userTelegramIds.length / 15)} сек.\n\n` +
+          `📊 ID: \`${broadcastId}\``,
+          { parse_mode: 'Markdown' }
+        );
+      } catch (error) {
+        await ctx.reply('❌ Ошибка при запуске рассылки');
+      }
 
       await updateSessionState(ctx.from!.id, BotState.IDLE);
     } else if (sessionCtx.session.state === BotState.AWAITING_ADMIN_USER_MESSAGE) {
@@ -448,24 +484,52 @@ export const initializeBot = (): Telegraf => {
       const voice = ctx.message.voice;
       const caption = ctx.message.caption || '';
 
-      await ctx.reply('📨 Начинаю рассылку голосового сообщения...');
+      await ctx.reply('📨 Ставлю рассылку голосового сообщения в очередь...');
 
       const userTelegramIds = await (await import('../services/user.service')).default.getAllUserTelegramIds();
 
-      let sent = 0;
-      let failed = 0;
-
-      for (const telegramId of userTelegramIds) {
-        const success = await notificationService.sendVoiceMessage(telegramId, voice.file_id, caption);
-        if (success) sent++;
-        else failed++;
-
-        await new Promise((resolve) => setTimeout(resolve, 50));
+      if (userTelegramIds.length === 0) {
+        await ctx.reply('❌ Нет пользователей для рассылки');
+        await updateSessionState(ctx.from!.id, BotState.IDLE);
+        return;
       }
 
-      await ctx.reply(
-        `✅ Рассылка завершена!\n\n📨 Отправлено: ${sent}\n❌ Не удалось: ${failed}\n👥 Всего: ${userTelegramIds.length}`
-      );
+      const broadcastId = `broadcast_voice_${ctx.from!.id}_${Date.now()}`;
+      const broadcastQueue = getQueue(QueueName.BROADCAST);
+
+      try {
+        const jobs = userTelegramIds.map((telegramId, index) => ({
+          name: 'send-message',
+          data: {
+            type: 'voice',
+            telegramId,
+            adminId: ctx.from!.id,
+            broadcastId,
+            fileId: voice.file_id,
+            caption,
+            totalUsers: userTelegramIds.length,
+            currentIndex: index,
+          } as BroadcastJobData,
+          opts: {
+            attempts: 3,
+            backoff: { type: 'exponential' as const, delay: 2000 },
+            removeOnComplete: 100,
+            removeOnFail: false,
+          },
+        }));
+
+        await broadcastQueue.addBulk(jobs);
+
+        await ctx.reply(
+          `✅ Рассылка голосового сообщения запущена!\n\n` +
+          `👥 Всего: ${userTelegramIds.length}\n` +
+          `⏱ Примерное время: ${Math.ceil(userTelegramIds.length / 15)} сек.\n\n` +
+          `📊 ID: \`${broadcastId}\``,
+          { parse_mode: 'Markdown' }
+        );
+      } catch (error) {
+        await ctx.reply('❌ Ошибка при запуске рассылки');
+      }
 
       await updateSessionState(ctx.from!.id, BotState.IDLE);
     } else if (sessionCtx.session.state === BotState.AWAITING_ADMIN_USER_MESSAGE) {
@@ -522,24 +586,52 @@ export const initializeBot = (): Telegraf => {
       const audio = ctx.message.audio;
       const caption = ctx.message.caption || '';
 
-      await ctx.reply('📨 Начинаю рассылку аудио...');
+      await ctx.reply('📨 Ставлю рассылку аудио в очередь...');
 
       const userTelegramIds = await (await import('../services/user.service')).default.getAllUserTelegramIds();
 
-      let sent = 0;
-      let failed = 0;
-
-      for (const telegramId of userTelegramIds) {
-        const success = await notificationService.sendAudioMessage(telegramId, audio.file_id, caption);
-        if (success) sent++;
-        else failed++;
-
-        await new Promise((resolve) => setTimeout(resolve, 50));
+      if (userTelegramIds.length === 0) {
+        await ctx.reply('❌ Нет пользователей для рассылки');
+        await updateSessionState(ctx.from!.id, BotState.IDLE);
+        return;
       }
 
-      await ctx.reply(
-        `✅ Рассылка завершена!\n\n📨 Отправлено: ${sent}\n❌ Не удалось: ${failed}\n👥 Всего: ${userTelegramIds.length}`
-      );
+      const broadcastId = `broadcast_audio_${ctx.from!.id}_${Date.now()}`;
+      const broadcastQueue = getQueue(QueueName.BROADCAST);
+
+      try {
+        const jobs = userTelegramIds.map((telegramId, index) => ({
+          name: 'send-message',
+          data: {
+            type: 'audio',
+            telegramId,
+            adminId: ctx.from!.id,
+            broadcastId,
+            fileId: audio.file_id,
+            caption,
+            totalUsers: userTelegramIds.length,
+            currentIndex: index,
+          } as BroadcastJobData,
+          opts: {
+            attempts: 3,
+            backoff: { type: 'exponential' as const, delay: 2000 },
+            removeOnComplete: 100,
+            removeOnFail: false,
+          },
+        }));
+
+        await broadcastQueue.addBulk(jobs);
+
+        await ctx.reply(
+          `✅ Рассылка аудио запущена!\n\n` +
+          `👥 Всего: ${userTelegramIds.length}\n` +
+          `⏱ Примерное время: ${Math.ceil(userTelegramIds.length / 15)} сек.\n\n` +
+          `📊 ID: \`${broadcastId}\``,
+          { parse_mode: 'Markdown' }
+        );
+      } catch (error) {
+        await ctx.reply('❌ Ошибка при запуске рассылки');
+      }
 
       await updateSessionState(ctx.from!.id, BotState.IDLE);
     } else if (sessionCtx.session.state === BotState.AWAITING_ADMIN_USER_MESSAGE) {

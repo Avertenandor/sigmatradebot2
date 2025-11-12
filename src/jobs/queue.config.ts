@@ -16,6 +16,7 @@ export enum QueueName {
   REWARD_CALCULATOR = 'reward-calculator',
   BACKUP = 'backup',
   LOG_CLEANUP = 'log-cleanup',
+  BROADCAST = 'broadcast', // Admin broadcast with RPS limiting
 }
 
 // Queue instances
@@ -53,6 +54,15 @@ export const initializeQueues = (): void => {
   const backupQueue = new Queue(QueueName.BACKUP, queueOptions);
   const logCleanupQueue = new Queue(QueueName.LOG_CLEANUP, queueOptions);
 
+  // Broadcast queue with RPS limiting (15 messages/second)
+  const broadcastQueue = new Queue(QueueName.BROADCAST, {
+    ...queueOptions,
+    limiter: {
+      max: 15, // Max 15 jobs per duration
+      duration: 1000, // Per 1 second (15 msg/s)
+    },
+  });
+
   queues.set(QueueName.BLOCKCHAIN_MONITOR, blockchainMonitorQueue);
   queues.set(QueueName.PAYMENT_PROCESSOR, paymentProcessorQueue);
   queues.set(QueueName.PAYMENT_RETRY, paymentRetryQueue);
@@ -60,6 +70,7 @@ export const initializeQueues = (): void => {
   queues.set(QueueName.REWARD_CALCULATOR, rewardCalculatorQueue);
   queues.set(QueueName.BACKUP, backupQueue);
   queues.set(QueueName.LOG_CLEANUP, logCleanupQueue);
+  queues.set(QueueName.BROADCAST, broadcastQueue);
 
   // Error handlers
   for (const [name, queue] of queues) {

@@ -20,6 +20,8 @@ import {
   stopBackupScheduler,
   startCleanupScheduler,
   stopCleanupScheduler,
+  startBroadcastProcessor,
+  stopBroadcastProcessor,
 } from './jobs';
 import {
   startPerformanceReporting,
@@ -93,7 +95,12 @@ async function main() {
     await startCleanupScheduler();
     logger.info('✅ Cleanup scheduler started');
 
-    // Step 10: Start performance monitoring
+    // Step 10: Start broadcast processor
+    logger.info('Starting broadcast processor...');
+    await startBroadcastProcessor();
+    logger.info('✅ Broadcast processor started');
+
+    // Step 11: Start performance monitoring
     logger.info('Starting performance monitoring...');
     startPerformanceReporting(); // Reports performance stats every hour
     startMemoryMonitoring(); // Logs memory usage every 5 minutes
@@ -160,6 +167,10 @@ function setupGracefulShutdown(bot: any) {
       logger.info('Stopping cleanup scheduler...');
       await stopCleanupScheduler();
       logger.info('✅ Cleanup scheduler stopped');
+
+      logger.info('Stopping broadcast processor...');
+      await stopBroadcastProcessor();
+      logger.info('✅ Broadcast processor stopped');
 
       // Step 2: Stop performance monitoring
       logger.info('Stopping performance monitoring...');

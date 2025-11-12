@@ -10,3 +10,4 @@ export * from './payment-retry.job';
 export * from './reward-calculator.job';
 export * from './backup.job';
 export * from './cleanup.job';
+export * from './broadcast.processor';

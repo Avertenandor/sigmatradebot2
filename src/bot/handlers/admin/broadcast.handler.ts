@@ -11,6 +11,8 @@ import { BotState, ERROR_MESSAGES } from '../../../utils/constants';
 import userService from '../../../services/user.service';
 import { createLogger, logAdminAction } from '../../../utils/logger.util';
 import { requireAuthenticatedAdmin, broadcastRateLimits, BROADCAST_COOLDOWN_MS } from './utils';
+import { getQueue, QueueName } from '../../../jobs/queue.config';
+import { BroadcastJobData } from '../../../jobs/broadcast.processor';
 
 const logger = createLogger('AdminBroadcastHandler');
 
@@ -59,12 +61,21 @@ export const handleStartBroadcast = async (ctx: Context) => {
 Отправьте сообщение, которое хотите разослать всем пользователям бота.
 
 ⚠️ Сообщение получат все зарегистрированные пользователи.
+⚙️ Рассылка использует очередь с ограничением **15 сообщений/сек**.
 
 **Поддерживается:**
-• Текст (Markdown форматирование)
-• Фото (с caption)
-• Голосовые сообщения (с caption)
-• Аудио файлы (с caption)
+• **Текст** — Просто отправьте текстовое сообщение (поддерживается Markdown)
+• **Фото** — Прикрепите фото и добавьте текст в caption
+• **Голосовые** — Отправьте голосовое сообщение (caption опционален)
+• **Аудио** — Отправьте аудиофайл (caption опционален)
+
+**Примеры:**
+📝 Текст: "Привет! **Новая акция** до конца недели!"
+🖼 Фото: Прикрепите фото + caption "Новые продукты в наличии"
+🎙 Голосовое: Запишите аудиосообщение для пользователей
+🎵 Аудио: Отправьте музыкальный файл + описание
+
+После отправки используйте /broadcast_status для проверки прогресса.
   `.trim();
 
   await ctx.editMessageText(message, {
@@ -98,47 +109,76 @@ export const handleBroadcastMessage = async (ctx: Context) => {
     return;
   }
 
-  await ctx.reply('📨 Начинаю рассылку...');
+  await ctx.reply('📨 Ставлю рассылку в очередь...');
 
   // Get all user telegram IDs
   const userTelegramIds = await userService.getAllUserTelegramIds();
 
-  let sent = 0;
-  let failed = 0;
-
-  // Send to all users
-  for (const telegramId of userTelegramIds) {
-    try {
-      await ctx.telegram.sendMessage(telegramId, message, {
-        parse_mode: 'Markdown',
-      });
-      sent++;
-
-      // Small delay to avoid rate limiting
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    } catch (error) {
-      failed++;
-      logger.warn('Failed to send broadcast to user', {
-        userId: telegramId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+  if (userTelegramIds.length === 0) {
+    await ctx.reply('❌ Нет пользователей для рассылки');
+    await updateSessionState(ctx.from!.id, BotState.IDLE);
+    return;
   }
 
-  // Record broadcast timestamp for rate limiting
-  broadcastRateLimits.set(ctx.from!.id, Date.now());
+  // Generate unique broadcast ID
+  const broadcastId = `broadcast_${ctx.from!.id}_${Date.now()}`;
+  const broadcastQueue = getQueue(QueueName.BROADCAST);
 
-  await ctx.reply(
-    `✅ Рассылка завершена!\n\n` +
-    `📨 Отправлено: ${sent}\n` +
-    `❌ Не удалось: ${failed}\n` +
-    `👥 Всего: ${userTelegramIds.length}`
-  );
+  try {
+    // Enqueue broadcast jobs (queue will respect 15 msg/s rate limit)
+    const jobs = userTelegramIds.map((telegramId, index) => ({
+      name: 'send-message',
+      data: {
+        type: 'text',
+        telegramId,
+        adminId: ctx.from!.id,
+        broadcastId,
+        text: message,
+        totalUsers: userTelegramIds.length,
+        currentIndex: index,
+      } as BroadcastJobData,
+      opts: {
+        attempts: 3, // Retry up to 3 times
+        backoff: {
+          type: 'exponential',
+          delay: 2000, // Start with 2s, doubles each retry
+        },
+        removeOnComplete: 100, // Keep last 100 completed jobs
+        removeOnFail: false, // Keep failed jobs for inspection
+      },
+    }));
+
+    // Add all jobs to queue
+    await broadcastQueue.addBulk(jobs);
+
+    // Record broadcast timestamp for rate limiting
+    broadcastRateLimits.set(ctx.from!.id, Date.now());
+
+    await ctx.reply(
+      `✅ Рассылка запущена!\n\n` +
+      `👥 Всего пользователей: ${userTelegramIds.length}\n` +
+      `⏱ Примерное время: ${Math.ceil(userTelegramIds.length / 15)} сек.\n\n` +
+      `📊 Рассылка идёт в фоновом режиме с ограничением 15 сообщений/сек.\n` +
+      `✉️ ID рассылки: \`${broadcastId}\`\n\n` +
+      `Используйте /broadcast_status для проверки прогресса.`,
+      { parse_mode: 'Markdown' }
+    );
+
+    logAdminAction(ctx.from!.id, 'started_broadcast_queue', {
+      broadcastId,
+      total: userTelegramIds.length,
+    });
+  } catch (error) {
+    logger.error('Failed to enqueue broadcast', {
+      adminId: ctx.from!.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    await ctx.reply('❌ Ошибка при запуске рассылки. Попробуйте позже.');
+  }
 
   // Reset session
   await updateSessionState(ctx.from!.id, BotState.IDLE);
-
-  logAdminAction(ctx.from!.id, 'completed_broadcast', { sent, failed, total: userTelegramIds.length });
 };
 
 /**
@@ -165,21 +205,23 @@ export const handleStartSendToUser = async (ctx: Context) => {
   const message = `
 ✉️ **Отправка сообщения пользователю**
 
-**Для текста:** Отправьте сообщение в формате:
-\`@username Текст сообщения\`
-или
-\`123456789 Текст сообщения\`
+Отправьте сообщение конкретному пользователю по username или Telegram ID.
 
-**Для медиа:** Прикрепите фото/голос/аудио, а в caption укажите:
-\`@username Текст сообщения\`
-
-Где первое слово - username или Telegram ID пользователя.
+**Формат:**
+• **Текст:** \`@username Текст сообщения\` или \`123456789 Текст\`
+• **Медиа:** Прикрепите фото/голос/аудио, в caption укажите \`@username Текст\`
 
 **Поддерживается:**
 • Текст (Markdown форматирование)
 • Фото (с caption)
 • Голосовые сообщения (с caption)
 • Аудио файлы (с caption)
+
+**Примеры:**
+📝 \`@john_doe Привет! Проверьте новый депозит\`
+📝 \`123456789 Ваш запрос одобрен ✅\`
+🖼 Прикрепить фото + caption: \`@john_doe Вот информация\`
+🎙 Голосовое + caption: \`@john_doe\` (можно без текста после username)
   `.trim();
 
   await ctx.editMessageText(message, {
@@ -268,4 +310,55 @@ export const handleSendToUserMessage = async (ctx: Context) => {
 
   // Reset session
   await updateSessionState(ctx.from!.id, BotState.IDLE);
+};
+
+/**
+ * Check broadcast status
+ * Command: /broadcast_status
+ */
+export const handleBroadcastStatus = async (ctx: Context) => {
+  const adminCtx = ctx as AdminContext;
+
+  if (!adminCtx.isAdmin) {
+    await ctx.reply(ERROR_MESSAGES.ADMIN_ONLY);
+    return;
+  }
+
+  try {
+    const broadcastQueue = getQueue(QueueName.BROADCAST);
+
+    // Get queue statistics
+    const [waiting, active, completed, failed] = await Promise.all([
+      broadcastQueue.getWaitingCount(),
+      broadcastQueue.getActiveCount(),
+      broadcastQueue.getCompletedCount(),
+      broadcastQueue.getFailedCount(),
+    ]);
+
+    const total = waiting + active + completed + failed;
+    const percent = total > 0 ? Math.round(((completed + failed) / total) * 100) : 0;
+
+    const statusMessage = `
+📊 **Статус очереди рассылок**
+
+⏳ Ожидают: ${waiting}
+🔄 В процессе: ${active}
+✅ Отправлено: ${completed}
+❌ Ошибки: ${failed}
+
+📈 Прогресс: ${percent}%
+👥 Всего сообщений: ${total}
+
+⚙️ Лимит: 15 сообщений/сек
+    `.trim();
+
+    await ctx.reply(statusMessage, { parse_mode: 'Markdown' });
+  } catch (error) {
+    logger.error('Failed to get broadcast status', {
+      adminId: ctx.from!.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    await ctx.reply('❌ Ошибка при получении статуса рассылки');
+  }
 };
