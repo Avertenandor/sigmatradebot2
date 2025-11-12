@@ -87,6 +87,11 @@ import {
   handleDeleteSession,
   handleStartCreateSession,
   handleRewardSessionInput,
+  handleRequestFinpassRecovery,
+  handleFinpassList,
+  handleFinpassView,
+  handleFinpassApprove,
+  handleFinpassReject,
 } from './handlers';
 
 // Context types
@@ -189,6 +194,11 @@ export const initializeBot = (): Telegraf => {
   bot.action('profile', handleProfile);
 
   /**
+   * Financial password recovery
+   */
+  bot.action('recover_finpass', handleRequestFinpassRecovery);
+
+  /**
    * Deposits
    */
   bot.action('deposits', handleDeposits);
@@ -243,6 +253,10 @@ export const initializeBot = (): Telegraf => {
   bot.action('admin_pending_withdrawals', handlePendingWithdrawals);
   bot.action(/^admin_approve_withdrawal_\d+$/, handleApproveWithdrawal);
   bot.action(/^admin_reject_withdrawal_\d+$/, handleRejectWithdrawal);
+  bot.action('admin_finpass_list', handleFinpassList);
+  bot.action(/^admin_finpass_view_\d+$/, handleFinpassView);
+  bot.action(/^admin_finpass_approve_\d+$/, handleFinpassApprove);
+  bot.action(/^admin_finpass_reject_\d+$/, handleFinpassReject);
 
   /**
    * Reward sessions

@@ -41,6 +41,14 @@ export {
   handleRejectWithdrawal,
 } from './withdrawals.handler';
 
+// Financial Password Recovery
+export {
+  handleFinpassList,
+  handleFinpassView,
+  handleFinpassApprove,
+  handleFinpassReject,
+} from './finpass-recovery.handler';
+
 // Import for default export
 import * as panelHandler from './panel.handler';
 import * as broadcastHandler from './broadcast.handler';
