@@ -342,6 +342,11 @@ export async function startHealthCheckServer(
   bot?: any
 ): Promise<express.Application> {
   const app = express();
+
+  // CRITICAL: Trust proxy for GCP Load Balancer
+  // Without this, req.ip will show internal LB IP (10.x.x.x), not client IP
+  app.set('trust proxy', true);
+
   const healthRouter = createHealthRouter(dataSource, redis, bot);
 
   app.use(healthRouter);

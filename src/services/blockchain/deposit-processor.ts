@@ -77,6 +77,96 @@ export class DepositProcessor {
   }
 
   /**
+   * Create transaction record with idempotent insert (ON CONFLICT DO NOTHING)
+   *
+   * P1 FIX: Prevents duplicate key violations on tx_hash UNIQUE constraint
+   * If transaction already exists, returns existing record instead of failing
+   *
+   * @returns Transaction record (new or existing)
+   */
+  private async createTransactionIdempotent(data: {
+    tx_hash: string;
+    user_id?: number;
+    type: TransactionType;
+    amount: string;
+    from_address: string;
+    to_address: string;
+    block_number: number;
+    status: TransactionStatus;
+  }): Promise<Transaction> {
+    const transactionRepo = AppDataSource.getRepository(Transaction);
+
+    // Try idempotent insert using QueryBuilder
+    try {
+      const result = await transactionRepo
+        .createQueryBuilder()
+        .insert()
+        .into(Transaction)
+        .values(data)
+        .orIgnore() // ON CONFLICT DO NOTHING
+        .returning('*')
+        .execute();
+
+      // If insert succeeded, return the new record
+      if (result.raw && result.raw.length > 0) {
+        logger.debug(`Transaction created: ${data.tx_hash}`);
+        return result.raw[0] as Transaction;
+      }
+
+      // If insert was ignored (duplicate), fetch existing record
+      logger.info(`Transaction already exists (idempotent): ${data.tx_hash}`);
+      const existing = await transactionRepo.findOne({
+        where: { tx_hash: data.tx_hash },
+      });
+
+      if (!existing) {
+        throw new Error(`Transaction ${data.tx_hash} should exist but was not found`);
+      }
+
+      return existing;
+    } catch (error: any) {
+      // Fallback: if .orIgnore() not supported, try raw query
+      logger.warn(`QueryBuilder .orIgnore() failed, using raw query fallback`, {
+        error: error.message,
+      });
+
+      const result = await AppDataSource.query(
+        `
+        INSERT INTO transactions (tx_hash, user_id, type, amount, from_address, to_address, block_number, status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (tx_hash) DO NOTHING
+        RETURNING *
+        `,
+        [
+          data.tx_hash,
+          data.user_id || null,
+          data.type,
+          data.amount,
+          data.from_address,
+          data.to_address,
+          data.block_number,
+          data.status,
+        ]
+      );
+
+      if (result && result.length > 0) {
+        return result[0] as Transaction;
+      }
+
+      // Fetch existing if insert was skipped
+      const existing = await transactionRepo.findOne({
+        where: { tx_hash: data.tx_hash },
+      });
+
+      if (!existing) {
+        throw new Error(`Transaction ${data.tx_hash} insertion failed completely`);
+      }
+
+      return existing;
+    }
+  }
+
+  /**
    * Handle Transfer event from blockchain
    */
   public async handleTransferEvent(
@@ -148,8 +238,8 @@ export class DepositProcessor {
 
       if (!user) {
         logger.warn(`⚠️ No user found with wallet address: ${from}`);
-        // Still create transaction record for audit purposes
-        await transactionRepo.save({
+        // Still create transaction record for audit purposes (idempotent)
+        await this.createTransactionIdempotent({
           tx_hash: txHash,
           type: TransactionType.DEPOSIT,
           amount: toDbString(amountMoney),
@@ -263,8 +353,8 @@ export class DepositProcessor {
           },
         });
 
-        // Create transaction record for audit
-        await transactionRepo.save({
+        // Create transaction record for audit (idempotent)
+        await this.createTransactionIdempotent({
           user_id: user.id,
           tx_hash: txHash,
           type: TransactionType.DEPOSIT,
@@ -320,17 +410,24 @@ export class DepositProcessor {
             },
           });
 
-          // Create transaction record for manual review
-          await manager.save(Transaction, {
-            user_id: user.id,
-            tx_hash: txHash,
-            type: TransactionType.DEPOSIT,
-            amount: toDbString(amountMoney),
-            from_address: from.toLowerCase(),
-            to_address: to.toLowerCase(),
-            block_number: blockNumber,
-            status: TransactionStatus.PENDING,
-          });
+          // Create transaction record for manual review (idempotent)
+          await manager.query(
+            `
+            INSERT INTO transactions (user_id, tx_hash, type, amount, from_address, to_address, block_number, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT (tx_hash) DO NOTHING
+            `,
+            [
+              user.id,
+              txHash,
+              TransactionType.DEPOSIT,
+              toDbString(amountMoney),
+              from.toLowerCase(),
+              to.toLowerCase(),
+              blockNumber,
+              TransactionStatus.PENDING,
+            ]
+          );
 
           logger.info(
             `ℹ️ Transaction recorded for manual review: ${txHash}`
@@ -343,17 +440,24 @@ export class DepositProcessor {
         pendingDeposit.block_number = blockNumber;
         await manager.save(Deposit, pendingDeposit);
 
-        // Create transaction record
-        await manager.save(Transaction, {
-          user_id: user.id,
-          tx_hash: txHash,
-          type: TransactionType.DEPOSIT,
-          amount: toDbString(amountMoney),
-          from_address: from.toLowerCase(),
-          to_address: to.toLowerCase(),
-          block_number: blockNumber,
-          status: TransactionStatus.PENDING,
-        });
+        // Create transaction record (idempotent)
+        await manager.query(
+          `
+          INSERT INTO transactions (user_id, tx_hash, type, amount, from_address, to_address, block_number, status)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          ON CONFLICT (tx_hash) DO NOTHING
+          `,
+          [
+            user.id,
+            txHash,
+            TransactionType.DEPOSIT,
+            toDbString(amountMoney),
+            from.toLowerCase(),
+            to.toLowerCase(),
+            blockNumber,
+            TransactionStatus.PENDING,
+          ]
+        );
 
         // Log successful deposit tracking to audit trail
         logFinancialOperation({

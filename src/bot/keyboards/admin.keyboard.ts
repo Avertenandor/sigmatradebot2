@@ -12,6 +12,7 @@ import { BUTTON_LABELS } from '../../utils/constants';
 export const getAdminPanelKeyboard = () => {
   return Markup.inlineKeyboard([
     [Markup.button.callback(BUTTON_LABELS.PENDING_WITHDRAWALS, 'admin_pending_withdrawals')],
+    [Markup.button.callback('🔑 Финпароли', 'admin_finpass_list')],
     [
       Markup.button.callback('💰 Сессии наград', 'reward_sessions'),
       Markup.button.callback(BUTTON_LABELS.PLATFORM_STATS, 'admin_stats'),

@@ -33,6 +33,21 @@ export class NotificationService {
   }
 
   /**
+   * Send a custom message to a user
+   * Public wrapper for sending arbitrary messages
+   */
+  public async sendCustomMessage(
+    telegramId: number,
+    message: string,
+    options?: { parse_mode?: 'Markdown' | 'HTML' }
+  ): Promise<boolean> {
+    return this.sendNotification(telegramId, message, {
+      parse_mode: options?.parse_mode,
+      notificationType: 'custom_message',
+    });
+  }
+
+  /**
    * Send notification to user with failure tracking
    * FIX #17: Track and retry failed notifications
    */

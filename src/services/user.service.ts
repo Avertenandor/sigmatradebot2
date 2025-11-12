@@ -14,6 +14,7 @@ import {
   verifyPassword,
   generateReferralCode,
 } from '../utils/crypto.util';
+import { fromDbString, toUsdtString, sum as sumMoney, type MoneyAmount } from '../utils/money.util';
 import {
   normalizeWalletAddress,
   isValidBSCAddress,
@@ -479,10 +480,9 @@ export class UserService {
           where: { referral_id: In(referralIds) },
         });
 
-        totalEarned = earnings.reduce(
-          (sum, earning) => sum + parseFloat(earning.amount),
-          0
-        );
+        // CRITICAL: Use precise money summation (no parseFloat!)
+        const totalEarnedMoney = sumMoney(earnings.map(e => fromDbString(e.amount)));
+        totalEarned = parseFloat(toUsdtString(totalEarnedMoney));  // Convert for return value
       }
 
       return {

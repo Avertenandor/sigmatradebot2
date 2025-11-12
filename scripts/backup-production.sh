@@ -194,22 +194,33 @@ fi
 
 # ==================== CREATE BACKUP ====================
 
-log_info "Creating database backup..."
+log_info "Creating sanitized database backup..."
 log_info "Backup file: ${BACKUP_PATH}"
 
 # Set password for pg_dump
 export PGPASSWORD="${DB_PASSWORD:-}"
 
-# Perform backup with compression
+# P0 SECURITY FIX: Only backup whitelisted tables (no secrets/config)
+# This prevents sensitive data from being committed to git
+CRITICAL_TABLES=("users" "deposits" "transactions" "referrals" "referral_earnings" "admins")
+TABLE_ARGS=""
+for t in "${CRITICAL_TABLES[@]}"; do
+  TABLE_ARGS="${TABLE_ARGS} -t ${t}"
+done
+
+log_info "Backing up tables: ${CRITICAL_TABLES[*]}"
+
+# Perform sanitized backup with compression
 # Options:
 #   -h: host
 #   -p: port
 #   -U: username
-#   -F c: custom format (for better compression and features)
-#   -b: include large objects
-#   -v: verbose
-#   -f: output file
+#   -t: table (repeated for each whitelisted table)
+#   --no-owner: skip ownership (portable across environments)
+#   --no-acl: skip access control lists (portable across environments)
+#   --format=custom: custom format (for better compression and features)
 #   --compress=9: maximum compression
+#   -f: output file
 
 START_TIME=$(date +%s)
 
@@ -218,9 +229,10 @@ pg_dump \
   -p "${DB_PORT}" \
   -U "${DB_USERNAME}" \
   -d "${DB_DATABASE}" \
+  ${TABLE_ARGS} \
+  --no-owner \
+  --no-acl \
   --format=custom \
-  --blobs \
-  --verbose \
   --compress=9 \
   --file="${BACKUP_PATH}.tmp" \
   2>> "${LOG_FILE}"

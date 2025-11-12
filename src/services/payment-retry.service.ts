@@ -26,6 +26,7 @@ import { notificationService } from './notification.service';
 import { logger } from '../utils/logger.util';
 import { logFinancialOperation } from '../utils/audit-logger.util';
 import { withTransaction, TRANSACTION_PRESETS } from '../database/transaction.util';
+import { fromDbString, toUsdtString, sum as sumMoney, type MoneyAmount } from '../utils/money.util';
 
 export class PaymentRetryService {
   private static instance: PaymentRetryService;
@@ -207,14 +208,17 @@ export class PaymentRetryService {
         throw new Error(`User ${retry.user.telegram_id} has no wallet address`);
       }
 
-      const amount = parseFloat(retry.amount);
+      // CRITICAL: Use precise money calculation (no parseFloat!)
+      const amountMoney: MoneyAmount = fromDbString(retry.amount);
+      const amountForDisplay = toUsdtString(amountMoney);
 
       // Send payment via blockchain
-      logger.info(`💸 Attempting payment: ${amount} USDT to ${retry.user.wallet_address}`);
+      logger.info(`💸 Attempting payment: ${amountForDisplay} USDT to ${retry.user.wallet_address}`);
 
+      // blockchain service expects number for now - convert at API boundary only
       const paymentResult = await blockchainService.sendPayment(
         retry.user.wallet_address,
-        amount
+        parseFloat(amountForDisplay)  // Convert only for external API
       );
 
       if (!paymentResult.success) {
@@ -304,12 +308,15 @@ export class PaymentRetryService {
 
         logger.warn(`⚠️ Retry ${retry.id} moved to DLQ after ${retry.attempt_count} attempts`);
 
+        // CRITICAL: Use precise money for logging
+        const amountMoney = fromDbString(retry.amount);
+
         // Audit log
         logFinancialOperation({
           category: 'payment',
           userId: retry.user_id,
           action: 'payment_retry_moved_to_dlq',
-          amount: parseFloat(retry.amount),
+          amount: parseFloat(toUsdtString(amountMoney)),  // Convert for audit log (number expected)
           success: false,
           error: errorMessage,
           details: {
@@ -323,7 +330,7 @@ export class PaymentRetryService {
         // Alert admins about DLQ item
         await notificationService.alertPaymentMovedToDLQ(
           retry.user_id,
-          parseFloat(retry.amount),
+          parseFloat(toUsdtString(amountMoney)),  // Convert for notification
           retry.attempt_count,
           errorMessage
         ).catch((err) => {
@@ -338,12 +345,15 @@ export class PaymentRetryService {
 
         logger.info(`⏰ Retry ${retry.id} scheduled for next attempt at: ${retry.next_retry_at.toISOString()}`);
 
+        // CRITICAL: Use precise money for logging
+        const amountMoney = fromDbString(retry.amount);
+
         // Audit log
         logFinancialOperation({
           category: 'payment',
           userId: retry.user_id,
           action: 'payment_retry_failed',
-          amount: parseFloat(retry.amount),
+          amount: parseFloat(toUsdtString(amountMoney)),  // Convert for audit log
           success: false,
           error: errorMessage,
           details: {
@@ -463,15 +473,12 @@ export class PaymentRetryService {
       where: { in_dlq: true, resolved: false },
     });
 
-    const totalAmount = allUnresolved.reduce(
-      (sum, r) => sum + parseFloat(r.amount),
-      0
-    );
+    // CRITICAL: Use precise money summation (no parseFloat!)
+    const totalAmountMoney = sumMoney(allUnresolved.map(r => fromDbString(r.amount)));
+    const totalAmount = parseFloat(toUsdtString(totalAmountMoney));  // Convert for return value
 
-    const dlqAmount = dlqItems.reduce(
-      (sum, r) => sum + parseFloat(r.amount),
-      0
-    );
+    const dlqAmountMoney = sumMoney(dlqItems.map(r => fromDbString(r.amount)));
+    const dlqAmount = parseFloat(toUsdtString(dlqAmountMoney));  // Convert for return value
 
     return {
       pendingRetries: pending,

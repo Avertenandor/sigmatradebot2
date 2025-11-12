@@ -1,0 +1,37 @@
+# Git Attributes
+# Configure how git handles different file types
+
+# Treat SQL dump files as binary to avoid huge diffs
+# This prevents git from attempting to diff large database backups
+*.sql.gz binary
+*.sql binary
+*.dump binary
+
+# Treat other binary files properly
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.tar binary
+*.tar.gz binary
+
+# Text files should have LF line endings
+*.ts text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.env text eol=lf
+*.txt text eol=lf
+
+# Linguist overrides (for GitHub language detection)
+*.sql linguist-detectable=false
+*.sql.gz linguist-detectable=false
+backups/* linguist-generated=true
+dist/* linguist-generated=true
+node_modules/* linguist-vendored=true

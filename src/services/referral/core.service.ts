@@ -27,6 +27,38 @@ export class ReferralCoreService {
   private userRepository = AppDataSource.getRepository(User);
 
   /**
+   * Invalidate referral chain cache for multiple users
+   * Called after creating/updating referral relationships
+   * OPTIMIZATION: Prevents stale cache data
+   */
+  private async invalidateReferralCache(userIds: number[], depth: number = REFERRAL_DEPTH): Promise<void> {
+    try {
+      const keysToDelete: string[] = [];
+
+      // Generate all possible cache keys for affected users
+      for (const userId of userIds) {
+        for (let d = 1; d <= depth; d++) {
+          keysToDelete.push(`referral:chain:${userId}:${d}`);
+        }
+      }
+
+      if (keysToDelete.length > 0) {
+        await redis.del(...keysToDelete);
+        logger.debug('Referral cache invalidated', {
+          userCount: userIds.length,
+          keysDeleted: keysToDelete.length,
+        });
+      }
+    } catch (error) {
+      // Don't throw - cache invalidation failure shouldn't break writes
+      logger.error('Error invalidating referral cache', {
+        userIds,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
    * Build referral chain for user up to N levels
    * Returns array of users from direct referrer to Nth level
    * FIX #12: Optimized with PostgreSQL Recursive CTE + Redis caching
@@ -239,6 +271,12 @@ export class ReferralCoreService {
           directReferrerId,
           levelsCreated: referralsToCreate.length,
         });
+
+        // OPTIMIZATION: Invalidate cache for all affected users
+        // - New user's cache (they now have referrers)
+        // - All referrers' caches (they now have a new referral)
+        const affectedUserIds = [newUserId, ...referrerIds];
+        await this.invalidateReferralCache(affectedUserIds, REFERRAL_DEPTH);
       }
 
       return { success: true };

@@ -1,7 +1,17 @@
 /**
- * Backup Job
- * Creates database backups and pushes to git repository
- * Runs daily at configured time (default: 4 AM)
+ * Sanitized DB Backup Job
+ *
+ * P0 SECURITY FIX: Only dumps whitelisted tables (no secrets/config)
+ *
+ * Features:
+ * - Dumps only critical business tables (users, deposits, transactions, referrals, etc.)
+ * - Excludes sensitive tables (config, sessions, retry queues, notifications)
+ * - Verifies backup integrity with pg_restore --list
+ * - Pushes to Git branch 'backups/sanitized' (separate from code)
+ * - Custom format (--format=custom) with max compression (--compress=9)
+ * - Automatic rotation (90 days retention)
+ *
+ * Schedule: Every 6 hours (cron configured in scheduler)
  */
 
 import { Job } from 'bull';
@@ -9,159 +19,206 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { getQueue, QueueName } from './queue.config';
+import { sanitizedBackupConfig as cfg } from '../config/backup.sanitized';
 import { config } from '../config';
 import { logger } from '../utils/logger.util';
 
-const execAsync = promisify(exec);
+const sh = promisify(exec);
 
 export interface BackupJobData {
-  timestamp: number;
+  timestamp?: number;
   manual?: boolean;
 }
 
 /**
- * Create database backup
+ * Create sanitized database backup
  */
-export const createBackup = async (job: Job<BackupJobData>): Promise<void> => {
-  if (!config.backup.enabled) {
-    logger.warn('⚠️ Backup is disabled');
+export const createBackup = async (_job: Job<BackupJobData>): Promise<void> => {
+  if (!cfg.enabled) {
+    logger.warn('⚠️  Sanitized backup is disabled');
     return;
   }
 
   try {
-    logger.info('💾 Starting database backup...');
+    // Ensure backup dir exists
+    await fs.mkdir(cfg.dir, { recursive: true });
 
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupDir = config.backup.dir;
-    const backupFile = path.join(backupDir, `backup-${timestamp}.sql`);
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const outFile = path.join(cfg.dir, `sigmatrade_${ts}.sql.gz`);
 
-    // Ensure backup directory exists
-    await fs.mkdir(backupDir, { recursive: true });
+    // Build table args for pg_dump
+    const tableArgs = cfg.tables.map(t => `-t ${t}`).join(' ');
 
-    // Create PostgreSQL dump
-    const dumpCommand = `PGPASSWORD="${config.database.password}" pg_dump \
-      -h ${config.database.host} \
-      -p ${config.database.port} \
-      -U ${config.database.username} \
-      -d ${config.database.database} \
-      -F p \
-      -f "${backupFile}"`;
+    // DB credentials
+    const { host, port, username, password, database } = config.database;
 
-    await execAsync(dumpCommand);
+    logger.info(`💾 Creating sanitized backup → ${outFile}`);
+    logger.info(`📋 Tables: ${cfg.tables.join(', ')}`);
 
-    logger.info(`✅ Database backup created: ${backupFile}`);
+    const env = { ...process.env, PGPASSWORD: password || '' };
 
-    // Compress backup
-    const compressedFile = `${backupFile}.gz`;
-    await execAsync(`gzip "${backupFile}"`);
+    // CRITICAL: Dump only whitelisted tables (no secrets!)
+    // - custom format: fast restore with pg_restore
+    // - compress=9: maximum compression
+    // - no-owner/no-acl: portable across environments
+    // - gzip container: additional compression layer
+    const dumpCmd =
+      `pg_dump -h ${host} -p ${port} -U ${username} -d ${database} ` +
+      `${tableArgs} --no-owner --no-acl --format=custom --compress=9 | gzip -c > "${outFile}"`;
 
-    logger.info(`✅ Backup compressed: ${compressedFile}`);
+    await sh(dumpCmd, { env });
 
-    // Clean old backups
-    await cleanOldBackups();
+    const stats = await fs.stat(outFile);
+    const sizeMB = (stats.size / 1024 / 1024).toFixed(2);
+    logger.info(`✅ Backup created: ${sizeMB} MB`);
 
-    // Push to git (if configured)
-    if (config.backup.gitRemote && config.backup.gitBranch) {
-      await pushBackupToGit(compressedFile);
+    // CRITICAL: Verify backup integrity before committing to git
+    logger.info('🔎 Verifying backup integrity...');
+    const verifyCmd = `gzip -cd "${outFile}" | pg_restore --list > /dev/null`;
+    await sh(verifyCmd, { env });
+    logger.info('✅ Backup integrity verified');
+
+    // Rotate old backups
+    await rotateOldBackups(cfg.dir, cfg.retentionDays);
+
+    // Push to git (separate branch: backups/sanitized)
+    if (cfg.gitRemote && cfg.gitBranch) {
+      await pushToGit(outFile, cfg.gitRemote, cfg.gitBranch);
     }
 
-    logger.info('✅ Backup job completed successfully');
+    logger.info('✅ Sanitized backup complete');
   } catch (error) {
-    logger.error('❌ Backup job failed:', error);
+    logger.error('❌ Sanitized backup failed:', error);
     throw error;
   }
 };
 
 /**
- * Clean old backups (older than retention period)
+ * Rotate old backups (delete files older than retention period)
  */
-const cleanOldBackups = async (): Promise<void> => {
+async function rotateOldBackups(dir: string, keepDays: number): Promise<void> {
   try {
-    const backupDir = config.backup.dir;
-    const retentionMs = config.backup.retentionDays * 24 * 60 * 60 * 1000;
     const now = Date.now();
+    const keepMs = keepDays * 24 * 60 * 60 * 1000;
+    const files = await fs.readdir(dir);
 
-    const files = await fs.readdir(backupDir);
+    let deletedCount = 0;
+    for (const f of files) {
+      if (!f.endsWith('.sql.gz')) continue;
 
-    for (const file of files) {
-      if (!file.startsWith('backup-') || !file.endsWith('.sql.gz')) {
-        continue;
-      }
+      const p = path.join(dir, f);
+      const st = await fs.stat(p);
 
-      const filePath = path.join(backupDir, file);
-      const stats = await fs.stat(filePath);
-      const age = now - stats.mtimeMs;
-
-      if (age > retentionMs) {
-        await fs.unlink(filePath);
-        logger.info(`🗑️ Deleted old backup: ${file}`);
+      if (now - st.mtimeMs > keepMs) {
+        await fs.unlink(p);
+        logger.info(`🗑️  Deleted old backup: ${f}`);
+        deletedCount++;
       }
     }
+
+    if (deletedCount > 0) {
+      logger.info(`🗑️  Cleaned up ${deletedCount} old backup(s)`);
+    }
   } catch (error) {
-    logger.error('❌ Error cleaning old backups:', error);
+    logger.error('❌ Error rotating old backups:', error);
+    // Don't throw - backup is still created
   }
-};
+}
 
 /**
- * Push backup to git repository
+ * Push backup to git branch (backups/sanitized)
+ *
+ * SECURITY: Only sanitized backups (whitelisted tables) go to git
+ * Never push full database dumps with secrets to git!
  */
-const pushBackupToGit = async (backupFile: string): Promise<void> => {
+async function pushToGit(
+  filePath: string,
+  remote: string,
+  branch: string
+): Promise<void> {
   try {
-    logger.info('📤 Pushing backup to git...');
+    logger.info(`📤 Pushing backup to git (${remote} ${branch})...`);
 
-    // Add backup file
-    await execAsync(`git add "${backupFile}"`);
+    // Ensure branch exists locally
+    try {
+      await sh(`git rev-parse --verify ${branch}`);
+      logger.info(`✓ Branch ${branch} exists`);
+    } catch {
+      logger.info(`✓ Creating new branch ${branch}`);
+      await sh(`git checkout -b ${branch}`);
+    }
 
-    // Commit
-    const commitMessage = `Automated backup: ${path.basename(backupFile)}`;
-    await execAsync(`git commit -m "${commitMessage}"`);
+    // Switch to backup branch if not already on it
+    const { stdout: currentBranch } = await sh('git rev-parse --abbrev-ref HEAD');
+    if (currentBranch.trim() !== branch) {
+      logger.info(`✓ Switching to branch ${branch}`);
+      await sh(`git checkout ${branch}`);
+    }
 
-    // Push
-    await execAsync(
-      `git push ${config.backup.gitRemote} ${config.backup.gitBranch}`
-    );
+    // Add backup file (relative path for portability)
+    const rel = path.relative(process.cwd(), filePath).replace(/\\/g, '/');
+    await sh(`git add -- "${rel}"`);
 
+    // Commit (skip if no changes)
+    const commitMsg = `Sanitized backup: ${path.basename(filePath)}`;
+    try {
+      await sh(`git commit -m "${commitMsg}"`);
+      logger.info('✓ Backup committed');
+    } catch (error: any) {
+      if (error.message?.includes('nothing to commit')) {
+        logger.info('✓ No changes to commit (backup already exists)');
+      } else {
+        throw error;
+      }
+    }
+
+    // Push to remote
+    await sh(`git push ${remote} ${branch}`);
     logger.info('✅ Backup pushed to git');
   } catch (error) {
     logger.error('❌ Error pushing backup to git:', error);
     // Don't throw - backup is still created locally
   }
-};
+}
 
 /**
- * Start backup scheduler
+ * Start backup scheduler (called from main process)
+ *
+ * Schedules sanitized backups every 6 hours using Bull queue
  */
 export const startBackupScheduler = async (): Promise<void> => {
-  if (!config.jobs.backup.enabled) {
-    logger.warn('⚠️ Backup scheduler is disabled');
+  if (!cfg.enabled) {
+    logger.warn('⚠️  Sanitized backup scheduler is disabled');
     return;
   }
 
   try {
+    const { getQueue, QueueName } = await import('./queue.config');
     const queue = getQueue(QueueName.BACKUP);
 
-    // Schedule daily backup
+    // Schedule sanitized backups (every 6 hours by default)
     await queue.add(
-      'daily-backup',
+      'sanitized-backup',
       { timestamp: Date.now() },
       {
         repeat: {
-          cron: config.jobs.backup.cron, // Default: "0 4 * * *" (4 AM daily)
+          cron: cfg.cron, // Default: "0 */6 * * *" (every 6 hours)
         },
         removeOnComplete: 10,
         removeOnFail: false,
       }
     );
 
-    // Process jobs
-    queue.process('daily-backup', createBackup);
+    // Process backup jobs
+    queue.process('sanitized-backup', createBackup);
 
     logger.info(
-      `✅ Backup scheduler started (cron: ${config.jobs.backup.cron})`
+      `✅ Sanitized backup scheduler started (cron: ${cfg.cron})`
     );
+    logger.info(`📋 Whitelisted tables: ${cfg.tables.join(', ')}`);
+    logger.info(`📤 Git push: ${cfg.gitRemote}/${cfg.gitBranch}`);
   } catch (error) {
-    logger.error('❌ Failed to start backup scheduler:', error);
+    logger.error('❌ Failed to start sanitized backup scheduler:', error);
     throw error;
   }
 };
@@ -171,12 +228,14 @@ export const startBackupScheduler = async (): Promise<void> => {
  */
 export const stopBackupScheduler = async (): Promise<void> => {
   try {
+    const { getQueue, QueueName } = await import('./queue.config');
     const queue = getQueue(QueueName.BACKUP);
-    await queue.removeRepeatable('daily-backup', {
-      cron: config.jobs.backup.cron,
+
+    await queue.removeRepeatable('sanitized-backup', {
+      cron: cfg.cron,
     });
 
-    logger.info('✅ Backup scheduler stopped');
+    logger.info('✅ Sanitized backup scheduler stopped');
   } catch (error) {
     logger.error('❌ Error stopping backup scheduler:', error);
   }
@@ -189,13 +248,10 @@ export const triggerManualBackup = async (): Promise<void> => {
   try {
     logger.info('🔄 Manual backup triggered');
 
-    const queue = getQueue(QueueName.BACKUP);
-    await queue.add('manual-backup', {
-      timestamp: Date.now(),
-      manual: true,
-    });
+    // Call createBackup directly (no queue)
+    await createBackup({ id: 'manual', data: { timestamp: Date.now(), manual: true } } as Job<BackupJobData>);
 
-    logger.info('✅ Manual backup queued');
+    logger.info('✅ Manual backup completed');
   } catch (error) {
     logger.error('❌ Manual backup failed:', error);
     throw error;

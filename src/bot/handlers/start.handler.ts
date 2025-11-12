@@ -3,7 +3,7 @@
  * Handles /start command, welcomes users, processes referral links
  */
 
-import { Context } from 'telegraf';
+import { Context, Markup } from 'telegraf';
 import { AuthContext } from '../middlewares/auth.middleware';
 import { AdminContext } from '../middlewares/admin.middleware';
 import { SessionContext } from '../middlewares/session.middleware';
@@ -133,6 +133,8 @@ export const handleMainMenu = async (ctx: Context) => {
  * Handle help command
  */
 export const handleHelp = async (ctx: Context) => {
+  const authCtx = ctx as AuthContext & AdminContext;
+
   const helpMessage = `
 ❓ Помощь
 
@@ -168,13 +170,26 @@ export const handleHelp = async (ctx: Context) => {
 💡 Используйте кнопки меню для навигации!
   `.trim();
 
-  await ctx.reply(helpMessage, {
-    parse_mode: 'Markdown',
-    ...getMainKeyboard((ctx as AdminContext).isAdmin),
-  });
+  // Build inline keyboard with finpass recovery button for registered users
+  const buttons: any[][] = [];
 
-  if (ctx.callbackQuery) {
+  if (authCtx.isRegistered) {
+    buttons.push([Markup.button.callback('🔑 Восстановить финпароль', 'recover_finpass')]);
+  }
+
+  buttons.push([Markup.button.callback('🏠 Главное меню', 'main_menu')]);
+
+  if (ctx.callbackQuery && 'message' in ctx.callbackQuery) {
+    await ctx.editMessageText(helpMessage, {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard(buttons),
+    });
     await ctx.answerCbQuery();
+  } else {
+    await ctx.reply(helpMessage, {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard(buttons),
+    });
   }
 };
 

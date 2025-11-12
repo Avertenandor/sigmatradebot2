@@ -95,17 +95,81 @@ export const getQueue = (name: QueueName): Queue.Queue => {
 };
 
 /**
- * Close all queues
+ * Close all queues with graceful drain
+ *
+ * IMPROVEMENT: Wait for active jobs to complete before forcing shutdown
+ * - Check active jobs count
+ * - Wait up to DRAIN_TIMEOUT_MS for jobs to finish
+ * - Log remaining unfinished jobs
+ * - Force close after timeout
  */
-export const closeQueues = async (): Promise<void> => {
+export const closeQueues = async (options?: { drainTimeoutMs?: number }): Promise<void> => {
+  const DRAIN_TIMEOUT_MS = options?.drainTimeoutMs || 30000; // 30 seconds default
+
   logger.info('🔄 Closing all queues...');
 
+  // Step 1: Check active jobs before closing
+  const activeJobs = new Map<QueueName, number>();
+  for (const [name, queue] of queues) {
+    const activeCount = await queue.getActiveCount();
+    if (activeCount > 0) {
+      activeJobs.set(name, activeCount);
+      logger.info(`⏳ Queue ${name} has ${activeCount} active job(s), waiting...`);
+    }
+  }
+
+  // Step 2: If there are active jobs, wait for drain
+  if (activeJobs.size > 0) {
+    logger.info(`⏳ Draining ${activeJobs.size} queue(s) with active jobs (timeout: ${DRAIN_TIMEOUT_MS}ms)...`);
+
+    const drainStart = Date.now();
+    const checkInterval = 1000; // Check every second
+
+    while (Date.now() - drainStart < DRAIN_TIMEOUT_MS) {
+      let allDrained = true;
+
+      for (const [name, queue] of queues) {
+        if (activeJobs.has(name)) {
+          const currentActive = await queue.getActiveCount();
+          if (currentActive > 0) {
+            allDrained = false;
+            logger.debug(`⏳ Queue ${name} still has ${currentActive} active job(s)...`);
+          } else {
+            logger.info(`✅ Queue ${name} drained`);
+            activeJobs.delete(name);
+          }
+        }
+      }
+
+      if (allDrained) {
+        logger.info('✅ All queues drained successfully');
+        break;
+      }
+
+      // Wait before next check
+      await new Promise(resolve => setTimeout(resolve, checkInterval));
+    }
+
+    // Step 3: Log remaining active jobs after timeout
+    if (activeJobs.size > 0) {
+      logger.warn(`⚠️  Drain timeout reached, ${activeJobs.size} queue(s) still have active jobs:`);
+      for (const [name, count] of activeJobs) {
+        const currentActive = await queues.get(name)?.getActiveCount();
+        logger.warn(`   - ${name}: ${currentActive} active job(s) will be interrupted`);
+      }
+    }
+  }
+
+  // Step 4: Force close all queues
+  logger.info('🔄 Force closing all queues...');
   const promises: Promise<void>[] = [];
 
   for (const [name, queue] of queues) {
     promises.push(
       queue.close().then(() => {
         logger.debug(`✅ Queue ${name} closed`);
+      }).catch((error) => {
+        logger.error(`❌ Error closing queue ${name}:`, error);
       })
     );
   }
@@ -160,4 +224,103 @@ export const getAllQueueStats = async (): Promise<
   }
 
   return stats;
+};
+
+/**
+ * Check DLQ (Dead Letter Queue) thresholds and alert
+ *
+ * MONITORING: Detect stuck/failed jobs that need attention
+ * - Failed jobs > threshold: Jobs that exhausted all retries
+ * - Delayed jobs > threshold: Jobs stuck waiting (stalled)
+ * - Logs alerts for SRE investigation
+ *
+ * Call this periodically (e.g., every 15 minutes) from performance monitor
+ */
+export const checkDLQThresholds = async (options?: {
+  failedThreshold?: number;
+  delayedThreshold?: number;
+}): Promise<void> => {
+  const FAILED_THRESHOLD = options?.failedThreshold || 50; // Alert if >50 failed jobs
+  const DELAYED_THRESHOLD = options?.delayedThreshold || 100; // Alert if >100 delayed jobs
+
+  try {
+    const stats = await getAllQueueStats();
+    const alerts: string[] = [];
+
+    for (const [name, counts] of stats) {
+      // Check failed jobs (DLQ)
+      if (counts.failed > FAILED_THRESHOLD) {
+        const message = `⚠️  DLQ ALERT: Queue ${name} has ${counts.failed} failed jobs (threshold: ${FAILED_THRESHOLD})`;
+        alerts.push(message);
+        logger.warn(message, {
+          queue: name,
+          failed: counts.failed,
+          threshold: FAILED_THRESHOLD,
+        });
+      }
+
+      // Check delayed jobs (potentially stuck)
+      if (counts.delayed > DELAYED_THRESHOLD) {
+        const message = `⚠️  DELAYED JOBS ALERT: Queue ${name} has ${counts.delayed} delayed jobs (threshold: ${DELAYED_THRESHOLD})`;
+        alerts.push(message);
+        logger.warn(message, {
+          queue: name,
+          delayed: counts.delayed,
+          threshold: DELAYED_THRESHOLD,
+        });
+      }
+
+      // Check for backlog (waiting + active + delayed)
+      const backlog = counts.waiting + counts.active + counts.delayed;
+      if (backlog > 500) {
+        const message = `⚠️  BACKLOG ALERT: Queue ${name} has ${backlog} jobs in backlog`;
+        alerts.push(message);
+        logger.warn(message, {
+          queue: name,
+          waiting: counts.waiting,
+          active: counts.active,
+          delayed: counts.delayed,
+          backlog,
+        });
+      }
+    }
+
+    if (alerts.length === 0) {
+      logger.debug('✅ DLQ check passed - all queues healthy');
+    } else {
+      logger.warn(`🚨 DLQ check found ${alerts.length} issue(s)`, {
+        alerts,
+      });
+    }
+  } catch (error) {
+    logger.error('Error checking DLQ thresholds', { error });
+  }
+};
+
+/**
+ * Get detailed info about failed jobs for investigation
+ *
+ * @param queueName - Queue to inspect
+ * @param limit - Max number of failed jobs to return
+ * @returns Array of failed jobs with error details
+ */
+export const getFailedJobs = async (
+  queueName: QueueName,
+  limit: number = 10
+): Promise<Array<{ id: string; data: any; failedReason: string; attemptsMade: number; timestamp: number }>> => {
+  try {
+    const queue = getQueue(queueName);
+    const failed = await queue.getFailed(0, limit - 1);
+
+    return failed.map(job => ({
+      id: job.id?.toString() || 'unknown',
+      data: job.data,
+      failedReason: job.failedReason || 'Unknown',
+      attemptsMade: job.attemptsMade,
+      timestamp: job.finishedOn || job.timestamp,
+    }));
+  } catch (error) {
+    logger.error(`Error getting failed jobs from queue ${queueName}`, { error });
+    return [];
+  }
 };
