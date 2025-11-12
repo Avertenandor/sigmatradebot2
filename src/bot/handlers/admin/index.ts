@@ -57,6 +57,19 @@ export {
   handleRoiStats,
 } from './deposit-settings.handler';
 
+// Wallet Management
+export {
+  handleWalletsMenu,
+  handleStartWalletChange,
+  handleConfirmCreate,
+  handleCancelWalletChange,
+  handleViewRequests,
+  handleViewRequestDetails,
+  handleApproveRequest,
+  handleRejectRequest,
+  handleApplyRequest,
+} from './wallets.handler';
+
 // Blacklist Management (Pre-registration Ban)
 export {
   handleBlacklistMenu,

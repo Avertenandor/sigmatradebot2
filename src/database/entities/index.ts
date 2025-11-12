@@ -20,3 +20,4 @@ export { SystemSetting } from './SystemSetting.entity';
 export { Blacklist } from './Blacklist.entity'; // Pre-registration ban list
 export { SupportTicket } from './SupportTicket.entity';
 export { SupportMessage } from './SupportMessage.entity';
+export { WalletChangeRequest } from './WalletChangeRequest.entity';
