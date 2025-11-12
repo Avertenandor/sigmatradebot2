@@ -49,12 +49,19 @@ export {
   handleFinpassReject,
 } from './finpass-recovery.handler';
 
+// Deposit Settings
+export {
+  handleDepositSettings,
+  handleSetMaxLevel,
+} from './deposit-settings.handler';
+
 // Import for default export
 import * as panelHandler from './panel.handler';
 import * as broadcastHandler from './broadcast.handler';
 import * as usersHandler from './users.handler';
 import * as managementHandler from './management.handler';
 import * as withdrawalsHandler from './withdrawals.handler';
+import * as depositSettingsHandler from './deposit-settings.handler';
 
 // Default export for backward compatibility
 export default {
@@ -76,4 +83,6 @@ export default {
   handleListAdmins: managementHandler.handleListAdmins,
   handleRemoveAdmin: managementHandler.handleRemoveAdmin,
   handleRegenerateMasterKey: managementHandler.handleRegenerateMasterKey,
+  handleDepositSettings: depositSettingsHandler.handleDepositSettings,
+  handleSetMaxLevel: depositSettingsHandler.handleSetMaxLevel,
 };

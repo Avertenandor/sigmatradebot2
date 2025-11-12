@@ -244,6 +244,38 @@ ${referredUsername ? `👤 Реферал: @${referredUsername}` : ''}
   }
 
   /**
+   * Notify user about ROI cap completion (500% reached)
+   */
+  public async notifyRoiCompleted(
+    telegramId: number,
+    level: number,
+    capAmount: number
+  ): Promise<void> {
+    const message = `
+🎯 **ROI достигнут 500%!**
+
+📊 Уровень: ${level}
+💰 Получено: ${capAmount.toFixed(2)} USDT
+🔥 Доход: 500% (5x)
+
+✅ Ваш депозит Уровня ${level} достиг максимального дохода 500%!
+
+📌 **Что дальше?**
+Чтобы продолжить получать доход, внесите новый депозит ${level === 1 ? '10 USDT' : ''}.
+
+💡 Депозит не возвращается — это чистый доход от инвестиций!
+    `.trim();
+
+    await this.sendNotification(telegramId, message, { parse_mode: 'Markdown' });
+
+    logger.info('ROI completion notification sent', {
+      telegramId,
+      level,
+      capAmount,
+    });
+  }
+
+  /**
    * Notify user about new referral
    */
   public async notifyNewReferral(
