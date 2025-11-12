@@ -4,60 +4,98 @@ import { logger } from '../utils/logger.util';
 /**
  * Схема валидации обязательных переменных окружения
  */
-const envSchema = z.object({
-  // Node environment
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+const envSchema = z
+  .object({
+    // Node environment
+    NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 
-  // Telegram Bot
-  BOT_TOKEN: z.string().min(30, 'BOT_TOKEN должен быть минимум 30 символов'),
-  TELEGRAM_WEBHOOK_SECRET: z.string().min(16).optional(),
+    // Telegram Bot
+    BOT_TOKEN: z.string().min(30, 'BOT_TOKEN должен быть минимум 30 символов'),
+    TELEGRAM_WEBHOOK_SECRET: z
+      .string()
+      .min(16, 'TELEGRAM_WEBHOOK_SECRET должен быть минимум 16 символов')
+      .optional(),
 
-  // Database
-  DB_HOST: z.string().min(1, 'DB_HOST обязателен'),
-  DB_PORT: z.string().regex(/^\d+$/, 'DB_PORT должен быть числом').default('5432'),
-  DB_USER: z.string().min(1, 'DB_USER обязателен'),
-  DB_PASSWORD: z.string().min(1, 'DB_PASSWORD обязателен'),
-  DB_NAME: z.string().min(1, 'DB_NAME обязателен'),
+    // Database
+    DB_HOST: z.string().min(1, 'DB_HOST обязателен'),
+    DB_PORT: z.string().regex(/^\d+$/, 'DB_PORT должен быть числом').default('5432'),
+    DB_USER: z.string().min(1, 'DB_USER обязателен'),
+    DB_PASSWORD: z.string().min(1, 'DB_PASSWORD обязателен'),
+    DB_NAME: z.string().min(1, 'DB_NAME обязателен'),
 
-  // Redis
-  REDIS_HOST: z.string().min(1, 'REDIS_HOST обязателен'),
-  REDIS_PORT: z.string().regex(/^\d+$/, 'REDIS_PORT должен быть числом').default('6379'),
-  REDIS_PASSWORD: z.string().optional(),
+    // Redis
+    REDIS_HOST: z.string().min(1, 'REDIS_HOST обязателен'),
+    REDIS_PORT: z.string().regex(/^\d+$/, 'REDIS_PORT должен быть числом').default('6379'),
+    REDIS_PASSWORD: z.string().optional(),
 
-  // Blockchain (QuickNode)
-  QUICKNODE_HTTPS_URL: z.string().url('QUICKNODE_HTTPS_URL должен быть валидным URL'),
-  QUICKNODE_WSS_URL: z.string().url('QUICKNODE_WSS_URL должен быть валидным URL'),
+    // Blockchain (QuickNode)
+    QUICKNODE_HTTPS_URL: z.string().url('QUICKNODE_HTTPS_URL должен быть валидным URL'),
+    QUICKNODE_WSS_URL: z.string().url('QUICKNODE_WSS_URL должен быть валидным URL'),
 
-  // System Wallet (for receiving deposits)
-  SYSTEM_WALLET_ADDRESS: z
-    .string()
-    .regex(/^0x[a-fA-F0-9]{40}$/, 'SYSTEM_WALLET_ADDRESS должен быть валидным Ethereum адресом'),
-  SYSTEM_WALLET_PRIVATE_KEY: z
-    .string()
-    .regex(/^(0x)?[a-fA-F0-9]{64}$/, 'SYSTEM_WALLET_PRIVATE_KEY должен быть валидным приватным ключом'),
+    // System Wallet (for receiving deposits)
+    SYSTEM_WALLET_ADDRESS: z
+      .string()
+      .regex(/^0x[a-fA-F0-9]{40}$/, 'SYSTEM_WALLET_ADDRESS должен быть валидным Ethereum адресом'),
+    SYSTEM_WALLET_PRIVATE_KEY: z
+      .string()
+      .regex(/^(0x)?[a-fA-F0-9]{64}$/, 'SYSTEM_WALLET_PRIVATE_KEY должен быть валидным приватным ключом'),
 
-  // USDT Contract Address (BSC)
-  USDT_CONTRACT_ADDRESS: z
-    .string()
-    .regex(/^0x[a-fA-F0-9]{40}$/, 'USDT_CONTRACT_ADDRESS должен быть валидным адресом контракта')
-    .default('0x55d398326f99059fF775485246999027B3197955'),
+    // USDT Contract Address (BSC)
+    USDT_CONTRACT_ADDRESS: z
+      .string()
+      .regex(/^0x[a-fA-F0-9]{40}$/, 'USDT_CONTRACT_ADDRESS должен быть валидным адресом контракта')
+      .default('0x55d398326f99059fF775485246999027B3197955'),
 
-  // Optional: Encryption key for PII
-  ENCRYPTION_KEY: z
-    .string()
-    .regex(/^[a-fA-F0-9]{64}$/, 'ENCRYPTION_KEY должен быть 64 hex символа (32 байта)')
-    .optional(),
+    // Encryption key for PII (optional in dev, required in production)
+    ENCRYPTION_KEY: z
+      .string()
+      .regex(/^[a-fA-F0-9]{64}$/, 'ENCRYPTION_KEY должен быть 64 hex символа (32 байта)')
+      .optional(),
 
-  // Optional: BSCScan API Key
-  BSCSCAN_API_KEY: z.string().optional(),
+    // Optional: BSCScan API Key
+    BSCSCAN_API_KEY: z.string().optional(),
 
-  // Optional: Admin Telegram IDs (comma-separated)
-  ADMIN_TELEGRAM_IDS: z.string().optional(),
+    // Optional: Admin Telegram IDs (comma-separated)
+    ADMIN_TELEGRAM_IDS: z.string().optional(),
 
-  // Optional: Monitoring
-  PROMETHEUS_PORT: z.string().regex(/^\d+$/).default('9090'),
-  HEALTH_CHECK_PORT: z.string().regex(/^\d+$/).default('3000'),
-});
+    // Optional: Deposit tolerance in USDT (default: 0.01)
+    DEPOSIT_AMOUNT_TOLERANCE: z
+      .string()
+      .regex(/^\d+(\.\d+)?$/, 'DEPOSIT_AMOUNT_TOLERANCE должен быть числом')
+      .default('0.01'),
+
+    // Optional: Monitoring
+    PROMETHEUS_PORT: z.string().regex(/^\d+$/).default('9090'),
+    HEALTH_CHECK_PORT: z.string().regex(/^\d+$/).default('3000'),
+  })
+  .refine(
+    (data) => {
+      // В production TELEGRAM_WEBHOOK_SECRET обязателен
+      if (data.NODE_ENV === 'production' && !data.TELEGRAM_WEBHOOK_SECRET) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message:
+        'TELEGRAM_WEBHOOK_SECRET обязателен в production окружении для защиты webhook от подделки',
+      path: ['TELEGRAM_WEBHOOK_SECRET'],
+    }
+  )
+  .refine(
+    (data) => {
+      // В production ENCRYPTION_KEY обязателен
+      if (data.NODE_ENV === 'production' && !data.ENCRYPTION_KEY) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message:
+        'ENCRYPTION_KEY обязателен в production окружении для шифрования персональных данных (GDPR compliance)',
+      path: ['ENCRYPTION_KEY'],
+    }
+  );
 
 export type EnvConfig = z.infer<typeof envSchema>;
 
@@ -78,17 +116,25 @@ export function validateEnv(): EnvConfig {
     console.log(`⛓️  QuickNode: ${validated.QUICKNODE_HTTPS_URL.substring(0, 30)}...`);
     console.log(`💼 System Wallet: ${validated.SYSTEM_WALLET_ADDRESS}`);
 
-    // Предупреждения для опциональных переменных
-    if (!validated.TELEGRAM_WEBHOOK_SECRET) {
-      console.warn(
-        '⚠️  TELEGRAM_WEBHOOK_SECRET не установлен - webhook не будет защищён от подделки'
-      );
-    }
+    // Предупреждения только для development окружения
+    const isProduction = validated.NODE_ENV === 'production';
 
-    if (!validated.ENCRYPTION_KEY) {
-      console.warn(
-        '⚠️  ENCRYPTION_KEY не установлен - PII данные (телефон, email) не будут зашифрованы'
-      );
+    if (!isProduction) {
+      if (!validated.TELEGRAM_WEBHOOK_SECRET) {
+        console.warn(
+          '⚠️  TELEGRAM_WEBHOOK_SECRET не установлен - webhook не будет защищён от подделки'
+        );
+      }
+
+      if (!validated.ENCRYPTION_KEY) {
+        console.warn(
+          '⚠️  ENCRYPTION_KEY не установлен - PII данные (телефон, email) не будут зашифрованы'
+        );
+      }
+    } else {
+      // В production эти переменные обязательны (проверено в refine)
+      console.log('🔒 Webhook security: enabled');
+      console.log('🔐 PII encryption: enabled');
     }
 
     if (!validated.ADMIN_TELEGRAM_IDS) {

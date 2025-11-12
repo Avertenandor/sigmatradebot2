@@ -18,13 +18,23 @@ import type { DepositService } from '../deposit.service';
 import { logFinancialOperation } from '../../utils/audit-logger.util';
 import { withTransaction, TRANSACTION_PRESETS } from '../../database/transaction.util';
 import { lockForDepositProcessing } from '../../database/locking.util';
+import {
+  fromUsdtWei,
+  fromUsdtString,
+  toDbString,
+  toUsdtString,
+  isWithinTolerance,
+  formatForDisplay,
+  type MoneyAmount,
+} from '../../utils/money.util';
+import { getEnvConfig } from '../../config/env.validator';
 
 export class DepositProcessor {
   private readonly DEPOSIT_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 24 hours
   private readonly CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
   /**
-   * Deposit amount tolerance in USDT
+   * Deposit amount tolerance in USDT (loaded from environment config)
    *
    * CRITICAL: This tolerance accounts for blockchain gas fees and minor variations.
    * Reduced from 0.5 USDT to 0.01 USDT (1 cent) to prevent abuse.
@@ -34,14 +44,19 @@ export class DepositProcessor {
    *
    * Current value (0.01) provides minimal tolerance for legitimate gas fee variations
    * while preventing abuse.
+   *
+   * Now configurable via DEPOSIT_AMOUNT_TOLERANCE environment variable.
    */
-  private readonly DEPOSIT_AMOUNT_TOLERANCE = 0.01; // 1 cent tolerance
+  private get depositAmountTolerance(): MoneyAmount {
+    const envConfig = getEnvConfig();
+    return fromUsdtString(envConfig.DEPOSIT_AMOUNT_TOLERANCE);
+  }
 
   /**
    * Threshold for admin alerts (in USDT)
    * Deposits within tolerance but above this threshold trigger admin notification
    */
-  private readonly TOLERANCE_ALERT_THRESHOLD = 0.005; // 0.5 cent
+  private readonly TOLERANCE_ALERT_THRESHOLD = fromUsdtString('0.005'); // 0.5 cent
 
   private cleanupInterval?: NodeJS.Timeout;
 
@@ -78,14 +93,18 @@ export class DepositProcessor {
     );
 
     try {
-      const usdtContract = this.providerManager.getUsdtContract();
-
-      // Convert USDT amount (6 decimals for USDT on BSC)
-      const decimals = await getUsdtDecimals(usdtContract);
-      const amount = parseFloat(ethers.formatUnits(value, decimals));
+      // Convert USDT amount using precise bigint arithmetic (NO parseFloat!)
+      // CRITICAL: parseFloat causes precision loss for financial calculations
+      const amountMoney = fromUsdtWei(value);
+      const amountDisplay = formatForDisplay(amountMoney);
 
       logger.info(
-        `💰 Transfer: ${amount} USDT from ${from} to ${to}`
+        `💰 Transfer: ${amountDisplay} from ${from} to ${to}`,
+        {
+          txHash,
+          amount: toUsdtString(amountMoney),
+          amountWei: value.toString(),
+        }
       );
 
       // Check if transaction already exists (fast pre-check to avoid unnecessary processing)
@@ -108,7 +127,7 @@ export class DepositProcessor {
           category: 'deposit',
           userId: existingTx.user_id,
           action: 'duplicate_transaction_attempt',
-          amount,
+          amount: parseFloat(toUsdtString(amountMoney)),
           success: false,
           error: 'Transaction already processed',
           details: {
@@ -133,7 +152,7 @@ export class DepositProcessor {
         await transactionRepo.save({
           tx_hash: txHash,
           type: TransactionType.DEPOSIT,
-          amount: amount.toString(),
+          amount: toDbString(amountMoney),
           from_address: from.toLowerCase(),
           to_address: to.toLowerCase(),
           block_number: blockNumber,
@@ -142,29 +161,32 @@ export class DepositProcessor {
         return;
       }
 
-      // Determine deposit level from amount
+      // Determine deposit level from amount using precise comparison
       let matchedLevel: number | null = null;
-      let expectedAmount: number | null = null;
-      let actualDifference = 0;
+      let expectedAmountMoney: MoneyAmount | null = null;
+      let toleranceCheck: ReturnType<typeof isWithinTolerance> | null = null;
+      const tolerance = this.depositAmountTolerance;
 
       for (const [level, levelAmount] of Object.entries(DEPOSIT_LEVELS)) {
-        const difference = Math.abs(amount - levelAmount);
+        const expectedMoney = fromUsdtString(levelAmount.toString());
+        const check = isWithinTolerance(amountMoney, expectedMoney, tolerance);
 
-        if (difference <= this.DEPOSIT_AMOUNT_TOLERANCE) {
+        if (check.matches) {
           matchedLevel = parseInt(level);
-          expectedAmount = levelAmount;
-          actualDifference = amount - levelAmount; // Can be negative if underpaid
+          expectedAmountMoney = expectedMoney;
+          toleranceCheck = check;
 
           // Log if deposit is within tolerance but not exact
-          if (difference > 0) {
+          if (check.difference.value !== 0n) {
             logger.warn('Deposit amount within tolerance but not exact', {
               txHash,
               userId: user.id,
               telegramId: user.telegram_id,
-              expected: levelAmount,
-              actual: amount,
-              difference: actualDifference,
-              tolerance: this.DEPOSIT_AMOUNT_TOLERANCE,
+              expected: toUsdtString(expectedMoney),
+              actual: toUsdtString(amountMoney),
+              difference: toUsdtString(check.difference),
+              percentDiff: check.percentDiff,
+              tolerance: toUsdtString(tolerance),
               level: matchedLevel,
             });
 
@@ -173,29 +195,35 @@ export class DepositProcessor {
               category: 'deposit',
               userId: user.id,
               action: 'deposit_tolerance_match',
-              amount: amount,
+              amount: parseFloat(toUsdtString(amountMoney)),
               success: true,
               details: {
                 txHash,
-                expected: levelAmount,
-                actual: amount,
-                difference: actualDifference,
-                tolerance: this.DEPOSIT_AMOUNT_TOLERANCE,
+                expected: toUsdtString(expectedMoney),
+                actual: toUsdtString(amountMoney),
+                difference: toUsdtString(check.difference),
+                percentDiff: check.percentDiff,
+                tolerance: toUsdtString(tolerance),
                 level: matchedLevel,
               },
             });
 
             // Alert admin if difference is significant
-            if (Math.abs(actualDifference) > this.TOLERANCE_ALERT_THRESHOLD) {
+            const absDiff = check.difference.value < 0n ? -check.difference.value : check.difference.value;
+            const absDiffMoney: MoneyAmount = { value: absDiff, decimals: check.difference.decimals };
+            const alertThreshold = this.TOLERANCE_ALERT_THRESHOLD;
+
+            if (absDiffMoney.value > alertThreshold.value) {
               logger.error('⚠️ ALERT: Significant deposit amount deviation', {
                 txHash,
                 userId: user.id,
                 telegramId: user.telegram_id,
-                expected: levelAmount,
-                actual: amount,
-                difference: actualDifference,
-                toleranceUsed: this.DEPOSIT_AMOUNT_TOLERANCE,
-                alertThreshold: this.TOLERANCE_ALERT_THRESHOLD,
+                expected: toUsdtString(expectedMoney),
+                actual: toUsdtString(amountMoney),
+                difference: toUsdtString(check.difference),
+                percentDiff: check.percentDiff,
+                toleranceUsed: toUsdtString(tolerance),
+                alertThreshold: toUsdtString(alertThreshold),
               });
 
               // TODO: Send Telegram notification to super admin
@@ -208,13 +236,13 @@ export class DepositProcessor {
         }
       }
 
-      if (!matchedLevel) {
+      if (!matchedLevel || !expectedAmountMoney) {
         logger.warn(
-          `⚠️ Amount ${amount} USDT doesn't match any deposit level for user ${user.telegram_id}`,
+          `⚠️ Amount ${toUsdtString(amountMoney)} USDT doesn't match any deposit level for user ${user.telegram_id}`,
           {
             txHash,
-            amount,
-            tolerance: this.DEPOSIT_AMOUNT_TOLERANCE,
+            amount: toUsdtString(amountMoney),
+            tolerance: toUsdtString(tolerance),
             availableLevels: Object.values(DEPOSIT_LEVELS),
           }
         );
@@ -224,13 +252,13 @@ export class DepositProcessor {
           category: 'deposit',
           userId: user.id,
           action: 'deposit_amount_mismatch',
-          amount: amount,
+          amount: parseFloat(toUsdtString(amountMoney)),
           success: false,
           error: 'Amount does not match any deposit level',
           details: {
             txHash,
-            amount,
-            tolerance: this.DEPOSIT_AMOUNT_TOLERANCE,
+            amount: toUsdtString(amountMoney),
+            tolerance: toUsdtString(tolerance),
             availableLevels: Object.values(DEPOSIT_LEVELS),
           },
         });
@@ -240,7 +268,7 @@ export class DepositProcessor {
           user_id: user.id,
           tx_hash: txHash,
           type: TransactionType.DEPOSIT,
-          amount: amount.toString(),
+          amount: toDbString(amountMoney),
           from_address: from.toLowerCase(),
           to_address: to.toLowerCase(),
           block_number: blockNumber,
@@ -273,7 +301,7 @@ export class DepositProcessor {
               userId: user.id,
               telegramId: user.telegram_id,
               level: matchedLevel,
-              amount,
+              amount: toUsdtString(amountMoney),
               txHash,
             }
           );
@@ -283,12 +311,12 @@ export class DepositProcessor {
             category: 'deposit',
             userId: user.id,
             action: 'no_pending_deposit_found',
-            amount,
+            amount: parseFloat(toUsdtString(amountMoney)),
             success: false,
             details: {
               txHash,
               level: matchedLevel,
-              expected: expectedAmount,
+              expected: toUsdtString(expectedAmountMoney),
             },
           });
 
@@ -297,7 +325,7 @@ export class DepositProcessor {
             user_id: user.id,
             tx_hash: txHash,
             type: TransactionType.DEPOSIT,
-            amount: amount.toString(),
+            amount: toDbString(amountMoney),
             from_address: from.toLowerCase(),
             to_address: to.toLowerCase(),
             block_number: blockNumber,
@@ -320,7 +348,7 @@ export class DepositProcessor {
           user_id: user.id,
           tx_hash: txHash,
           type: TransactionType.DEPOSIT,
-          amount: amount.toString(),
+          amount: toDbString(amountMoney),
           from_address: from.toLowerCase(),
           to_address: to.toLowerCase(),
           block_number: blockNumber,
@@ -332,7 +360,7 @@ export class DepositProcessor {
           category: 'deposit',
           userId: user.id,
           action: 'deposit_tracked',
-          amount,
+          amount: parseFloat(toUsdtString(amountMoney)),
           success: true,
           details: {
             txHash,
@@ -343,14 +371,14 @@ export class DepositProcessor {
         });
 
         logger.info(
-          `✅ Deposit tracked: ${amount} USDT for user ${user.telegram_id} (tx: ${txHash})`
+          `✅ Deposit tracked: ${formatForDisplay(amountMoney)} for user ${user.telegram_id} (tx: ${txHash})`
         );
       }, TRANSACTION_PRESETS.FINANCIAL); // Use FINANCIAL preset for higher retries and timeout
 
         // Notify user about detected deposit (pending confirmation)
         await notificationService.notifyDepositPending(
           user.telegram_id,
-          amount,
+          parseFloat(toUsdtString(amountMoney)),
           matchedLevel!,
           txHash
         ).catch((err) => {

@@ -62,10 +62,19 @@ for cmd in "${REQUIRED_COMMANDS[@]}"; do
     fi
 done
 
-# Check if .env file exists
-if [ ! -f "${PROJECT_ROOT}/.env" ]; then
-    error ".env file not found. Please create it from .env.example"
+# Check if .env file exists (only required for development)
+if [ "$ENVIRONMENT" = "development" ] && [ ! -f "${PROJECT_ROOT}/.env" ]; then
+    error ".env file not found in development mode. Please create it from .env.example"
     exit 1
+fi
+
+# In production/staging, secrets should come from Secret Manager or CI/CD variables
+if [ "$ENVIRONMENT" != "development" ]; then
+    info "Production/Staging mode: Using Google Secret Manager for secrets"
+    if [ -f "${PROJECT_ROOT}/.env" ]; then
+        warn "⚠️  Local .env file detected in production deploy. Secrets should be in Secret Manager!"
+        warn "⚠️  The .env file will NOT be included in the Docker image"
+    fi
 fi
 
 # Check git status

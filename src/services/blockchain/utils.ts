@@ -6,6 +6,7 @@
 import { ethers } from 'ethers';
 import { logger } from '../../utils/logger.util';
 import { config } from '../../config';
+import { fromUsdtWei, toUsdtString, type MoneyAmount } from '../../utils/money.util';
 
 // USDT BEP-20 ABI (ERC20 standard)
 export const USDT_ABI = [
@@ -30,19 +31,36 @@ export async function getUsdtDecimals(usdtContract: ethers.Contract): Promise<nu
 }
 
 /**
- * Get USDT balance of an address
+ * Get USDT balance of an address (precise bigint arithmetic)
+ * Returns MoneyAmount for precise financial calculations
+ */
+export async function getBalancePrecise(
+  address: string,
+  usdtContract: ethers.Contract
+): Promise<MoneyAmount> {
+  try {
+    const balance = await usdtContract.balanceOf(address);
+    return fromUsdtWei(balance);
+  } catch (error) {
+    logger.error(`❌ Error getting balance for ${address}:`, error);
+    return fromUsdtWei(0n);
+  }
+}
+
+/**
+ * Get USDT balance of an address (legacy - returns string)
+ * @deprecated Use getBalancePrecise() for precise calculations
  */
 export async function getBalance(
   address: string,
   usdtContract: ethers.Contract
-): Promise<number> {
+): Promise<string> {
   try {
-    const decimals = await getUsdtDecimals(usdtContract);
-    const balance = await usdtContract.balanceOf(address);
-    return parseFloat(ethers.formatUnits(balance, decimals));
+    const balanceMoney = await getBalancePrecise(address, usdtContract);
+    return toUsdtString(balanceMoney);
   } catch (error) {
     logger.error(`❌ Error getting balance for ${address}:`, error);
-    return 0;
+    return '0';
   }
 }
 

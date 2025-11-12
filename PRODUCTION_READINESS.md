@@ -271,7 +271,7 @@ spec:
 ### 1. Установка зависимостей
 
 ```bash
-npm install zod  # Для ENV валидатора
+npm install zod bottleneck  # zod - ENV валидатор, bottleneck - RPC rate limiter
 ```
 
 ### 2. Копирование .env
@@ -321,20 +321,132 @@ await bot.launch();
 
 ---
 
-## 🎯 Что дальше?
+## 🔒 P1 Фиксы (Важно - Реализовано)
 
-### Рекомендуется (но не критично):
+### 4. PII Encryption (src/utils/encryption.util.ts)
 
-1. **PII Encryption** (P1) - Шифрование phone/email полей
-2. **RPC Rate Limiter** (P1) - Ограничение QuickNode запросов
-3. **Winston Log Redaction** (P1) - Маскировка чувствительных данных в логах
-4. **Load Testing** (P2) - k6/Artillery для проверки нагрузки
+**Что делает:**
+- AES-256-GCM шифрование для phone/email полей
+- TypeORM transformer для автоматического шифрования/расшифровки
+- Утилиты для безопасного хранения персональных данных
+- Маскировка PII для логирования
 
-### Опционально:
+**Использование:**
 
-5. **Cloud Build Workflows** - Автоматизация инцидентов
-6. **Automated Post-Mortem** - Генерация отчётов
-7. **Migration Verification** - Автопроверка индексов
+```typescript
+import { encryptionTransformer, encrypt, decrypt, maskPII } from './utils/encryption.util';
+
+// В TypeORM Entity
+@Entity()
+class User {
+  @Column({ type: 'text', transformer: encryptionTransformer })
+  phone?: string;  // Автоматически шифруется при сохранении
+
+  @Column({ type: 'text', transformer: encryptionTransformer })
+  email?: string;  // Автоматически расшифровывается при чтении
+}
+
+// Ручное шифрование
+const encrypted = encrypt('user@example.com');
+const decrypted = decrypt(encrypted);
+
+// Для логирования
+logger.info('User data', { email: maskPII(email, 'email') });
+// Output: u***r@example.com
+```
+
+**Требования:**
+- `ENCRYPTION_KEY` в .env (64 hex символа)
+- Генерация: `openssl rand -hex 32`
+
+---
+
+### 5. RPC Rate Limiter (src/blockchain/rpc-limiter.ts)
+
+**Что делает:**
+- Ограничивает QuickNode API requests через Bottleneck
+- Поддерживает разные планы (free, build, scale)
+- Автоматический retry с exponential backoff
+- Батчинг запросов для оптимизации
+- Метрики использования
+
+**Использование:**
+
+```typescript
+import { getRPCRateLimiter } from './blockchain/rpc-limiter';
+
+// Инициализация (plan: 'free' | 'build' | 'scale' | 'custom')
+const rpc = getRPCRateLimiter('build'); // $49/месяц план
+
+// Все методы проходят через rate limiter
+const blockNumber = await rpc.getBlockNumber();
+const block = await rpc.getBlock(blockNumber, true);
+const tx = await rpc.getTransaction(txHash);
+
+// Батч запросы (оптимизация)
+const logs = await rpc.getBatchLogs([filter1, filter2, filter3]);
+
+// Метрики
+const stats = rpc.getStats();
+console.log('Success rate:', stats.successRate + '%');
+console.log('Average latency:', stats.averageLatency + 'ms');
+```
+
+**Конфигурация планов:**
+- **Free**: 25 req/sec, 5 concurrent, 100 burst
+- **Build ($49)**: 100 req/sec, 20 concurrent, 500 burst
+- **Scale ($299)**: 200 req/sec, 50 concurrent, 1000 burst
+
+**Установка:**
+```bash
+npm install bottleneck
+```
+
+---
+
+### 6. Log Redaction (src/utils/logger.util.ts)
+
+**Что делает:**
+- Автоматически маскирует чувствительные данные во всех логах
+- Применяется к console и file transports
+- Маскирует: токены, приватные ключи, пароли, email, телефоны
+
+**Что маскируется:**
+- ✅ Telegram bot tokens: `123456789:ABC...` → `***:***BOT_TOKEN***`
+- ✅ Private keys: `0x1234...` → `***PRIVATE_KEY***`
+- ✅ Encryption keys: `abc123...` → `***ENCRYPTION_KEY***`
+- ✅ JWT tokens: `eyJ...` → `***JWT_TOKEN***`
+- ✅ Emails: `user@example.com` → `***@example.com`
+- ✅ Телефоны: `+1234567890` → `******7890`
+- ✅ Пароли: `"password":"secret"` → `"password":"***PASSWORD***"`
+
+**Примеры:**
+
+```typescript
+import { logger } from './utils/logger.util';
+
+// Автоматическая маскировка
+logger.info('User login', {
+  email: 'user@example.com',  // Будет: ***@example.com
+  token: botToken,             // Будет: ***:***BOT_TOKEN***
+  phone: '+1234567890'         // Будет: ******7890
+});
+
+// В логах НЕ будет реальных данных!
+```
+
+**Не требует дополнительной установки** - работает из коробки.
+
+---
+
+## 🎯 Следующие шаги (Опционально)
+
+### Можно добавить позже:
+
+1. **Load Testing** (P2) - k6/Artillery для проверки нагрузки
+2. **Cloud Build Workflows** - Автоматизация инцидентов
+3. **Automated Post-Mortem** - Генерация отчётов
+4. **Migration Verification** - Автопроверка индексов
 
 ---
 

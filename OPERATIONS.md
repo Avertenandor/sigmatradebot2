@@ -339,18 +339,18 @@ echo "Compressing backups..."
 gzip $BACKUP_DIR/full_backup_$DATE.sql
 gzip $BACKUP_DIR/critical_$DATE.sql
 
-# Upload to cloud storage (if configured)
+# Upload to cloud storage (REQUIRED for production)
 if [ -n "$GCS_BUCKET" ]; then
   echo "Uploading to Google Cloud Storage..."
   gsutil cp $BACKUP_DIR/full_backup_$DATE.sql.gz gs://$GCS_BUCKET/backups/
   gsutil cp $BACKUP_DIR/critical_$DATE.sql.gz gs://$GCS_BUCKET/backups/
-fi
 
-# Commit to git
-cd $BACKUP_DIR
-git add .
-git commit -m "Backup $DATE" --quiet
-git push origin main --quiet
+  # Set lifecycle policy for automatic cleanup (90 days retention)
+  # gsutil lifecycle set lifecycle.json gs://$GCS_BUCKET
+else
+  echo "WARNING: GCS_BUCKET not configured - backups stored only locally!"
+  echo "Configure GCS_BACKUP_BUCKET in .env for production"
+fi
 
 # Cleanup old backups (keep 14 days locally)
 echo "Cleaning up old backups..."

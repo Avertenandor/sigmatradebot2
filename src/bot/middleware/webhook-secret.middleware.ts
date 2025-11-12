@@ -21,8 +21,18 @@ export function webhookSecretMiddleware(
 ): void {
   const config = getEnvConfig();
 
-  // Если секрет не настроен, пропускаем проверку (но логируем предупреждение)
+  // Если секрет не настроен
   if (!config.TELEGRAM_WEBHOOK_SECRET) {
+    // В production это критичная ошибка (хотя env.validator должен был уже заблокировать старт)
+    if (config.NODE_ENV === 'production') {
+      logger.error('КРИТИЧНО: TELEGRAM_WEBHOOK_SECRET не настроен в production окружении');
+      return res.status(503).json({
+        error: 'Service Unavailable',
+        message: 'Webhook security not configured',
+      });
+    }
+
+    // В development - предупреждение и пропуск
     logger.warn(
       'TELEGRAM_WEBHOOK_SECRET не настроен - webhook не защищён от подделки. ' +
         'Установите TELEGRAM_WEBHOOK_SECRET в .env для production.'

@@ -34,9 +34,66 @@ const level = (): string => {
   return isDevelopment ? 'debug' : process.env.LOG_LEVEL || 'info';
 };
 
+/**
+ * Redaction Format - Маскирует чувствительные данные в логах
+ *
+ * Маскирует:
+ * - Токены и ключи (BOT_TOKEN, ENCRYPTION_KEY, PRIVATE_KEY)
+ * - Email адреса
+ * - Номера телефонов
+ * - Пароли
+ */
+const redactSensitiveData = winston.format((info) => {
+  let stringified = JSON.stringify(info);
+
+  // Маскировка токенов и ключей
+  const patterns = [
+    // Telegram bot token (format: 1234567890:ABCDefghIJKlmnopQRStuvwxyz)
+    { regex: /\d{8,10}:[A-Za-z0-9_-]{35}/g, replacement: '***:***BOT_TOKEN***' },
+
+    // Private keys (hex, 64 characters)
+    { regex: /['"](0x)?[a-fA-F0-9]{64}['"]/g, replacement: '"***PRIVATE_KEY***"' },
+
+    // Encryption keys (hex, 64 characters)
+    { regex: /"encryptionKey":\s*"[a-fA-F0-9]{64}"/g, replacement: '"encryptionKey":"***ENCRYPTION_KEY***"' },
+
+    // JWT tokens
+    { regex: /"token":\s*"[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+"/g, replacement: '"token":"***JWT_TOKEN***"' },
+
+    // API keys (generic pattern)
+    { regex: /"(api[_-]?key|apikey|api_secret)":\s*"[^"]{10,}"/gi, replacement: '"$1":"***API_KEY***"' },
+
+    // Email addresses
+    { regex: /([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, replacement: '***@$2' },
+
+    // Phone numbers (various formats)
+    { regex: /\+?[\d\s()-]{10,}/g, replacement: (match: string) => {
+      // Сохраняем только последние 4 цифры
+      const digits = match.replace(/\D/g, '');
+      return digits.length >= 4 ? '*'.repeat(digits.length - 4) + digits.slice(-4) : '***';
+    }},
+
+    // Passwords in objects
+    { regex: /"(password|pwd|pass)":\s*"[^"]+"/gi, replacement: '"$1":"***PASSWORD***"' },
+
+    // Session tokens
+    { regex: /"(session|sid|sessionId)":\s*"[^"]+"/gi, replacement: '"$1":"***SESSION***"' },
+
+    // Credit card numbers (basic pattern)
+    { regex: /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g, replacement: '****-****-****-****' },
+  ];
+
+  patterns.forEach(({ regex, replacement }) => {
+    stringified = stringified.replace(regex, replacement as string);
+  });
+
+  return JSON.parse(stringified);
+});
+
 // Custom format for console output
 const consoleFormat = winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+  redactSensitiveData(), // Маскируем чувствительные данные
   winston.format.colorize({ all: true }),
   winston.format.printf((info) => {
     const { timestamp, level, message, ...meta } = info;
@@ -55,6 +112,7 @@ const consoleFormat = winston.format.combine(
 // Custom format for file output (JSON)
 const fileFormat = winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+  redactSensitiveData(), // Маскируем чувствительные данные
   winston.format.errors({ stack: true }),
   winston.format.json()
 );
@@ -227,4 +285,6 @@ export const logPerformance = (
   });
 };
 
+// Export both named and default
+export { logger };
 export default logger;
