@@ -20,7 +20,7 @@ import { WalletChangeType } from '../database/entities/WalletChangeRequest.entit
 import { settingsService } from './settings.service';
 import { secretStoreService } from './secret-store.service';
 import { createLogger } from '../utils/logger.util';
-import { auditLog, AuditCategory } from '../utils/audit-logger.util';
+import { logAdminAudit } from '../utils/audit-logger.util';
 import { isValidBSCAddress, normalizeWalletAddress } from '../utils/validation.util';
 import { ethers } from 'ethers';
 
@@ -122,15 +122,13 @@ export class WalletAdminService {
     await this.requestRepo.save(request);
 
     // Audit log
-    await auditLog({
-      category: AuditCategory.ADMIN_ACTION,
-      message: `Wallet change request created: ${type}`,
-      level: 'admin',
-      metadata: {
+    await logAdminAudit({
+      adminId: initiatorId,
+      action: `wallet_change_request_created_${type}`,
+      details: {
         requestId: request.id,
         type,
         newAddress: checksummedAddress,
-        initiatorId,
         reason,
         hasSecret: !!secretRef,
       },
@@ -188,15 +186,13 @@ export class WalletAdminService {
     await this.requestRepo.save(request);
 
     // Audit log
-    await auditLog({
-      category: AuditCategory.ADMIN_ACTION,
-      message: `Wallet change request approved: ${request.type}`,
-      level: 'admin',
-      metadata: {
+    await logAdminAudit({
+      adminId: approverId,
+      action: `wallet_change_request_approved_${request.type}`,
+      details: {
         requestId: request.id,
         type: request.type,
         newAddress: request.new_address,
-        approverId,
         initiatedBy: request.initiated_by.displayName,
         reason: approvalReason,
       },
@@ -260,15 +256,13 @@ export class WalletAdminService {
     }
 
     // Audit log
-    await auditLog({
-      category: AuditCategory.ADMIN_ACTION,
-      message: `Wallet change request rejected: ${request.type}`,
-      level: 'admin',
-      metadata: {
+    await logAdminAudit({
+      adminId: rejectorId,
+      action: `wallet_change_request_rejected_${request.type}`,
+      details: {
         requestId: request.id,
         type: request.type,
         newAddress: request.new_address,
-        rejectorId,
         initiatedBy: request.initiated_by.displayName,
         reason: rejectionReason,
       },
@@ -328,15 +322,13 @@ export class WalletAdminService {
     await settingsService.incrementWalletsVersion();
 
     // Audit log
-    await auditLog({
-      category: AuditCategory.ADMIN_ACTION,
-      message: `Wallet change applied: ${request.type}`,
-      level: 'critical',
-      metadata: {
+    await logAdminAudit({
+      adminId: applierId,
+      action: `wallet_change_applied_${request.type}`,
+      details: {
         requestId: request.id,
         type: request.type,
         newAddress: request.new_address,
-        applierId,
         initiatedBy: request.initiated_by?.displayName,
         approvedBy: request.approved_by?.displayName,
       },

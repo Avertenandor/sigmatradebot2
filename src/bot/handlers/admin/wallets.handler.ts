@@ -557,7 +557,7 @@ export const handleApproveRequest = async (ctx: Context, requestId: number): Pro
   try {
     await ctx.answerCbQuery?.('Одобрение заявки...');
 
-    const request = await walletAdminService.approveRequest(requestId, admin.id);
+    await walletAdminService.approveRequest(requestId, admin.id);
 
     await ctx.editMessageText(
       `✅ Заявка #${requestId} одобрена!\n\nТеперь её можно применить.`,
@@ -596,7 +596,7 @@ export const handleRejectRequest = async (ctx: Context, requestId: number): Prom
   try {
     await ctx.answerCbQuery?.('Отклонение заявки...');
 
-    const request = await walletAdminService.rejectRequest(
+    await walletAdminService.rejectRequest(
       requestId,
       admin.id,
       'Отклонено через админ-панель'
@@ -636,7 +636,7 @@ export const handleApplyRequest = async (ctx: Context, requestId: number): Promi
   try {
     await ctx.answerCbQuery?.('Применение изменений...');
 
-    const request = await walletAdminService.applyRequest(requestId, admin.id);
+    await walletAdminService.applyRequest(requestId, admin.id);
 
     await ctx.editMessageText(
       `🚀 **Заявка #${requestId} успешно применена!**\n\n✅ Кошелёк обновлён\n✅ Мониторинг перезапущен`,

@@ -149,7 +149,7 @@ export const handleOpenBscScan = async (ctx: Context): Promise<void> => {
 
     await ctx.editMessageText(message, {
       parse_mode: 'Markdown',
-      disable_web_page_preview: true,
+      link_preview_options: { is_disabled: true },
       ...Markup.inlineKeyboard([
         [Markup.button.url('🔗 Открыть на BscScan', bscscanUrl)],
         [Markup.button.callback('« Назад к инструкции', 'user_instructions')],
