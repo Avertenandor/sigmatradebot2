@@ -589,6 +589,31 @@ ${message}
   }
 
   /**
+   * Alert admins about significant deposit amount deviation
+   */
+  public async alertSignificantDepositDeviation(params: {
+    txHash: string;
+    userId: number;
+    telegramId: number;
+    expected: string;
+    actual: string;
+    percentDiff: string;
+    toleranceMode: string;
+  }): Promise<void> {
+    await this.notifyAllAdmins(
+      'Отклонение суммы депозита',
+      `⚠️ **Значительное отклонение суммы депозита**\n\n` +
+      `👤 Пользователь: [${params.userId}](tg://user?id=${params.telegramId})\n` +
+      `💰 Ожидалось: ${params.expected} USDT\n` +
+      `💸 Получено: ${params.actual} USDT\n` +
+      `📊 Отклонение: ${params.percentDiff}\n` +
+      `🔧 Режим толеранса: ${params.toleranceMode}\n\n` +
+      `🔗 TX: \`${params.txHash}\`\n\n` +
+      `Депозит зачислен по толерансу, но отклонение превышает порог алерта (2%).`
+    );
+  }
+
+  /**
    * Alert admins about payment moved to DLQ (Dead Letter Queue)
    */
   public async alertPaymentMovedToDLQ(

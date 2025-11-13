@@ -358,9 +358,18 @@ export class DepositProcessor {
                 alertThreshold: toleranceMode === 'percent' ? `${this.TOLERANCE_ALERT_THRESHOLD_PERCENT * 100}%` : toUsdtString(this.TOLERANCE_ALERT_THRESHOLD),
               });
 
-              // TODO: Send Telegram notification to super admin
-              // This requires integration with notification service
-              // For now, critical error log will be picked up by monitoring
+              // Send Telegram notification to admins
+              await notificationService.alertSignificantDepositDeviation({
+                txHash,
+                userId: user.id,
+                telegramId: user.telegram_id,
+                expected: toUsdtString(expectedMoney),
+                actual: toUsdtString(amountMoney),
+                percentDiff: check.percentDiff,
+                toleranceMode: toleranceMode === 'percent' ? `±${this.depositTolerancePercent * 100}%` : `±${toUsdtString(this.depositAmountTolerance)} USDT`,
+              }).catch((err) => {
+                logger.error('Failed to send deposit deviation alert', { error: err, txHash });
+              });
             }
           }
 
