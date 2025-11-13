@@ -205,4 +205,66 @@ export class ProviderManager {
   public getPayoutWallet(): ethers.Wallet | undefined {
     return this.payoutWallet;
   }
+
+  /**
+   * Reload payout wallet with new private key from Secret Manager
+   * Called when admin applies wallet change request
+   * @param secretRef - Reference to secret in Secret Manager
+   */
+  public async reloadPayoutWallet(secretRef: string): Promise<void> {
+    try {
+      logger.info('Reloading payout wallet from Secret Manager', { secretRef });
+
+      // Import secret store service
+      const { default: secretStoreService } = await import('../secret-store.service');
+
+      // Access secret from Secret Manager
+      const privateKey = await secretStoreService.accessSecret(secretRef);
+
+      // Create new wallet with new private key
+      const newWallet = new ethers.Wallet(privateKey, this.httpProvider);
+
+      // Update payout wallet
+      this.payoutWallet = newWallet;
+
+      logger.info('✅ Payout wallet reloaded successfully', {
+        address: newWallet.address,
+        secretRef,
+      });
+    } catch (error) {
+      logger.error('❌ Failed to reload payout wallet', { error, secretRef });
+      throw new Error(`Failed to reload payout wallet: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Reload system wallet address for deposit monitoring
+   * Called when admin applies system wallet change request
+   * Note: This is a placeholder - actual implementation requires
+   * restarting the event monitor with new address filter
+   * @param newAddress - New system wallet address (checksummed)
+   */
+  public async reloadSystemWalletAddress(newAddress: string): Promise<void> {
+    try {
+      logger.info('System wallet address changed', { newAddress });
+
+      // TODO: Implement event monitor restart with new address
+      // This requires integration with EventMonitor service
+      // For now, we just log the change - manual restart may be required
+
+      logger.warn(
+        '⚠️ System wallet address changed. Event monitor restart may be required.',
+        { newAddress }
+      );
+
+      // Note: In production, this should:
+      // 1. Stop current event monitor
+      // 2. Update filter to listen for Transfer events to new address
+      // 3. Restart event monitor
+      // 4. Optionally: scan recent blocks for missed transactions
+    } catch (error) {
+      logger.error('❌ Failed to update system wallet address', { error, newAddress });
+      throw new Error(`Failed to update system wallet address: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
 }

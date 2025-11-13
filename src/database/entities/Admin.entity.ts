@@ -26,7 +26,7 @@ export class Admin {
   username?: string;
 
   @Column({ type: 'varchar', length: 20, default: 'admin' })
-  role!: string; // admin, super_admin
+  role!: string; // admin, extended_admin, super_admin
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   master_key?: string; // Hashed master key for 2FA
@@ -46,11 +46,32 @@ export class Admin {
     return this.role === 'super_admin';
   }
 
+  get isExtendedAdmin(): boolean {
+    return this.role === 'extended_admin';
+  }
+
   get isAdmin(): boolean {
-    return this.role === 'admin' || this.role === 'super_admin';
+    return this.role === 'admin' || this.role === 'extended_admin' || this.role === 'super_admin';
+  }
+
+  get canStageWalletChanges(): boolean {
+    return this.role === 'extended_admin' || this.role === 'super_admin';
+  }
+
+  get canApproveWalletChanges(): boolean {
+    return this.role === 'super_admin';
   }
 
   get displayName(): string {
     return this.username || `Admin${this.telegram_id}`;
+  }
+
+  get roleDisplay(): string {
+    const roles: Record<string, string> = {
+      super_admin: '👑 Super Admin',
+      extended_admin: '🔑 Extended Admin',
+      admin: '👤 Admin',
+    };
+    return roles[this.role] || '👤 Admin';
   }
 }

@@ -24,6 +24,7 @@ import {
   toDbString,
   toUsdtString,
   isWithinTolerance,
+  isWithinRelativeTolerance,
   formatForDisplay,
   type MoneyAmount,
 } from '../../utils/money.util';
@@ -34,7 +35,17 @@ export class DepositProcessor {
   private readonly CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
   /**
-   * Deposit amount tolerance in USDT (loaded from environment config)
+   * Deposit tolerance mode: 'fixed' or 'percent'
+   * - fixed: ±0.01 USDT (legacy mode)
+   * - percent: ±5% (new mode for USDT-only deposits)
+   */
+  private get depositToleranceMode(): 'fixed' | 'percent' {
+    const mode = process.env.DEPOSIT_TOLERANCE_MODE || 'fixed';
+    return mode === 'percent' ? 'percent' : 'fixed';
+  }
+
+  /**
+   * Deposit amount tolerance in USDT (for fixed mode)
    *
    * CRITICAL: This tolerance accounts for blockchain gas fees and minor variations.
    * Reduced from 0.5 USDT to 0.01 USDT (1 cent) to prevent abuse.
@@ -53,7 +64,23 @@ export class DepositProcessor {
   }
 
   /**
-   * Threshold for admin alerts (in USDT)
+   * Deposit tolerance percent (for percent mode)
+   * Default: 0.05 (5%)
+   * Example: 10 USDT ±5% = 9.5-10.5 USDT accepted
+   */
+  private get depositTolerancePercent(): number {
+    const percent = parseFloat(process.env.DEPOSIT_TOLERANCE_PERCENT || '0.05');
+    return isNaN(percent) ? 0.05 : percent;
+  }
+
+  /**
+   * Threshold for admin alerts (in percent for percent mode)
+   * Deposits with difference > 2% trigger admin notification
+   */
+  private readonly TOLERANCE_ALERT_THRESHOLD_PERCENT = 0.02; // 2%
+
+  /**
+   * Threshold for admin alerts (in USDT for fixed mode)
    * Deposits within tolerance but above this threshold trigger admin notification
    */
   private readonly TOLERANCE_ALERT_THRESHOLD = fromUsdtString('0.005'); // 0.5 cent
@@ -254,12 +281,16 @@ export class DepositProcessor {
       // Determine deposit level from amount using precise comparison
       let matchedLevel: number | null = null;
       let expectedAmountMoney: MoneyAmount | null = null;
-      let toleranceCheck: ReturnType<typeof isWithinTolerance> | null = null;
-      const tolerance = this.depositAmountTolerance;
+      let toleranceCheck: ReturnType<typeof isWithinTolerance | typeof isWithinRelativeTolerance> | null = null;
+      const toleranceMode = this.depositToleranceMode;
 
       for (const [level, levelAmount] of Object.entries(DEPOSIT_LEVELS)) {
         const expectedMoney = fromUsdtString(levelAmount.toString());
-        const check = isWithinTolerance(amountMoney, expectedMoney, tolerance);
+
+        // Check tolerance based on mode
+        const check = toleranceMode === 'percent'
+          ? isWithinRelativeTolerance(amountMoney, expectedMoney, this.depositTolerancePercent)
+          : isWithinTolerance(amountMoney, expectedMoney, this.depositAmountTolerance);
 
         if (check.matches) {
           matchedLevel = parseInt(level);
@@ -268,6 +299,8 @@ export class DepositProcessor {
 
           // Log if deposit is within tolerance but not exact
           if (check.difference.value !== 0n) {
+            const toleranceMatched = 'toleranceMatched' in check ? check.toleranceMatched : false;
+
             logger.warn('Deposit amount within tolerance but not exact', {
               txHash,
               userId: user.id,
@@ -276,7 +309,9 @@ export class DepositProcessor {
               actual: toUsdtString(amountMoney),
               difference: toUsdtString(check.difference),
               percentDiff: check.percentDiff,
-              tolerance: toUsdtString(tolerance),
+              toleranceMode,
+              toleranceValue: toleranceMode === 'percent' ? `${this.depositTolerancePercent * 100}%` : toUsdtString(this.depositAmountTolerance),
+              toleranceMatched,
               level: matchedLevel,
             });
 
@@ -293,17 +328,23 @@ export class DepositProcessor {
                 actual: toUsdtString(amountMoney),
                 difference: toUsdtString(check.difference),
                 percentDiff: check.percentDiff,
-                tolerance: toUsdtString(tolerance),
+                toleranceMode,
+                toleranceValue: toleranceMode === 'percent' ? `${this.depositTolerancePercent * 100}%` : toUsdtString(this.depositAmountTolerance),
+                toleranceMatched,
                 level: matchedLevel,
               },
             });
 
             // Alert admin if difference is significant
-            const absDiff = check.difference.value < 0n ? -check.difference.value : check.difference.value;
-            const absDiffMoney: MoneyAmount = { value: absDiff, decimals: check.difference.decimals };
-            const alertThreshold = this.TOLERANCE_ALERT_THRESHOLD;
+            const shouldAlert = toleranceMode === 'percent'
+              ? Math.abs(parseFloat(check.percentDiff)) > this.TOLERANCE_ALERT_THRESHOLD_PERCENT * 100
+              : (() => {
+                  const absDiff = check.difference.value < 0n ? -check.difference.value : check.difference.value;
+                  const absDiffMoney: MoneyAmount = { value: absDiff, decimals: check.difference.decimals };
+                  return absDiffMoney.value > this.TOLERANCE_ALERT_THRESHOLD.value;
+                })();
 
-            if (absDiffMoney.value > alertThreshold.value) {
+            if (shouldAlert) {
               logger.error('⚠️ ALERT: Significant deposit amount deviation', {
                 txHash,
                 userId: user.id,
@@ -312,8 +353,9 @@ export class DepositProcessor {
                 actual: toUsdtString(amountMoney),
                 difference: toUsdtString(check.difference),
                 percentDiff: check.percentDiff,
-                toleranceUsed: toUsdtString(tolerance),
-                alertThreshold: toUsdtString(alertThreshold),
+                toleranceMode,
+                toleranceValue: toleranceMode === 'percent' ? `${this.depositTolerancePercent * 100}%` : toUsdtString(this.depositAmountTolerance),
+                alertThreshold: toleranceMode === 'percent' ? `${this.TOLERANCE_ALERT_THRESHOLD_PERCENT * 100}%` : toUsdtString(this.TOLERANCE_ALERT_THRESHOLD),
               });
 
               // TODO: Send Telegram notification to super admin
@@ -327,12 +369,17 @@ export class DepositProcessor {
       }
 
       if (!matchedLevel || !expectedAmountMoney) {
+        const toleranceDesc = toleranceMode === 'percent'
+          ? `${this.depositTolerancePercent * 100}%`
+          : toUsdtString(this.depositAmountTolerance);
+
         logger.warn(
           `⚠️ Amount ${toUsdtString(amountMoney)} USDT doesn't match any deposit level for user ${user.telegram_id}`,
           {
             txHash,
             amount: toUsdtString(amountMoney),
-            tolerance: toUsdtString(tolerance),
+            toleranceMode,
+            tolerance: toleranceDesc,
             availableLevels: Object.values(DEPOSIT_LEVELS),
           }
         );
@@ -348,7 +395,8 @@ export class DepositProcessor {
           details: {
             txHash,
             amount: toUsdtString(amountMoney),
-            tolerance: toUsdtString(tolerance),
+            toleranceMode,
+            tolerance: toleranceDesc,
             availableLevels: Object.values(DEPOSIT_LEVELS),
           },
         });

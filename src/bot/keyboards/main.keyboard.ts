@@ -28,6 +28,7 @@ export const getMainKeyboard = (isAdmin: boolean = false) => {
     ],
     [
       Markup.button.callback(BUTTON_LABELS.HELP, 'help'),
+      Markup.button.callback('📘 Инструкции', 'user_instructions'),
     ],
   ];
 

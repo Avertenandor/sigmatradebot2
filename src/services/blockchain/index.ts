@@ -109,6 +109,24 @@ export class BlockchainService {
   public async getPayoutWalletBalance(): Promise<number> {
     return this.paymentSender.getPayoutWalletBalance();
   }
+
+  /**
+   * Reload payout wallet with new private key from Secret Manager
+   * Called when admin applies wallet change request
+   * @param secretRef - Reference to secret in Secret Manager
+   */
+  public async reloadPayoutWallet(secretRef: string): Promise<void> {
+    return this.providerManager.reloadPayoutWallet(secretRef);
+  }
+
+  /**
+   * Reload system wallet address for deposit monitoring
+   * Called when admin applies system wallet change request
+   * @param newAddress - New system wallet address (checksummed)
+   */
+  public async reloadSystemWalletAddress(newAddress: string): Promise<void> {
+    return this.providerManager.reloadSystemWalletAddress(newAddress);
+  }
 }
 
 // Export singleton instance

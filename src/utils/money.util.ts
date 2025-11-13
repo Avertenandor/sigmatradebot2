@@ -228,6 +228,52 @@ export function isWithinTolerance(
 }
 
 /**
+ * Check if actual amount is within relative (percentage) tolerance of expected amount
+ * Used for deposit validation with ±5% tolerance
+ * @param actual - Actual amount received
+ * @param expected - Expected amount
+ * @param tolerancePercent - Tolerance as decimal (e.g., 0.05 for 5%)
+ * @returns Object with match status, difference, and percentage difference
+ */
+export function isWithinRelativeTolerance(
+  actual: MoneyAmount,
+  expected: MoneyAmount,
+  tolerancePercent: number
+): { matches: boolean; difference: MoneyAmount; percentDiff: string; toleranceMatched: boolean } {
+  const diff = subtract(actual, expected);
+  const absDiff: MoneyAmount = {
+    value: diff.value < 0n ? -diff.value : diff.value,
+    decimals: diff.decimals,
+  };
+
+  // Calculate tolerance amount: expected * tolerancePercent
+  // e.g., 10 USDT * 0.05 = 0.5 USDT
+  const tolerancePercentBigInt = BigInt(Math.floor(tolerancePercent * 10000)); // 5% = 500
+  const toleranceAmount: MoneyAmount = {
+    value: (expected.value * tolerancePercentBigInt) / BigInt(10000),
+    decimals: expected.decimals,
+  };
+
+  const matches = lessThanOrEqual(absDiff, toleranceAmount);
+  const toleranceMatched = absDiff.value > 0n && matches; // Within tolerance but not exact
+
+  // Calculate percentage difference for logging
+  let percentDiff = '0';
+  if (expected.value !== 0n) {
+    // (actual - expected) / expected * 100
+    const percentBigInt = (diff.value * BigInt(10000)) / expected.value;
+    percentDiff = (Number(percentBigInt) / 100).toFixed(2);
+  }
+
+  return {
+    matches,
+    difference: diff,
+    percentDiff,
+    toleranceMatched,
+  };
+}
+
+/**
  * Absolute value of money amount
  */
 export function abs(amount: MoneyAmount): MoneyAmount {
