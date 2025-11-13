@@ -834,11 +834,11 @@ export class DepositProcessor {
               });
             }
 
-            continue;
+            return;
           }
 
           if (!deposit.block_number) {
-            continue; // Skip if no block number yet
+            return; // Skip if no block number yet
           }
 
           const confirmations = currentBlock - deposit.block_number;
@@ -854,7 +854,7 @@ export class DepositProcessor {
               logger.warn(
                 `⚠️ Transaction receipt not found: ${deposit.tx_hash}`
               );
-              continue;
+              return;
             }
 
             if (receipt.status !== 1) {
@@ -898,7 +898,7 @@ export class DepositProcessor {
                 });
               }, TRANSACTION_PRESETS.FINANCIAL);
 
-              continue;
+              return;
             }
 
             // Confirm deposit using DepositService (creates referral earnings)

@@ -21,7 +21,9 @@ export const loggerMiddleware: MiddlewareFn<Context> = async (ctx, next) => {
 
   // Extract update type
   const updateType = ctx.updateType;
+  // @ts-ignore
   const messageText = 'text' in (ctx.message || {}) ? ctx.message?.text : undefined;
+  // @ts-ignore
   const callbackData = 'data' in (ctx.callbackQuery || {}) ? ctx.callbackQuery?.data : undefined;
 
   // Log incoming update
