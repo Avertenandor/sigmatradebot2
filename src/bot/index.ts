@@ -103,6 +103,22 @@ import {
   handleBlacklistAddInput,
   handleStartBlacklistRemove,
   handleBlacklistRemoveInput,
+  handleInstructions,
+  handleCopyAddress,
+  handleOpenBscScan,
+  handleCheckStatus,
+  handleCommonMistakes,
+  handleWalletsMenu,
+  handleStartWalletChange,
+  handleConfirmCreate,
+  handleCancelWalletChange,
+  handleViewRequests,
+  handleViewRequestDetails,
+  handleApproveRequest,
+  handleRejectRequest,
+  handleApplyRequest,
+  handleAddressInput,
+  handleKeyInput,
 } from './handlers';
 
 // Support handlers
@@ -212,6 +228,15 @@ export const initializeBot = (): Telegraf => {
   bot.action('help', handleHelp);
 
   /**
+   * Instructions (User deposit guide)
+   */
+  bot.action('user_instructions', handleInstructions);
+  bot.action('user_instructions_copy_address', handleCopyAddress);
+  bot.action('user_instructions_bscscan', handleOpenBscScan);
+  bot.action('user_instructions_check_status', handleCheckStatus);
+  bot.action('user_instructions_common_mistakes', handleCommonMistakes);
+
+  /**
    * Registration flow
    */
   bot.action('start_registration', registrationRateLimitMiddleware, handleStartRegistration);
@@ -319,6 +344,48 @@ export const initializeBot = (): Telegraf => {
   bot.action(/^admin_support_send_reply_\d+$/, handleAdminSupportSendReply);
 
   /**
+   * Wallets Management (Admin)
+   */
+  bot.action('admin_wallets', handleWalletsMenu);
+  bot.action('admin_wallet_change_system', (ctx) => handleStartWalletChange(ctx, 'system_deposit'));
+  bot.action('admin_wallet_change_payout', (ctx) => handleStartWalletChange(ctx, 'payout_withdrawal'));
+  bot.action('admin_wallet_confirm_create', handleConfirmCreate);
+  bot.action('admin_wallet_cancel', handleCancelWalletChange);
+  bot.action('admin_wallet_requests', handleViewRequests);
+  bot.action(/^admin_wallet_request_\d+$/, async (ctx) => {
+    const match = ctx.callbackQuery && 'data' in ctx.callbackQuery
+      ? ctx.callbackQuery.data.match(/^admin_wallet_request_(\d+)$/)
+      : null;
+    if (match) {
+      await handleViewRequestDetails(ctx, parseInt(match[1]));
+    }
+  });
+  bot.action(/^admin_wallet_approve_\d+$/, async (ctx) => {
+    const match = ctx.callbackQuery && 'data' in ctx.callbackQuery
+      ? ctx.callbackQuery.data.match(/^admin_wallet_approve_(\d+)$/)
+      : null;
+    if (match) {
+      await handleApproveRequest(ctx, parseInt(match[1]));
+    }
+  });
+  bot.action(/^admin_wallet_reject_\d+$/, async (ctx) => {
+    const match = ctx.callbackQuery && 'data' in ctx.callbackQuery
+      ? ctx.callbackQuery.data.match(/^admin_wallet_reject_(\d+)$/)
+      : null;
+    if (match) {
+      await handleRejectRequest(ctx, parseInt(match[1]));
+    }
+  });
+  bot.action(/^admin_wallet_apply_\d+$/, async (ctx) => {
+    const match = ctx.callbackQuery && 'data' in ctx.callbackQuery
+      ? ctx.callbackQuery.data.match(/^admin_wallet_apply_(\d+)$/)
+      : null;
+    if (match) {
+      await handleApplyRequest(ctx, parseInt(match[1]));
+    }
+  });
+
+  /**
    * Reward sessions
    */
   bot.action('reward_sessions', handleRewardSessions);
@@ -342,6 +409,17 @@ export const initializeBot = (): Telegraf => {
    */
   bot.on('text', async (ctx) => {
     const sessionCtx = ctx as SessionContext;
+
+    // Check wallet change FSM first (uses separate state management)
+    const walletAddressHandled = await handleAddressInput(ctx);
+    if (walletAddressHandled) {
+      return;
+    }
+
+    const walletKeyHandled = await handleKeyInput(ctx);
+    if (walletKeyHandled) {
+      return;
+    }
 
     switch (sessionCtx.session.state) {
       case BotState.AWAITING_WALLET_ADDRESS:

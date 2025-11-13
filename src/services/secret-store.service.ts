@@ -24,12 +24,12 @@ class SecretStoreService {
   private isDevelopment: boolean;
   private secretsDir: string;
   // private client?: SecretManagerServiceClient;
-  private projectId: string;
+  // private projectId: string;
 
   constructor() {
     this.isDevelopment = process.env.NODE_ENV !== 'production';
     this.secretsDir = path.join(process.cwd(), '.secrets', 'dev');
-    this.projectId = process.env.GCP_PROJECT_ID || 'sigmatradebot';
+    // this.projectId = process.env.GCP_PROJECT_ID || 'sigmatradebot';
 
     if (this.isDevelopment) {
       // Create local secrets directory for development
