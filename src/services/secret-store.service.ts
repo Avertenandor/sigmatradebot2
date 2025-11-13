@@ -17,19 +17,18 @@ import * as path from 'path';
 import logger from '../utils/logger.util';
 
 // GCP Secret Manager (production)
-// Uncomment when @google-cloud/secret-manager is installed
-// import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
+import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 
 class SecretStoreService {
   private isDevelopment: boolean;
   private secretsDir: string;
-  // private client?: SecretManagerServiceClient;
-  // private projectId: string;
+  private client?: SecretManagerServiceClient;
+  private projectId: string;
 
   constructor() {
     this.isDevelopment = process.env.NODE_ENV !== 'production';
     this.secretsDir = path.join(process.cwd(), '.secrets', 'dev');
-    // this.projectId = process.env.GCP_PROJECT_ID || 'sigmatradebot';
+    this.projectId = process.env.GCP_PROJECT_ID || 'sigmatradebot';
 
     if (this.isDevelopment) {
       // Create local secrets directory for development
@@ -39,9 +38,10 @@ class SecretStoreService {
       logger.warn('⚠️ SecretStore: Using LOCAL file storage (development only)');
     } else {
       // Initialize GCP Secret Manager client
-      // Uncomment when @google-cloud/secret-manager is installed
-      // this.client = new SecretManagerServiceClient();
-      logger.info('✅ SecretStore: Using GCP Secret Manager (production)');
+      this.client = new SecretManagerServiceClient();
+      logger.info('✅ SecretStore: Using GCP Secret Manager (production)', {
+        projectId: this.projectId,
+      });
     }
   }
 
@@ -156,47 +156,76 @@ class SecretStoreService {
   // ==================== PRODUCTION (GCP Secret Manager) ====================
 
   private async saveGcpSecret(name: string, value: string): Promise<string> {
-    // TODO: Implement GCP Secret Manager integration
-    // Uncomment when @google-cloud/secret-manager is installed
-    /*
+    if (!this.client) {
+      throw new Error('GCP Secret Manager client not initialized');
+    }
+
     const parent = `projects/${this.projectId}`;
     const secretId = `sigmatradebot-wallet-${name}`;
 
-    // Create secret
-    const [secret] = await this.client!.createSecret({
-      parent,
-      secretId,
-      secret: {
-        replication: {
-          automatic: {},
+    try {
+      // Try to create secret (will fail if already exists)
+      const [secret] = await this.client.createSecret({
+        parent,
+        secretId,
+        secret: {
+          replication: {
+            automatic: {},
+          },
         },
-      },
-    });
+      });
 
-    // Add secret version
-    const [version] = await this.client!.addSecretVersion({
-      parent: secret.name,
-      payload: {
-        data: Buffer.from(value, 'utf8'),
-      },
-    });
+      logger.info('✅ GCP Secret created', {
+        name: secret.name,
+      });
 
-    logger.info('✅ GCP Secret created', {
-      name: secret.name,
-      version: version.name,
-    });
+      // Add secret version
+      const [version] = await this.client.addSecretVersion({
+        parent: secret.name,
+        payload: {
+          data: Buffer.from(value, 'utf8'),
+        },
+      });
 
-    return version.name!;
-    */
+      logger.info('✅ GCP Secret version added', {
+        version: version.name,
+      });
 
-    throw new Error('GCP Secret Manager not configured. Install @google-cloud/secret-manager');
+      return version.name!;
+    } catch (error: any) {
+      // If secret already exists, just add a new version
+      if (error.code === 6) { // ALREADY_EXISTS
+        const secretName = `${parent}/secrets/${secretId}`;
+
+        logger.info('Secret already exists, adding new version', {
+          secretName,
+        });
+
+        const [version] = await this.client.addSecretVersion({
+          parent: secretName,
+          payload: {
+            data: Buffer.from(value, 'utf8'),
+          },
+        });
+
+        logger.info('✅ GCP Secret version added', {
+          version: version.name,
+        });
+
+        return version.name!;
+      }
+
+      // Re-throw other errors
+      throw error;
+    }
   }
 
   private async accessGcpSecret(secretRef: string): Promise<string> {
-    // TODO: Implement GCP Secret Manager integration
-    // Uncomment when @google-cloud/secret-manager is installed
-    /*
-    const [version] = await this.client!.accessSecretVersion({
+    if (!this.client) {
+      throw new Error('GCP Secret Manager client not initialized');
+    }
+
+    const [version] = await this.client.accessSecretVersion({
       name: secretRef,
     });
 
@@ -205,26 +234,27 @@ class SecretStoreService {
       throw new Error('Secret payload is empty');
     }
 
-    return payload;
-    */
+    logger.debug('✅ GCP Secret accessed', {
+      refLength: secretRef.length,
+    });
 
-    throw new Error('GCP Secret Manager not configured. Install @google-cloud/secret-manager');
+    return payload;
   }
 
   private async deleteGcpSecret(secretRef: string): Promise<void> {
-    // TODO: Implement GCP Secret Manager integration
-    // Uncomment when @google-cloud/secret-manager is installed
-    /*
+    if (!this.client) {
+      throw new Error('GCP Secret Manager client not initialized');
+    }
+
     // Extract secret name from version reference
+    // secretRef format: projects/{project}/secrets/{secret}/versions/{version}
     const secretName = secretRef.split('/versions/')[0];
-    await this.client!.deleteSecret({
+
+    await this.client.deleteSecret({
       name: secretName,
     });
 
     logger.info('✅ GCP Secret deleted', { secretName });
-    */
-
-    throw new Error('GCP Secret Manager not configured. Install @google-cloud/secret-manager');
   }
 }
 
