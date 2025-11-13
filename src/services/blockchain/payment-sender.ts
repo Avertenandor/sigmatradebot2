@@ -140,4 +140,17 @@ export class PaymentSender {
     }
     return getBalance(payoutWallet.address, this.providerManager.getUsdtContract());
   }
+
+  /**
+   * Get payout wallet BNB (gas) balance
+   */
+  public async getPayoutWalletBnbBalance(): Promise<number> {
+    const payoutWallet = this.providerManager.getPayoutWallet();
+    if (!payoutWallet) {
+      return 0;
+    }
+    const balance = await this.providerManager.getHttpProvider().getBalance(payoutWallet.address);
+    // Convert from wei to BNB
+    return parseFloat(ethers.formatEther(balance));
+  }
 }

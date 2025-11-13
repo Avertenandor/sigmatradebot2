@@ -20,7 +20,9 @@ import { AdminContext } from '../../middlewares/admin.middleware';
 import { ERROR_MESSAGES } from '../../../utils/constants';
 import { walletAdminService } from '../../../services/wallet-admin.service';
 import { settingsService } from '../../../services/settings.service';
+import { blockchainService } from '../../../services/blockchain';
 import { logAdminAction } from '../../../utils/logger.util';
+import { isValidBSCAddress, normalizeWalletAddress } from '../../../utils/validation.util';
 import { requireAuthenticatedAdmin } from './utils';
 import { Admin } from '../../../database/entities';
 
@@ -56,21 +58,29 @@ export const handleWalletsMenu = async (ctx: Context): Promise<void> => {
     const payoutWallet = await settingsService.getPayoutWalletAddress();
     const walletsVersion = await settingsService.getWalletsVersion();
 
-    // TODO: Get balances from blockchain service
-    // const systemBalance = await blockchainService.getBalance(systemWallet);
-    // const payoutBalance = await blockchainService.getBalance(payoutWallet);
+    // Get balances from blockchain service
+    const [systemBalance, payoutBalance, payoutBnbBalance] = await Promise.all([
+      blockchainService.getBalance(systemWallet).catch(() => -1),
+      blockchainService.getPayoutWalletBalance().catch(() => -1),
+      blockchainService.getPayoutWalletBnbBalance().catch(() => -1),
+    ]);
+
+    const formatBalance = (balance: number) => {
+      if (balance < 0) return '⚠️ ошибка загрузки';
+      return balance.toFixed(2);
+    };
 
     const message = `
 🔐 **Кошельки системы**
 
 **Кошелёк приёма депозитов:**
 \`${systemWallet}\`
-💰 Баланс: - USDT (загрузка...)
+💰 Баланс: ${formatBalance(systemBalance)} USDT
 
 **Кошелёк выплат:**
 \`${payoutWallet}\`
-💰 Баланс: - USDT (загрузка...)
-⛽ Gas (BNB): - BNB (загрузка...)
+💰 Баланс: ${formatBalance(payoutBalance)} USDT
+⛽ Gas (BNB): ${formatBalance(payoutBnbBalance)} BNB
 
 📌 **Версия:** v${walletsVersion}
 
@@ -190,14 +200,15 @@ export const handleAddressInput = async (ctx: Context): Promise<boolean> => {
     return true;
   }
 
-  // Validate address format
-  // TODO: Use validation util
-  if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
-    await ctx.reply('❌ Неверный формат адреса. Адрес должен начинаться с 0x и содержать 42 символа.');
+  // Validate address format with EIP-55 checksum
+  if (!isValidBSCAddress(address)) {
+    await ctx.reply('❌ Неверный формат адреса. Адрес должен быть валидным BSC/Ethereum адресом (0x + 40 hex символов).');
     return true;
   }
 
-  state.newAddress = address;
+  // Normalize address to EIP-55 checksum format
+  const normalizedAddress = normalizeWalletAddress(address);
+  state.newAddress = normalizedAddress;
 
   if (state.type === 'system_deposit') {
     // System wallet: no key needed, go straight to confirmation
