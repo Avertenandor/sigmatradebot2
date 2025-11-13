@@ -22,6 +22,7 @@ import { secretStoreService } from './secret-store.service';
 import { createLogger } from '../utils/logger.util';
 import { logAdminAudit } from '../utils/audit-logger.util';
 import { isValidBSCAddress, normalizeWalletAddress } from '../utils/validation.util';
+import { config } from '../config';
 import { ethers } from 'ethers';
 
 const logger = createLogger('WalletAdminService');
@@ -89,6 +90,14 @@ export class WalletAdminService {
     let secretRef: string | undefined;
 
     if (type === 'payout_withdrawal') {
+      // SECURITY: Prevent creating payout wallet requests in production without GCP Secret Manager
+      if (config.isProduction && !config.gcp.secretManagerEnabled) {
+        throw new Error(
+          'Cannot create payout wallet requests in production without GCP Secret Manager. ' +
+          'Please set GCP_SECRET_MANAGER_ENABLED=true and configure GCP_PROJECT_ID.'
+        );
+      }
+
       if (!keyOrMnemonic) {
         throw new Error('Private key or mnemonic is required for payout wallet');
       }

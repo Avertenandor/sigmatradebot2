@@ -15,6 +15,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import logger from '../utils/logger.util';
+import { config } from '../config';
 
 // GCP Secret Manager (production)
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
@@ -26,9 +27,10 @@ class SecretStoreService {
   private projectId: string;
 
   constructor() {
-    this.isDevelopment = process.env.NODE_ENV !== 'production';
+    // Use GCP Secret Manager flag from config (not NODE_ENV)
+    this.isDevelopment = !config.gcp.secretManagerEnabled;
     this.secretsDir = path.join(process.cwd(), '.secrets', 'dev');
-    this.projectId = process.env.GCP_PROJECT_ID || 'sigmatradebot';
+    this.projectId = config.gcp.projectId || 'sigmatradebot';
 
     if (this.isDevelopment) {
       // Create local secrets directory for development
@@ -36,8 +38,12 @@ class SecretStoreService {
         fs.mkdirSync(this.secretsDir, { recursive: true });
       }
       logger.warn('⚠️ SecretStore: Using LOCAL file storage (development only)');
+      logger.warn('⚠️ Set GCP_SECRET_MANAGER_ENABLED=true for production');
     } else {
       // Initialize GCP Secret Manager client
+      if (!this.projectId) {
+        throw new Error('GCP_PROJECT_ID is required when GCP_SECRET_MANAGER_ENABLED=true');
+      }
       this.client = new SecretManagerServiceClient();
       logger.info('✅ SecretStore: Using GCP Secret Manager (production)', {
         projectId: this.projectId,
