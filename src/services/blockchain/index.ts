@@ -9,6 +9,7 @@ import { EventMonitor } from './event-monitor';
 import { DepositProcessor } from './deposit-processor';
 import { PaymentSender } from './payment-sender';
 import { getBalance, verifyTransaction } from './utils';
+import { logger } from '../../utils/logger.util';
 
 export class BlockchainService {
   private static instance: BlockchainService;
@@ -111,6 +112,13 @@ export class BlockchainService {
   }
 
   /**
+   * Get payout wallet BNB (gas) balance
+   */
+  public async getPayoutWalletBnbBalance(): Promise<number> {
+    return this.paymentSender.getPayoutWalletBnbBalance();
+  }
+
+  /**
    * Reload payout wallet with new private key from Secret Manager
    * Called when admin applies wallet change request
    * @param secretRef - Reference to secret in Secret Manager
@@ -125,7 +133,38 @@ export class BlockchainService {
    * @param newAddress - New system wallet address (checksummed)
    */
   public async reloadSystemWalletAddress(newAddress: string): Promise<void> {
-    return this.providerManager.reloadSystemWalletAddress(newAddress);
+    try {
+      logger.info('🔄 Reloading system wallet address and restarting monitor', {
+        newAddress,
+      });
+
+      // Step 1: Stop current monitoring
+      logger.info('⏸️ Stopping event monitor...');
+      await this.stopMonitoring();
+
+      // Step 2: Settings are already updated by wallet-admin.service.applyRequest
+      // No need to update here
+
+      // Step 3: Restart monitoring with new address
+      logger.info('▶️ Starting event monitor with new address...');
+      await this.startMonitoring();
+
+      // Step 4: Rescan recent blocks to catch any deposits during transition
+      logger.info('🔍 Rescanning recent blocks for deposits to new address...');
+      await this.eventMonitor.rescanRecentBlocks(3);
+
+      logger.info('✅ System wallet address reloaded successfully', {
+        newAddress,
+      });
+    } catch (error) {
+      logger.error('❌ Failed to reload system wallet address', {
+        error,
+        newAddress,
+      });
+      throw new Error(
+        `Failed to reload system wallet address: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
   }
 }
 

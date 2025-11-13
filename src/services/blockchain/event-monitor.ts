@@ -65,10 +65,18 @@ export class EventMonitor {
         () => this.handleWebSocketDisconnect()
       );
 
+      // Get current system wallet address from settings (dynamic)
+      const { settingsService } = await import('../settings.service');
+      const systemWalletAddress = await settingsService.getSystemWalletAddress();
+
+      logger.info('🔍 Monitoring system wallet for deposits', {
+        address: systemWalletAddress
+      });
+
       // Listen for Transfer events to system wallet
       const filter = usdtContractWs.filters.Transfer(
         null,
-        config.blockchain.systemWalletAddress
+        systemWalletAddress
       );
 
       usdtContractWs.on(filter, async (from, to, value, event) => {
@@ -96,7 +104,7 @@ export class EventMonitor {
 
       this.isMonitoring = true;
       logger.info('✅ Blockchain monitoring started');
-      logger.info(`📡 Listening for deposits to: ${config.blockchain.systemWalletAddress}`);
+      logger.info(`📡 Listening for deposits to: ${systemWalletAddress}`);
     } catch (error) {
       logger.error('❌ Failed to start blockchain monitoring:', error);
       throw error;
@@ -122,6 +130,80 @@ export class EventMonitor {
       logger.info('✅ Blockchain monitoring stopped');
     } catch (error) {
       logger.error('❌ Error stopping blockchain monitoring:', error);
+    }
+  }
+
+  /**
+   * Rescan recent blocks for deposits to new system wallet address
+   * Called after system wallet address change to catch any deposits during transition
+   * @param blocksToScan - Number of blocks to scan backwards (default: 3)
+   */
+  public async rescanRecentBlocks(blocksToScan: number = 3): Promise<void> {
+    try {
+      logger.info('🔄 Rescanning recent blocks for deposits', { blocksToScan });
+
+      const httpProvider = this.providerManager.getHttpProvider();
+      const usdtContract = this.providerManager.getUsdtContract();
+      const currentBlock = await httpProvider.getBlockNumber();
+
+      // Get current system wallet address from settings
+      const { settingsService } = await import('../settings.service');
+      const systemWalletAddress = await settingsService.getSystemWalletAddress();
+
+      const fromBlock = Math.max(0, currentBlock - blocksToScan);
+      const toBlock = currentBlock;
+
+      logger.info(`🔍 Scanning blocks ${fromBlock} to ${toBlock} for deposits to ${systemWalletAddress}`);
+
+      // Query Transfer events to new system wallet
+      const filter = usdtContract.filters.Transfer(null, systemWalletAddress);
+      const events = await usdtContract.queryFilter(filter, fromBlock, toBlock);
+
+      if (events.length === 0) {
+        logger.info('✅ No deposits found in recent blocks');
+        return;
+      }
+
+      logger.info(`📥 Found ${events.length} Transfer events in recent blocks, processing...`);
+
+      // Process events through deposit processor
+      const transactionRepo = AppDataSource.getRepository(Transaction);
+      let processed = 0;
+      let skipped = 0;
+
+      for (const event of events) {
+        try {
+          if (!event.args) continue;
+
+          // Check if already processed
+          const existing = await transactionRepo.findOne({
+            where: { tx_hash: event.transactionHash },
+          });
+
+          if (existing) {
+            skipped++;
+            continue;
+          }
+
+          const [from, to, value] = event.args;
+          await this.depositProcessor.handleTransferEvent(from, to, value, event);
+          processed++;
+        } catch (error) {
+          logger.error('❌ Error processing recent block event:', {
+            error,
+            txHash: event.transactionHash,
+          });
+        }
+      }
+
+      logger.info('✅ Recent blocks rescan completed', {
+        totalEvents: events.length,
+        processed,
+        skipped,
+      });
+    } catch (error) {
+      logger.error('❌ Error rescanning recent blocks:', error);
+      throw error;
     }
   }
 
@@ -238,10 +320,14 @@ export class EventMonitor {
         `🔍 Fetching historical Transfer events from block ${fromBlock} to ${toBlock} (${toBlock - fromBlock} blocks)...`
       );
 
+      // Get current system wallet address from settings (dynamic)
+      const { settingsService } = await import('../settings.service');
+      const systemWalletAddress = await settingsService.getSystemWalletAddress();
+
       // Query historical Transfer events to system wallet
       const filter = usdtContract.filters.Transfer(
         null,
-        config.blockchain.systemWalletAddress
+        systemWalletAddress
       );
 
       const events = await usdtContract.queryFilter(filter, fromBlock, toBlock);
