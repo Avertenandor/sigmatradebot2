@@ -52,12 +52,35 @@ async def main() -> None:
     )
 
     # Register handlers
-    from bot.handlers import deposit, menu, start, withdrawal
+    from bot.handlers import (
+        deposit,
+        menu,
+        start,
+        withdrawal,
+        referral,
+        profile,
+        transaction,
+        support,
+    )
+    from bot.handlers.admin import panel, users, withdrawals, broadcast
 
+    # Core handlers
     dp.include_router(start.router)
     dp.include_router(menu.router)
+
+    # User handlers
     dp.include_router(deposit.router)
     dp.include_router(withdrawal.router)
+    dp.include_router(referral.router)
+    dp.include_router(profile.router)
+    dp.include_router(transaction.router)
+    dp.include_router(support.router)
+
+    # Admin handlers
+    dp.include_router(panel.router)
+    dp.include_router(users.router)
+    dp.include_router(withdrawals.router)
+    dp.include_router(broadcast.router)
 
     # Start polling
     logger.info("Bot started successfully")
