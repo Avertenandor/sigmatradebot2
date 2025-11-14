@@ -19,6 +19,10 @@ from app.services.notification_retry_service import (
 )
 from app.services.payment_retry_service import PaymentRetryService
 
+# Support & Admin Services
+from app.services.admin_service import AdminService
+from app.services.support_service import SupportService
+
 __all__ = [
     # Core
     "DepositService",
@@ -31,4 +35,7 @@ __all__ = [
     # PART5 Critical
     "NotificationRetryService",
     "PaymentRetryService",
+    # Support & Admin
+    "AdminService",
+    "SupportService",
 ]
