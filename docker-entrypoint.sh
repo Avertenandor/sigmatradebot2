@@ -28,13 +28,18 @@ case "$1" in
     bot)
         # Validate environment variables
         echo -e "${YELLOW}Validating environment variables...${NC}"
-        if python scripts/validate-env.py 2>/dev/null; then
-            echo -e "${GREEN}Environment validation passed!${NC}"
+        if [ -f "scripts/validate-env.py" ]; then
+            python3 scripts/validate-env.py
+            VALIDATION_EXIT_CODE=$?
+            if [ $VALIDATION_EXIT_CODE -ne 0 ]; then
+                echo -e "${RED}Environment validation FAILED with exit code $VALIDATION_EXIT_CODE${NC}"
+                exit $VALIDATION_EXIT_CODE
+            else
+                echo -e "${GREEN}Environment validation PASSED${NC}"
+            fi
         else
-            echo -e "${YELLOW}Environment validation skipped (script not found or validation failed)${NC}"
-            echo -e "${YELLOW}Please check your .env file manually${NC}"
-            # In production, you might want to exit here:
-            # exit 1
+            echo -e "${RED}Environment validation script NOT FOUND (scripts/validate-env.py). Failing.${NC}"
+            exit 1
         fi
         
         # Run database migrations (only for bot service)
