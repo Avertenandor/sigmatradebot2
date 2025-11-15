@@ -14,7 +14,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.deposit_reward import DepositReward
-from app.models.enums import PaymentType, TransactionStatus, TransactionType
+from app.models.enums import TransactionStatus, TransactionType
+from app.models.payment_retry import PaymentType
 from app.models.payment_retry import PaymentRetry
 from app.models.referral_earning import ReferralEarning
 from app.models.transaction import Transaction
