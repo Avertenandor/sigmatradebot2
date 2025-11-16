@@ -4,13 +4,18 @@ Settings Service.
 Manages system settings stored in database with Redis caching.
 """
 
-from typing import Any, Optional
-import redis.asyncio as redis
+from typing import TYPE_CHECKING, Any, Optional
+
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.system_setting import SystemSetting
-from app.repositories.system_setting_repository import SystemSettingRepository
+from app.repositories.system_setting_repository import (
+    SystemSettingRepository,
+)
+
+if TYPE_CHECKING:
+    import redis.asyncio as redis  # type: ignore
 
 
 class SettingsService:
@@ -27,7 +32,7 @@ class SettingsService:
     def __init__(
         self,
         session: AsyncSession,
-        redis_client: Optional[redis.Redis] = None,
+        redis_client: Optional[Any] = None,  # Redis client for caching
         cache_ttl: int = 300,  # 5 minutes
     ) -> None:
         """
@@ -167,12 +172,11 @@ class SettingsService:
         if value is None:
             return default
 
-        if isinstance(value, bool):
-            return value
-
-        # Parse string values
-        if isinstance(value, str):
-            return value.lower() in ("true", "1", "yes", "on")
+        # Value is already string from DB, parse it
+        if value.lower() in ("true", "1", "yes", "on"):
+            return True
+        if value.lower() in ("false", "0", "no", "off"):
+            return False
 
         return bool(value)
 
