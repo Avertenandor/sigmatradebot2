@@ -18,7 +18,6 @@ from bot.keyboards.reply import (
     main_menu_reply_keyboard,
     referral_keyboard,
     settings_keyboard,
-    support_keyboard,
     withdrawal_keyboard,
 )
 from bot.states.update_contacts import UpdateContactsStates
@@ -194,27 +193,8 @@ async def show_referral_menu(
     )
 
 
-@router.message(F.text == "💬 Поддержка")
-async def show_support_menu(
-    message: Message,
-    session: AsyncSession,
-    user: User,
-    state: FSMContext,
-) -> None:
-    """Show support menu."""
-    await state.clear()
-
-    text = (
-        f"💬 *Служба поддержки*\n\n"
-        f"Выберите действие:"
-    )
-
-    await message.answer(
-        text,
-        reply_markup=support_keyboard(),
-        parse_mode="Markdown"
-    )
-
+# Support menu handler moved to bot/handlers/support.py
+# Removed to avoid handler conflicts
 
 @router.message(F.text == "⚙️ Настройки")
 async def show_settings_menu(
