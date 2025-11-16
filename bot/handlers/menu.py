@@ -4,6 +4,8 @@ Menu handler.
 Handles main menu navigation - ТОЛЬКО REPLY KEYBOARDS!
 """
 
+from typing import Any
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
@@ -71,10 +73,21 @@ async def show_main_menu(
 async def handle_main_menu(
     message: Message,
     session: AsyncSession,
-    user: User,
     state: FSMContext,
+    **data: Any,
 ) -> None:
     """Handle main menu button."""
+    user: User | None = data.get("user")
+    if not user:
+        # Если по какой-то причине DI не предоставил user, просто очистим
+        # состояние и покажем базовое меню без учёта статусов.
+        await state.clear()
+        await message.answer(
+            "📊 *Главное меню*\n\nВыберите действие:",
+            reply_markup=main_menu_reply_keyboard(),
+            parse_mode="Markdown",
+        )
+        return
     await show_main_menu(message, session, user, state)
 
 

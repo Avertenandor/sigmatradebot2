@@ -378,8 +378,8 @@ async def skip_contacts(
 async def process_phone(
     message: Message,
     session: AsyncSession,
-    user: User,
     state: FSMContext,
+    **data: Any,
 ) -> None:
     """Process phone number."""
     # Check if message is a menu button - if so, clear state and ignore
@@ -426,8 +426,8 @@ async def process_phone(
 async def process_email(
     message: Message,
     session: AsyncSession,
-    user: User,
     state: FSMContext,
+    **data: Any,
 ) -> None:
     """Process email and save contacts."""
     # Check if message is a menu button - if so, clear state and ignore
@@ -457,8 +457,15 @@ async def process_email(
 
     # Update user with contacts
     user_service = UserService(session)
+    current_user: User | None = data.get("user")
+    if not current_user:
+        logger.error("process_email: user missing in middleware data")
+        await message.answer(
+            "❌ Ошибка контекста пользователя. Повторите /start"
+        )
+        return
     await user_service.update_profile(
-        user.id,
+        current_user.id,
         phone=phone,
         email=email,
     )
