@@ -156,14 +156,12 @@ pytest tests/load/ -v -m load     # Load tests
 # With coverage
 pytest --cov=app --cov=bot --cov-report=html
 
-# Type checking
-mypy bot/ app/
-
-# Format code
-black bot/ app/
+# Linting (Ruff)
+ruff check .
 ```
 
 **Testing Documentation:**
+
 - **[tests/TESTING_SYSTEM_DOCUMENTATION.md](tests/TESTING_SYSTEM_DOCUMENTATION.md)**: Complete testing system
 - **[tests/LOAD_TESTING_SCENARIOS.md](tests/LOAD_TESTING_SCENARIOS.md)**: Load testing scenarios
 - **[tests/TEST_COVERAGE_MAP.md](tests/TEST_COVERAGE_MAP.md)**: Coverage map
@@ -172,23 +170,27 @@ black bot/ app/
 ## 📊 Key Components
 
 ### Middleware Chain (Order Critical!)
+
 1. RequestIDMiddleware - Unique request tracking
 2. DatabaseMiddleware - Database session management
 3. AuthMiddleware - User authentication
 
 ### Models
+
 - User, Deposit, Transaction, Referral, ReferralEarning
 - PaymentRetry, FailedNotification (PART5)
 - SupportTicket, SupportMessage
 
 ### Services
+
 - UserService, DepositService, ReferralService
 - WithdrawalService, NotificationService
 - TransactionService, SupportService
 
 ## 🐛 Troubleshooting
 
-**Bot won't start**
+### Bot won't start
+
 ```bash
 # Check logs
 sudo journalctl -u sigmatradebot -f
@@ -200,7 +202,8 @@ cat .env | grep TELEGRAM_BOT_TOKEN
 psql -h localhost -U botuser -d sigmatradebot
 ```
 
-**Database errors**
+### Database errors
+
 ```bash
 # Check PostgreSQL status
 sudo systemctl status postgresql

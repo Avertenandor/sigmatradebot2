@@ -55,6 +55,9 @@ python -m pytest tests/unit -v
 
 # Покрытие
 python -m pytest --cov=app --cov=bot --cov-report=html
+
+# Линтер (Ruff)
+ruff check .
 ```
 
 ## 📦 Обновление зависимостей
