@@ -9,8 +9,8 @@ asyncpg==0.29.0
 psycopg2-binary==2.9.9
 
 # Settings & Configuration
-pydantic==2.7.4
-pydantic-settings==2.2.1
+pydantic==2.5.3
+pydantic-settings==2.1.0
 python-dotenv==1.0.0
 
 # Blockchain & Web3
