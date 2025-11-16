@@ -8,21 +8,46 @@ from decimal import Decimal
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import Message
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from app.services.deposit_service import DepositService
-from bot.keyboards.inline import deposit_keyboard, main_menu_keyboard
+from bot.keyboards.reply import deposit_keyboard, main_menu_reply_keyboard
 from bot.states.deposit import DepositStates
+from bot.utils.menu_buttons import is_menu_button
 
 router = Router()
 
 
-@router.callback_query(F.data.startswith("deposit:level:"))
+def extract_level_from_button(text: str) -> int:
+    """
+    Extract deposit level from button text.
+    
+    Args:
+        text: Button text like "💰 Пополнить Level 1 (50 USDT)"
+        
+    Returns:
+        Level number (1-5)
+    """
+    # Extract level number from text
+    if "Level 1" in text or "Level 2" in text or "Level 3" in text or "Level 4" in text or "Level 5" in text:
+        for i in range(1, 6):
+            if f"Level {i}" in text:
+                return i
+    return 1  # Default to level 1 if not found
+
+
+@router.message(F.text.in_([
+    "💰 Пополнить Level 1 (50 USDT)",
+    "💰 Пополнить Level 2 (100 USDT)",
+    "💰 Пополнить Level 3 (250 USDT)",
+    "💰 Пополнить Level 4 (500 USDT)",
+    "💰 Пополнить Level 5 (1000 USDT)",
+]))
 async def select_deposit_level(
-    callback: CallbackQuery,
+    message: Message,
     session: AsyncSession,
     user: User,
     state: FSMContext,
@@ -31,13 +56,13 @@ async def select_deposit_level(
     Handle deposit level selection with validation.
 
     Args:
-        callback: Callback query
+        message: Telegram message
         session: Database session
         user: Current user
         state: FSM state
     """
-    # Extract level from callback data
-    level = int(callback.data.split(":")[-1])
+    # Extract level from button text
+    level = extract_level_from_button(message.text)
 
     # Validate purchase eligibility
     from app.services.deposit_validation_service import DepositValidationService
@@ -48,9 +73,10 @@ async def select_deposit_level(
     )
 
     if not can_purchase:
-        await callback.answer(
-            error_msg or "Нельзя купить этот уровень депозита",
-            show_alert=True,
+        await message.answer(
+            f"❌ {error_msg or 'Нельзя купить этот уровень депозита'}\n\n"
+            "Попробуйте выбрать другой уровень депозита.",
+            reply_markup=deposit_keyboard()
         )
         return
 
@@ -63,8 +89,8 @@ async def select_deposit_level(
 
     # Ask for amount
     text = (
-        f"📦 **Депозит уровня {level}**\n\n"
-        f"💰 Сумма депозита: **{expected_amount} USDT**\n\n"
+        f"📦 *Депозит уровня {level}*\n\n"
+        f"💰 Сумма депозита: *{expected_amount} USDT*\n\n"
     )
 
     if level == 1:
@@ -74,14 +100,12 @@ async def select_deposit_level(
         )
 
     text += (
-        "📝 **Следующий шаг:**\n"
+        f"📝 *Следующий шаг:*\n"
         f"Отправьте {expected_amount} USDT на адрес кошелька проекта.\n\n"
         "После отправки введите hash транзакции:"
     )
 
-    await callback.message.edit_text(text, parse_mode="Markdown")
-    await callback.answer()
-
+    await message.answer(text, parse_mode="Markdown")
     await state.set_state(DepositStates.waiting_for_tx_hash)
 
 
@@ -201,6 +225,5 @@ async def process_tx_hash(
         f"https://bscscan.com/tx/{tx_hash}"
     )
 
-    from bot.keyboards.reply import main_menu_reply_keyboard
     await message.answer(text, parse_mode="Markdown", reply_markup=main_menu_reply_keyboard())
     await state.clear()

@@ -8,22 +8,23 @@ from decimal import Decimal
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import Message
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from app.services.user_service import UserService
 from app.services.withdrawal_service import WithdrawalService
-from bot.keyboards.inline import main_menu_keyboard, withdrawal_keyboard
+from bot.keyboards.reply import main_menu_reply_keyboard, withdrawal_keyboard
 from bot.states.withdrawal import WithdrawalStates
+from bot.utils.menu_buttons import is_menu_button
 
 router = Router()
 
 
-@router.callback_query(F.data == "withdrawal:all")
+@router.message(F.text == "💸 Вывести всю сумму")
 async def withdraw_all(
-    callback: CallbackQuery,
+    message: Message,
     session: AsyncSession,
     user: User,
     state: FSMContext,
@@ -32,17 +33,17 @@ async def withdraw_all(
     Withdraw all available balance.
 
     Args:
-        callback: Callback query
+        message: Telegram message
         session: Database session
         user: Current user
         state: FSM state
     """
     # Check verification status (from TZ: withdrawals require verification)
     if not user.is_verified:
-        await callback.answer(
+        await message.answer(
             "❌ Для вывода средств необходимо пройти верификацию!\n\n"
             "Используйте кнопку '✅ Пройти верификацию' в настройках.",
-            show_alert=True,
+            reply_markup=withdrawal_keyboard()
         )
         return
     
@@ -51,9 +52,9 @@ async def withdraw_all(
     balance = await user_service.get_user_balance(user.id)
 
     if not balance or balance["available_balance"] == 0:
-        await callback.answer(
+        await message.answer(
             "❌ Недостаточно средств для вывода",
-            show_alert=True,
+            reply_markup=withdrawal_keyboard()
         )
         return
 
@@ -62,9 +63,9 @@ async def withdraw_all(
     # Check minimum
     min_amount = WithdrawalService.get_min_withdrawal_amount()
     if available < min_amount:
-        await callback.answer(
+        await message.answer(
             f"❌ Минимальная сумма вывода: {min_amount} USDT",
-            show_alert=True,
+            reply_markup=withdrawal_keyboard()
         )
         return
 
@@ -72,38 +73,35 @@ async def withdraw_all(
     await state.update_data(amount=available)
 
     text = (
-        f"💸 Вывод всех средств\n\n"
-        f"Сумма: {available} USDT\n\n"
+        f"💸 *Вывод всех средств*\n\n"
+        f"Сумма: *{available} USDT*\n\n"
         f"Для подтверждения введите ваш финансовый пароль:"
     )
 
-    await callback.message.edit_text(text)
-    await callback.answer()
-
+    await message.answer(text, parse_mode="Markdown")
     await state.set_state(WithdrawalStates.waiting_for_financial_password)
 
 
-@router.callback_query(F.data == "withdrawal:amount")
+@router.message(F.text == "💵 Вывести указанную сумму")
 async def withdraw_amount(
-    callback: CallbackQuery, state: FSMContext
+    message: Message,
+    state: FSMContext,
 ) -> None:
     """
     Withdraw specific amount.
 
     Args:
-        callback: Callback query
+        message: Telegram message
         state: FSM state
     """
     text = (
-        f"💸 Вывод средств\n\n"
+        f"💸 *Вывод средств*\n\n"
         f"Введите сумму вывода в USDT:\n\n"
         f"Минимальная сумма: "
-        f"{WithdrawalService.get_min_withdrawal_amount()} USDT"
+        f"*{WithdrawalService.get_min_withdrawal_amount()} USDT*"
     )
 
-    await callback.message.edit_text(text)
-    await callback.answer()
-
+    await message.answer(text, parse_mode="Markdown")
     await state.set_state(WithdrawalStates.waiting_for_amount)
 
 
@@ -233,7 +231,6 @@ async def process_financial_password(
     )
 
     if error:
-        from bot.keyboards.reply import main_menu_reply_keyboard
         await message.answer(
             f"❌ Ошибка создания заявки:\n{error}",
             reply_markup=main_menu_reply_keyboard(),
@@ -260,14 +257,13 @@ async def process_financial_password(
         f"Вы получите уведомление после обработки."
     )
 
-    from bot.keyboards.reply import main_menu_reply_keyboard
     await message.answer(text, reply_markup=main_menu_reply_keyboard())
     await state.clear()
 
 
-@router.callback_query(F.data == "withdrawal:history")
+@router.message(F.text == "📜 История выводов")
 async def show_withdrawal_history(
-    callback: CallbackQuery,
+    message: Message,
     session: AsyncSession,
     user: User,
 ) -> None:
@@ -275,7 +271,7 @@ async def show_withdrawal_history(
     Show withdrawal history.
 
     Args:
-        callback: Callback query
+        message: Telegram message
         session: Database session
         user: Current user
     """
@@ -289,7 +285,7 @@ async def show_withdrawal_history(
     if not withdrawals:
         text = "📜 История выводов пуста"
     else:
-        text = "📜 История выводов:\n\n"
+        text = "📜 *История выводов:*\n\n"
         for w in withdrawals:
             status_emoji = {
                 "PENDING": "⏳",
@@ -298,7 +294,7 @@ async def show_withdrawal_history(
             }.get(w.status, "❓")
 
             text += (
-                f"{status_emoji} {w.amount} USDT\n"
+                f"{status_emoji} *{w.amount} USDT*\n"
                 f"📅 {w.created_at.strftime('%d.%m.%Y %H:%M')}\n"
             )
 
@@ -307,7 +303,8 @@ async def show_withdrawal_history(
 
             text += "\n"
 
-    await callback.message.edit_text(
-        text, reply_markup=withdrawal_keyboard()
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=withdrawal_keyboard()
     )
-    await callback.answer()
