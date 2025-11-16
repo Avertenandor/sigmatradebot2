@@ -49,11 +49,11 @@ async def handle_create_ticket(
         f"Для отмены нажмите '📊 Главное меню'"
     )
     
-    await state.set_state(SupportStates.waiting_for_message)
+    await state.set_state(SupportStates.awaiting_input)
     await message.answer(text, parse_mode="Markdown")
 
 
-@router.message(SupportStates.waiting_for_message)
+@router.message(SupportStates.awaiting_input)
 async def process_ticket_message(
     message: Message,
     state: FSMContext,
