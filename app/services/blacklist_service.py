@@ -117,7 +117,9 @@ class BlacklistService:
 
                 # Update appeal deadline for blocked users
                 if action_type == BlacklistActionType.BLOCKED:
-                    appeal_deadline = datetime.now(timezone.utc) + timedelta(days=3)
+                    appeal_deadline = (
+                        datetime.now(timezone.utc) + timedelta(days=3)
+                    )
                 else:
                     appeal_deadline = None
 
