@@ -33,6 +33,7 @@ async def show_main_menu(
     event: Message | CallbackQuery,
     session: AsyncSession,
     user: User,
+    is_admin: bool = False,
 ) -> None:
     """
     Show main menu with conditional buttons based on user status.
@@ -41,6 +42,7 @@ async def show_main_menu(
         event: Message or callback query
         session: Database session
         user: Current user
+        is_admin: Whether the user is an admin
     """
     from app.repositories.blacklist_repository import BlacklistRepository
     from bot.keyboards.reply import main_menu_reply_keyboard
@@ -57,8 +59,12 @@ async def show_main_menu(
     )
 
     if isinstance(event, Message):
-        # Use reply keyboard for messages (with conditional buttons)
-        reply_keyboard = main_menu_reply_keyboard(user=user, blacklist_entry=blacklist_entry)
+        # Use reply keyboard for messages (with conditional buttons including admin)
+        reply_keyboard = main_menu_reply_keyboard(
+            user=user, 
+            blacklist_entry=blacklist_entry,
+            is_admin=is_admin
+        )
         await event.answer(text, reply_markup=reply_keyboard)
     else:
         # Use inline keyboard for callbacks

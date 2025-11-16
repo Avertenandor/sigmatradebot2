@@ -17,15 +17,17 @@ from app.models.user import User
 def main_menu_reply_keyboard(
     user: Optional[User] = None,
     blacklist_entry: Optional[Blacklist] = None,
+    is_admin: bool = False,
 ) -> ReplyKeyboardMarkup:
     """
     Main menu reply keyboard.
 
-    Conditionally shows buttons based on user status (e.g., blocked).
+    Conditionally shows buttons based on user status (e.g., blocked, admin).
 
     Args:
         user: The current user object (optional).
         blacklist_entry: The user's blacklist entry, if any (optional).
+        is_admin: Whether the user is an admin (optional).
 
     Returns:
         ReplyKeyboardMarkup with main menu buttons
@@ -59,6 +61,12 @@ def main_menu_reply_keyboard(
         builder.row(
             KeyboardButton(text="✅ Пройти верификацию"),
         )
+        
+        # Add admin panel button for admins
+        if is_admin:
+            builder.row(
+                KeyboardButton(text="👑 Админ-панель"),
+            )
 
     return builder.as_markup(resize_keyboard=True)
 

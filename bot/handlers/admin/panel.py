@@ -4,7 +4,8 @@ Handles admin panel main menu and platform statistics
 """
 
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.filters import Command
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.user_service import UserService
@@ -63,6 +64,64 @@ def get_admin_stats_keyboard(range_type: str = "all") -> InlineKeyboardMarkup:
         ],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+@router.message(Command("admin"))
+async def cmd_admin_panel(
+    message: Message,
+    session: AsyncSession,
+    is_admin: bool = False,
+) -> None:
+    """
+    Вход в админ-панель по команде /admin.
+    Работает только для админов (is_admin=True из middleware).
+    """
+    if not is_admin:
+        await message.answer("❌ Эта команда доступна только администраторам")
+        return
+
+    text = """
+👑 **Панель администратора**
+
+Добро пожаловать в панель управления SigmaTrade Bot.
+
+Выберите действие:
+    """.strip()
+
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=get_admin_panel_keyboard(),
+    )
+
+
+@router.message(F.text == "👑 Админ-панель")
+async def handle_admin_panel_button(
+    message: Message,
+    session: AsyncSession,
+    is_admin: bool = False,
+) -> None:
+    """
+    Вход в админ-панель по кнопке в reply keyboard.
+    Работает только для админов (is_admin=True из middleware).
+    """
+    if not is_admin:
+        await message.answer("❌ Эта функция доступна только администраторам")
+        return
+
+    text = """
+👑 **Панель администратора**
+
+Добро пожаловать в панель управления SigmaTrade Bot.
+
+Выберите действие:
+    """.strip()
+
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=get_admin_panel_keyboard(),
+    )
 
 
 @router.callback_query(F.data == "admin_panel")
