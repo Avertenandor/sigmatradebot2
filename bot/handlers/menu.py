@@ -1,700 +1,316 @@
 """
 Menu handler.
 
-Handles main menu navigation.
+Handles main menu navigation - ТОЛЬКО REPLY KEYBOARDS!
 """
 
 from aiogram import F, Router
-from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, default_state
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
+from app.repositories.blacklist_repository import BlacklistRepository
 from app.services.transaction_service import TransactionService
 from app.services.user_service import UserService
-from bot.keyboards.inline import (
+from bot.keyboards.reply import (
     deposit_keyboard,
-    main_menu_keyboard,
+    main_menu_reply_keyboard,
     referral_keyboard,
     settings_keyboard,
     support_keyboard,
     withdrawal_keyboard,
 )
 from bot.states.update_contacts import UpdateContactsStates
+from bot.utils.menu_buttons import is_menu_button
 
 router = Router()
 
 
-@router.message(F.text == "📊 Главное меню")
-@router.callback_query(F.data == "menu:main")
 async def show_main_menu(
-    event: Message | CallbackQuery,
-    session: AsyncSession,
-    user: User,
-    is_admin: bool = False,
-) -> None:
-    """
-    Show main menu with conditional buttons based on user status.
-
-    Args:
-        event: Message or callback query
-        session: Database session
-        user: Current user
-        is_admin: Whether the user is an admin
-    """
-    from app.repositories.blacklist_repository import BlacklistRepository
-    from bot.keyboards.reply import main_menu_reply_keyboard
-    from bot.keyboards.inline import main_menu_keyboard
-    
-    # Check blacklist status
-    blacklist_repo = BlacklistRepository(session)
-    blacklist_entry = await blacklist_repo.get_by_telegram_id(user.telegram_id)
-    
-    text = (
-        f"👤 Пользователь: {user.username or 'Аноним'}\n"
-        f"💰 Баланс: {user.balance} USDT\n\n"
-        f"Выберите действие:"
-    )
-
-    if isinstance(event, Message):
-        # Use reply keyboard for messages (with conditional buttons including admin)
-        reply_keyboard = main_menu_reply_keyboard(
-            user=user, 
-            blacklist_entry=blacklist_entry,
-            is_admin=is_admin
-        )
-        await event.answer(text, reply_markup=reply_keyboard)
-    else:
-        # Use inline keyboard for callbacks
-        await event.message.edit_text(
-            text, reply_markup=main_menu_keyboard()
-        )
-        await event.answer()
-
-
-@router.message(F.text == "📊 Баланс")
-@router.callback_query(F.data == "menu:balance")
-async def show_balance(
-    event: Message | CallbackQuery,
+    message: Message,
     session: AsyncSession,
     user: User,
     state: FSMContext,
 ) -> None:
     """
-    Show user balance.
-
+    Show main menu.
+    
     Args:
-        event: Message or callback query
+        message: Message object
         session: Database session
         user: Current user
         state: FSM state
     """
-    # Clear any active FSM state when navigating to balance
+    # Clear any active FSM state
+    await state.clear()
+    
+    # Get blacklist status
+    blacklist_repo = BlacklistRepository(session)
+    blacklist_entry = await blacklist_repo.get_active_blacklist(user.telegram_id)
+    
+    # Check if user is admin
+    from app.config.settings import settings
+    is_admin = user.telegram_id in settings.get_admin_ids()
+    
+    text = (
+        f"📊 *Главное меню*\n\n"
+        f"Добро пожаловать, {user.username or 'пользователь'}!\n\n"
+        f"Выберите действие из меню ниже:"
+    )
+    
+    await message.answer(
+        text,
+        reply_markup=main_menu_reply_keyboard(
+            user=user,
+            blacklist_entry=blacklist_entry,
+            is_admin=is_admin
+        ),
+        parse_mode="Markdown"
+    )
+
+
+@router.message(F.text == "📊 Главное меню")
+async def handle_main_menu(
+    message: Message,
+    session: AsyncSession,
+    user: User,
+    state: FSMContext,
+) -> None:
+    """Handle main menu button."""
+    await show_main_menu(message, session, user, state)
+
+
+@router.message(F.text == "📊 Баланс")
+async def show_balance(
+    message: Message,
+    session: AsyncSession,
+    user: User,
+    state: FSMContext,
+) -> None:
+    """Show user balance."""
     await state.clear()
     
     user_service = UserService(session)
     balance = await user_service.get_user_balance(user.id)
 
     if not balance:
-        if isinstance(event, Message):
-            await event.answer("❌ Ошибка получения баланса")
-        else:
-            await event.answer("Ошибка получения баланса", show_alert=True)
+        await message.answer("❌ Ошибка получения баланса")
         return
 
     text = (
-        f"💰 Ваш баланс:\n\n"
-        f"Общий: {balance['total_balance']:.2f} USDT\n"
-        f"Доступно: {balance['available_balance']:.2f} USDT\n"
-        f"В ожидании: {balance['pending_earnings']:.2f} USDT\n\n"
-        f"📊 Статистика:\n"
-        f"Депозиты: {balance['total_deposits']:.2f} USDT\n"
-        f"Выводы: {balance['total_withdrawals']:.2f} USDT\n"
-        f"Заработано: {balance['total_earnings']:.2f} USDT"
+        f"💰 *Ваш баланс:*\n\n"
+        f"Общий: `{balance['total_balance']:.2f} USDT`\n"
+        f"Доступно: `{balance['available_balance']:.2f} USDT`\n"
+        f"В ожидании: `{balance['pending_earnings']:.2f} USDT`\n\n"
+        f"📊 *Статистика:*\n"
+        f"Депозиты: `{balance['total_deposits']:.2f} USDT`\n"
+        f"Выводы: `{balance['total_withdrawals']:.2f} USDT`\n"
+        f"Заработано: `{balance['total_earnings']:.2f} USDT`"
     )
 
-    if isinstance(event, Message):
-        from bot.keyboards.reply import main_menu_reply_keyboard
-        await event.answer(text, reply_markup=main_menu_reply_keyboard())
-    else:
-        await event.message.edit_text(
-            text, reply_markup=main_menu_keyboard()
-        )
-        await event.answer()
-
-
-@router.message(F.text == "📜 История")
-@router.callback_query(F.data == "menu:history")
-async def show_history(
-    event: Message | CallbackQuery,
-    session: AsyncSession,
-    user: User,
-    state: FSMContext,
-) -> None:
-    """
-    Show transaction history.
-
-    Args:
-        event: Message or callback query
-        session: Database session
-        user: Current user
-        state: FSM state
-    """
-    # Clear any active FSM state when navigating to history
-    await state.clear()
-    
-    tx_service = TransactionService(session)
-    recent = await tx_service.get_recent_transactions(user.id, limit=10)
-
-    if not recent:
-        text = "📜 История транзакций пуста"
-    else:
-        text = "📜 Последние транзакции:\n\n"
-        for tx in recent:
-            status_emoji = {
-                "PENDING": "⏳",
-                "CONFIRMED": "✅",
-                "FAILED": "❌",
-            }.get(tx.status.name, "❓")
-
-            text += (
-                f"{status_emoji} {tx.description}\n"
-                f"💰 {tx.amount} USDT\n"
-                f"📅 {tx.created_at.strftime('%d.%m.%Y %H:%M')}\n\n"
-            )
-
-    if isinstance(event, Message):
-        from bot.keyboards.reply import main_menu_reply_keyboard
-        await event.answer(text, reply_markup=main_menu_reply_keyboard())
-    else:
-        await event.message.edit_text(
-            text, reply_markup=main_menu_keyboard()
-        )
-        await event.answer()
+    await message.answer(text, parse_mode="Markdown")
 
 
 @router.message(F.text == "💰 Депозит")
-@router.callback_query(F.data == "menu:deposit")
 async def show_deposit_menu(
-    event: Message | CallbackQuery,
+    message: Message,
+    session: AsyncSession,
+    user: User,
     state: FSMContext,
 ) -> None:
-    """
-    Show deposit menu.
-
-    Args:
-        event: Message or callback query
-        state: FSM state
-    """
-    # Clear any active FSM state when navigating to deposit
+    """Show deposit menu."""
     await state.clear()
+
+    from app.config.settings import settings
     
     text = (
-        "💰 Депозит\n\n"
-        "Выберите уровень депозита:\n\n"
-        "📦 Уровень 1: ROI cap 500%\n"
-        "📦 Уровень 2-5: Без ROI cap"
+        f"💰 *Выберите уровень депозита:*\n\n"
+        f"Level 1: `{settings.deposit_level_1:.0f} USDT`\n"
+        f"Level 2: `{settings.deposit_level_2:.0f} USDT`\n"
+        f"Level 3: `{settings.deposit_level_3:.0f} USDT`\n"
+        f"Level 4: `{settings.deposit_level_4:.0f} USDT`\n"
+        f"Level 5: `{settings.deposit_level_5:.0f} USDT`"
     )
 
-    if isinstance(event, Message):
-        from bot.keyboards.reply import main_menu_reply_keyboard
-        await event.answer(
-            text,
-            reply_markup=main_menu_reply_keyboard(),
-            parse_mode="Markdown"
-        )
-        await event.answer(
-            "Выберите уровень:",
-            reply_markup=deposit_keyboard()
-        )
-    else:
-        await event.message.edit_text(
-            text,
-            reply_markup=deposit_keyboard(),
-            parse_mode="Markdown"
-        )
-        await event.answer()
+    await message.answer(
+        text,
+        reply_markup=deposit_keyboard(),
+        parse_mode="Markdown"
+    )
 
 
 @router.message(F.text == "💸 Вывод")
-@router.callback_query(F.data == "menu:withdrawal")
 async def show_withdrawal_menu(
-    event: Message | CallbackQuery,
+    message: Message,
+    session: AsyncSession,
+    user: User,
     state: FSMContext,
 ) -> None:
-    """
-    Show withdrawal menu.
-
-    Args:
-        event: Message or callback query
-        state: FSM state
-    """
-    # Clear any active FSM state when navigating to withdrawal
+    """Show withdrawal menu."""
     await state.clear()
-    
+
+    user_service = UserService(session)
+    balance = await user_service.get_user_balance(user.id)
+
     text = (
-        "💸 Вывод средств\n\n"
-        "Минимальная сумма: 5 USDT\n"
-        "Комиссия сети: ~0.1-0.5 USDT\n\n"
-        "Выберите действие:"
+        f"💸 *Вывод средств*\n\n"
+        f"Доступно для вывода: `{balance['available_balance']:.2f} USDT`\n\n"
+        f"Выберите действие:"
     )
 
-    if isinstance(event, Message):
-        from bot.keyboards.reply import main_menu_reply_keyboard
-        await event.answer(text, reply_markup=main_menu_reply_keyboard())
-        await event.answer(
-            "Выберите действие:",
-            reply_markup=withdrawal_keyboard()
-        )
-    else:
-        await event.message.edit_text(
-            text, reply_markup=withdrawal_keyboard()
-        )
-        await event.answer()
+    await message.answer(
+        text,
+        reply_markup=withdrawal_keyboard(),
+        parse_mode="Markdown"
+    )
 
 
 @router.message(F.text == "👥 Рефералы")
-@router.callback_query(F.data == "menu:referral")
 async def show_referral_menu(
-    event: Message | CallbackQuery,
+    message: Message,
+    session: AsyncSession,
     user: User,
     state: FSMContext,
 ) -> None:
-    """
-    Show referral menu.
-
-    Args:
-        event: Message or callback query
-        user: Current user
-        state: FSM state
-    """
-    # Clear any active FSM state when navigating to referral
+    """Show referral menu."""
     await state.clear()
-    
-    # Generate referral link
-    bot_username = (await event.bot.get_me()).username
-    ref_link = f"https://t.me/{bot_username}?start=ref{user.telegram_id}"
+
+    from app.config.settings import settings
+    bot_username = settings.telegram_bot_username
+    referral_link = f"https://t.me/{bot_username}?start={user.telegram_id}"
 
     text = (
-        f"👥 Реферальная программа\n\n"
+        f"👥 *Реферальная программа*\n\n"
         f"Ваша реферальная ссылка:\n"
-        f"`{ref_link}`\n\n"
-        f"💰 Вознаграждения:\n"
-        f"• Уровень 1: 3%\n"
-        f"• Уровень 2: 2%\n"
-        f"• Уровень 3: 5%\n\n"
-        f"Приглашайте друзей и зарабатывайте!"
+        f"`{referral_link}`\n\n"
+        f"Приглашайте друзей и получайте вознаграждение!"
     )
 
-    if isinstance(event, Message):
-        from bot.keyboards.reply import main_menu_reply_keyboard
-        await event.answer(text, reply_markup=main_menu_reply_keyboard(), parse_mode="Markdown")
-        await event.answer(
-            "Выберите действие:",
-            reply_markup=referral_keyboard(user.telegram_id)
-        )
-    else:
-        await event.message.edit_text(
-            text,
-            reply_markup=referral_keyboard(user.telegram_id),
-        )
-        await event.answer()
+    await message.answer(
+        text,
+        reply_markup=referral_keyboard(),
+        parse_mode="Markdown"
+    )
 
 
 @router.message(F.text == "💬 Поддержка")
-@router.callback_query(F.data == "menu:support")
 async def show_support_menu(
-    event: Message | CallbackQuery,
+    message: Message,
+    session: AsyncSession,
+    user: User,
     state: FSMContext,
 ) -> None:
-    """
-    Show support menu.
-
-    Args:
-        event: Message or callback query
-        state: FSM state
-    """
-    # Clear any active FSM state when navigating to support
+    """Show support menu."""
     await state.clear()
-    
+
     text = (
-        "💬 Поддержка\n\n"
-        "Наша команда готова помочь вам 24/7!\n\n"
-        "Выберите действие:"
+        f"💬 *Служба поддержки*\n\n"
+        f"Выберите действие:"
     )
 
-    if isinstance(event, Message):
-        from bot.keyboards.reply import support_keyboard as support_reply_keyboard
-        await event.answer(text, reply_markup=support_reply_keyboard())
-    else:
-        await event.message.edit_text(
-            text, reply_markup=support_keyboard()
-        )
-        await event.answer()
+    await message.answer(
+        text,
+        reply_markup=support_keyboard(),
+        parse_mode="Markdown"
+    )
 
 
 @router.message(F.text == "⚙️ Настройки")
-@router.callback_query(F.data == "menu:settings")
 async def show_settings_menu(
-    event: Message | CallbackQuery,
+    message: Message,
     session: AsyncSession,
     user: User,
     state: FSMContext,
 ) -> None:
-    """
-    Show user settings menu.
-
-    Args:
-        event: Message or callback query
-        session: Database session
-        user: Current user
-        state: FSM state
-    """
-    # Clear any active FSM state when navigating to settings
+    """Show settings menu."""
     await state.clear()
-    
-    from bot.keyboards.inline import settings_keyboard
-    from bot.keyboards.reply import main_menu_reply_keyboard
-    
-    # Format wallet address for display
-    wallet_display = user.wallet_address
-    if len(user.wallet_address) > 20:
-        wallet_display = f"{user.wallet_address[:10]}...{user.wallet_address[-8:]}"
-    
+
     text = (
-        "⚙️ Настройки\n\n"
-        f"👤 Пользователь: {user.username or 'Аноним'}\n"
-        f"🆔 ID: {user.id}\n"
-        f"💳 Кошелек: `{wallet_display}`\n"
-        f"✅ Верификация: {'Пройдена' if user.is_verified else 'Не пройдена'}\n"
-        f"📅 Регистрация: {user.created_at.strftime('%d.%m.%Y')}\n\n"
-        "Выберите действие:"
+        f"⚙️ *Настройки*\n\n"
+        f"Выберите раздел:"
     )
 
-    if isinstance(event, Message):
-        await event.answer(
-            text,
-            reply_markup=main_menu_reply_keyboard(),
-            parse_mode="Markdown"
-        )
-        # Send inline keyboard for settings actions
-        await event.answer(
-            "Выберите настройку:",
-            reply_markup=settings_keyboard()
-        )
-    else:
-        await event.message.edit_text(
-            text,
-            reply_markup=settings_keyboard(),
-            parse_mode="Markdown"
-        )
-        await event.answer()
-
-
-@router.message(F.text == "🎁 Награды")
-@router.callback_query(F.data == "menu:rewards")
-async def show_rewards_menu(
-    event: Message | CallbackQuery,
-    session: AsyncSession,
-    user: User,
-    state: FSMContext,
-) -> None:
-    """
-    Show rewards menu.
-
-    Args:
-        event: Message or callback query
-        session: Database session
-        user: Current user
-        state: FSM state
-    """
-    # Clear any active FSM state when navigating to rewards
-    await state.clear()
-    
-    from app.repositories.deposit_reward_repository import DepositRewardRepository
-    
-    reward_repo = DepositRewardRepository(session)
-    # Get user's deposit rewards
-    from sqlalchemy import select
-    from app.models.deposit_reward import DepositReward
-    from app.models.deposit import Deposit
-    
-    stmt = (
-        select(DepositReward)
-        .join(Deposit, DepositReward.deposit_id == Deposit.id)
-        .where(Deposit.user_id == user.id)
-        .order_by(DepositReward.created_at.desc())
-        .limit(10)
-    )
-    result = await session.execute(stmt)
-    rewards = result.scalars().all()
-    
-    if not rewards:
-        text = (
-            "🎁 Награды\n\n"
-            "У вас пока нет наград.\n\n"
-            "Награды начисляются за:\n"
-            "• Активность в системе\n"
-            "• Приглашение рефералов\n"
-            "• Создание депозитов\n\n"
-            "Продолжайте использовать бота, чтобы получать награды!"
-        )
-    else:
-        text = "🎁 Ваши награды:\n\n"
-        total_earned = 0
-        for reward in rewards:
-            status_emoji = "✅" if reward.paid else "⏳"
-            reward_amount = float(reward.reward_amount)
-            text += (
-                f"{status_emoji} Награда за депозит #{reward.deposit_id}\n"
-                f"💰 {reward_amount:.2f} USDT\n"
-                f"📅 {reward.calculated_at.strftime('%d.%m.%Y %H:%M')}\n\n"
-            )
-            if reward.paid:
-                total_earned += reward_amount
-        
-        text += f"💰 Всего получено: {total_earned:.2f} USDT"
-    
-    if isinstance(event, Message):
-        from bot.keyboards.reply import main_menu_reply_keyboard
-        await event.answer(text, reply_markup=main_menu_reply_keyboard())
-    else:
-        await event.message.edit_text(
-            text, reply_markup=main_menu_keyboard()
-        )
-        await event.answer()
-
-
-@router.callback_query(F.data == "settings:profile")
-async def show_profile_settings(
-    callback: CallbackQuery,
-    session: AsyncSession,
-    user: User,
-) -> None:
-    """
-    Show profile settings.
-
-    Args:
-        callback: Callback query
-        session: Database session
-        user: Current user
-    """
-    from bot.keyboards.inline import settings_keyboard
-    
-    text = (
-        "👤 Настройки профиля\n\n"
-        f"🆔 ID: {user.id}\n"
-        f"👤 Username: {user.username or 'Не указан'}\n"
-        f"📅 Регистрация: {user.created_at.strftime('%d.%m.%Y %H:%M')}\n"
-        f"✅ Верификация: {'Пройдена' if user.is_verified else 'Не пройдена'}\n"
-        f"🚫 Статус: {'Заблокирован' if user.is_banned else 'Активен'}\n\n"
-        "Для изменения данных обратитесь в поддержку."
-    )
-    
-    await callback.message.edit_text(
-        text,
-        reply_markup=settings_keyboard()
-    )
-    await callback.answer()
-
-
-@router.callback_query(F.data == "settings:wallet")
-async def show_wallet_settings(
-    callback: CallbackQuery,
-    session: AsyncSession,
-    user: User,
-) -> None:
-    """
-    Show wallet settings.
-
-    Args:
-        callback: Callback query
-        session: Database session
-        user: Current user
-    """
-    from bot.keyboards.inline import settings_keyboard
-    
-    wallet_display = user.wallet_address
-    if len(user.wallet_address) > 20:
-        wallet_display = f"{user.wallet_address[:10]}...{user.wallet_address[-8:]}"
-    
-    text = (
-        "💳 Настройки кошелька\n\n"
-        f"📍 Адрес кошелька:\n`{user.wallet_address}`\n\n"
-        f"Отображаемый адрес: {wallet_display}\n\n"
-        "⚠️ Изменение адреса кошелька доступно только через поддержку."
-    )
-    
-    await callback.message.edit_text(
+    await message.answer(
         text,
         reply_markup=settings_keyboard(),
         parse_mode="Markdown"
     )
-    await callback.answer()
 
 
-@router.callback_query(F.data == "settings:notifications")
-async def show_notification_settings(
-    callback: CallbackQuery,
-    session: AsyncSession,
-    user: User,
-) -> None:
-    """
-    Show notification settings.
+# Handlers для submenu кнопок
 
-    Args:
-        callback: Callback query
-        session: Database session
-        user: Current user
-    """
-    text = (
-        "🔔 Настройки уведомлений\n\n"
-        "Вы получаете уведомления о:\n"
-        "✅ Новых депозитах\n"
-        "✅ Выплатах\n"
-        "✅ Изменениях баланса\n"
-        "✅ Реферальных наградах\n\n"
-        "Уведомления включены автоматически.\n"
-        "Для изменения настроек обратитесь в поддержку."
-    )
-    
-    await callback.message.edit_text(
-        text,
-        reply_markup=settings_keyboard()
-    )
-    await callback.answer()
-
-
-@router.callback_query(F.data == "settings:update_contacts")
-async def start_update_contacts(
-    callback: CallbackQuery,
-    session: AsyncSession,
-    user: User,
-    state: FSMContext,
-) -> None:
-    """
-    Start contacts update flow.
-
-    Args:
-        callback: Callback query
-        session: Database session
-        user: Current user
-        state: FSM state
-    """
-    current_contacts = []
-    if user.phone:
-        current_contacts.append(f"📞 Телефон: {user.phone}")
-    if user.email:
-        current_contacts.append(f"📧 Email: {user.email}")
-    
-    text = (
-        "📝 Обновление контактов\n\n"
-    )
-    
-    if current_contacts:
-        text += "Текущие контакты:\n" + "\n".join(current_contacts) + "\n\n"
-    else:
-        text += "Контакты не указаны.\n\n"
-    
-    text += "📞 Введите номер телефона (или /skip чтобы пропустить):"
-    
-    await callback.message.edit_text(text)
-    await callback.answer()
-    await state.set_state(UpdateContactsStates.waiting_for_phone)
-
-
-@router.message(UpdateContactsStates.waiting_for_phone)
-async def process_update_phone(
+@router.message(F.text == "👥 Мои рефералы")
+async def show_my_referrals(
     message: Message,
     session: AsyncSession,
     user: User,
-    state: FSMContext,
 ) -> None:
-    """Process phone number update."""
-    from bot.keyboards.reply import main_menu_reply_keyboard
-    
-    # Check if message is a menu button
-    from bot.utils.menu_buttons import is_menu_button
-    if is_menu_button(message.text):
-        await state.clear()
-        return
-    
-    if message.text and message.text.strip().lower() in ["/skip", "пропустить", "skip"]:
-        await state.update_data(phone=None)
-    else:
-        phone = message.text.strip() if message.text else ""
-        
-        # Basic phone validation
-        if phone and len(phone) < 5:
-            await message.answer(
-                "❌ Неверный формат телефона!\n\n"
-                "Введите корректный номер или /skip чтобы пропустить:"
-            )
-            return
-        
-        await state.update_data(phone=phone if phone else None)
-    
-    await state.set_state(UpdateContactsStates.waiting_for_email)
-    await message.answer(
-        "📧 Введите email (или /skip чтобы пропустить):",
-    )
-
-
-@router.message(UpdateContactsStates.waiting_for_email)
-async def process_update_email(
-    message: Message,
-    session: AsyncSession,
-    user: User,
-    state: FSMContext,
-) -> None:
-    """Process email update and save contacts."""
-    from bot.keyboards.reply import main_menu_reply_keyboard
-    
-    # Check if message is a menu button
-    from bot.utils.menu_buttons import is_menu_button
-    if is_menu_button(message.text):
-        await state.clear()
-        return
-    
-    if message.text and message.text.strip().lower() in ["/skip", "пропустить", "skip"]:
-        email = None
-    else:
-        email = message.text.strip() if message.text else None
-        
-        # Basic email validation
-        if email and ("@" not in email or "." not in email):
-            await message.answer(
-                "❌ Неверный формат email!\n\n"
-                "Введите корректный email или /skip чтобы пропустить:"
-            )
-            return
-    
-    # Get phone from state
-    data = await state.get_data()
-    phone = data.get("phone")
-    
-    # Update user with contacts
+    """Show user's referrals list."""
     user_service = UserService(session)
-    await user_service.update_profile(
-        user.id,
-        phone=phone,
-        email=email,
+    
+    # TODO: Implement referral list logic
+    text = "👥 *Мои рефералы*\n\nФункция в разработке"
+    
+    await message.answer(text, parse_mode="Markdown")
+
+
+@router.message(F.text == "💰 Мой заработок")
+async def show_my_earnings(
+    message: Message,
+    session: AsyncSession,
+    user: User,
+) -> None:
+    """Show user's referral earnings."""
+    # TODO: Implement earnings logic
+    text = "💰 *Мой заработок*\n\nФункция в разработке"
+    
+    await message.answer(text, parse_mode="Markdown")
+
+
+@router.message(F.text == "📊 Статистика рефералов")
+async def show_referral_stats(
+    message: Message,
+    session: AsyncSession,
+    user: User,
+) -> None:
+    """Show referral statistics."""
+    # TODO: Implement stats logic
+    text = "📊 *Статистика рефералов*\n\nФункция в разработке"
+    
+    await message.answer(text, parse_mode="Markdown")
+
+
+@router.message(F.text == "👤 Мой профиль")
+async def show_my_profile(
+    message: Message,
+    session: AsyncSession,
+    user: User,
+) -> None:
+    """Show user profile."""
+    text = (
+        f"👤 *Мой профиль*\n\n"
+        f"Username: @{user.username or 'не указан'}\n"
+        f"Telegram ID: `{user.telegram_id}`\n"
+        f"Кошелек: `{user.wallet_address[:10]}...{user.wallet_address[-8:]}`\n"
+        f"Дата регистрации: {user.created_at.strftime('%d.%m.%Y')}"
     )
     
-    contacts_text = "✅ Контакты обновлены!\n\n"
-    if phone:
-        contacts_text += f"📞 Телефон: {phone}\n"
-    else:
-        contacts_text += "📞 Телефон: не указан\n"
+    await message.answer(text, parse_mode="Markdown")
+
+
+@router.message(F.text == "💳 Мой кошелек")
+async def show_my_wallet(
+    message: Message,
+    session: AsyncSession,
+    user: User,
+) -> None:
+    """Show user wallet."""
+    text = (
+        f"💳 *Мой кошелек*\n\n"
+        f"Адрес: `{user.wallet_address}`\n\n"
+        f"⚠️ Сохраните приватный ключ в безопасном месте!"
+    )
     
-    if email:
-        contacts_text += f"📧 Email: {email}\n"
-    else:
-        contacts_text += "📧 Email: не указан\n"
-    
-    contacts_text += "\nВы можете изменить их снова в настройках профиля."
-    
-    await message.answer(contacts_text, reply_markup=main_menu_reply_keyboard())
-    await state.clear()
+    await message.answer(text, parse_mode="Markdown")
+
