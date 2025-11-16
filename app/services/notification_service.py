@@ -4,17 +4,17 @@ Notification service (+ PART5 multimedia support).
 Sends notifications to users via Telegram.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from aiogram import Bot
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.failed_notification import FailedNotification
+from app.repositories.admin_repository import AdminRepository
 from app.repositories.failed_notification_repository import (
     FailedNotificationRepository,
 )
-from app.repositories.admin_repository import AdminRepository
 from app.repositories.support_ticket_repository import SupportTicketRepository
 
 
@@ -77,7 +77,7 @@ class NotificationService:
         bot: Bot,
         user_telegram_id: int,
         file_id: str,
-        caption: Optional[str] = None,
+        caption: str | None = None,
     ) -> bool:
         """
         Send photo notification (PART5 multimedia).
@@ -115,7 +115,7 @@ class NotificationService:
         message: str,
         error: str,
         critical: bool = False,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> FailedNotification:
         """Save failed notification for retry (PART5)."""
         return await self.failed_repo.create(

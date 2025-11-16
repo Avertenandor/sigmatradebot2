@@ -4,8 +4,7 @@ Appeal model.
 Tracks user appeals for blocked accounts.
 """
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -15,7 +14,7 @@ from app.models.base import Base
 
 class AppealStatus(str):
     """Appeal status types."""
-    
+
     PENDING = "pending"  # Ожидает рассмотрения
     UNDER_REVIEW = "under_review"  # На рассмотрении
     APPROVED = "approved"  # Одобрена
@@ -71,19 +70,21 @@ class Appeal(Base):
     )
 
     # Review information (optional, set when reviewed)
-    reviewed_by_admin_id: Mapped[Optional[int]] = mapped_column(
+    reviewed_by_admin_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("admins.id", ondelete="SET NULL"), nullable=True
     )
 
-    review_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    review_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    reviewed_at: Mapped[Optional[datetime]] = mapped_column(
+    reviewed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False
     )
 
     def __repr__(self) -> str:
@@ -91,4 +92,3 @@ class Appeal(Base):
             f"<Appeal(id={self.id}, user_id={self.user_id}, "
             f"status={self.status})>"
         )
-

@@ -6,6 +6,7 @@ Handles user verification with financial password generation.
 
 import secrets
 import string
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
@@ -14,8 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from app.services.user_service import UserService
-from bot.keyboards.reply import main_menu_reply_keyboard, settings_keyboard
-
+from bot.keyboards.reply import main_menu_reply_keyboard
 
 router = Router(name="verification")
 
@@ -23,17 +23,22 @@ router = Router(name="verification")
 def generate_financial_password(length: int = 8) -> str:
     """
     Generate random financial password.
-    
+
     Args:
         length: Password length (default 8)
-        
+
     Returns:
         Random password string
     """
     # Use digits and uppercase letters for better readability
     alphabet = string.digits + string.ascii_uppercase
     # Exclude confusing characters: 0, O, I, 1
-    alphabet = alphabet.replace("0", "").replace("O", "").replace("I", "").replace("1", "")
+    alphabet = (
+        alphabet.replace("0", "")
+        .replace("O", "")
+        .replace("I", "")
+        .replace("1", "")
+    )
     password = "".join(secrets.choice(alphabet) for _ in range(length))
     return password
 
@@ -47,7 +52,7 @@ async def start_verification(
 ) -> None:
     """
     Start verification process - generate financial password.
-    
+
     Args:
         message: Telegram message
         session: Database session
@@ -56,7 +61,7 @@ async def start_verification(
     """
     # Clear any active FSM state
     await state.clear()
-    
+
     # Check if already verified
     if user.is_verified:
         message_text = (
@@ -64,33 +69,33 @@ async def start_verification(
             "Ваш финансовый пароль уже установлен. "
             "Если вы забыли пароль, обратитесь в поддержку."
         )
-        
+
         await message.answer(
             message_text,
             reply_markup=main_menu_reply_keyboard(),
         )
         return
-    
+
     # Generate financial password
     financial_password = generate_financial_password(8)
-    
+
     # Hash and save password
     user_service = UserService(session)
-    
+
     # Import bcrypt hashing
     import bcrypt
+
     password_hash = bcrypt.hashpw(
-        financial_password.encode("utf-8"),
-        bcrypt.gensalt(rounds=12)
+        financial_password.encode("utf-8"), bcrypt.gensalt(rounds=12)
     ).decode("utf-8")
-    
+
     # Update user
     await user_service.update_profile(
         user.id,
         financial_password=password_hash,
         is_verified=True,
     )
-    
+
     logger.info(
         "User verified with generated password",
         extra={
@@ -98,7 +103,7 @@ async def start_verification(
             "telegram_id": user.telegram_id,
         },
     )
-    
+
     # Show password ONCE with warning
     password_message = (
         "🔐 *Финансовый пароль сгенерирован!*\n\n"
@@ -110,10 +115,9 @@ async def start_verification(
         "• При утере пароля обратитесь в поддержку\n\n"
         "✅ Верификация завершена!"
     )
-    
+
     await message.answer(
         password_message,
         parse_mode="Markdown",
         reply_markup=main_menu_reply_keyboard(),
     )
-

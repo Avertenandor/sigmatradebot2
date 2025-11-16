@@ -12,4 +12,3 @@ class UpdateContactsStates(StatesGroup):
 
     waiting_for_phone = State()
     waiting_for_email = State()
-

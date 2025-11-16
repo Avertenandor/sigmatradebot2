@@ -3,7 +3,7 @@ Main Keyboard
 Main menu keyboard for the bot
 """
 
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 
 def get_main_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
@@ -18,28 +18,20 @@ def get_main_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
     """
     buttons = [
         [
-            InlineKeyboardButton(
-                text="💰 Депозит", callback_data="deposit"
-            ),
-            InlineKeyboardButton(
-                text="💸 Вывод", callback_data="withdrawal"
-            ),
+            InlineKeyboardButton(text="💰 Депозит", callback_data="deposit"),
+            InlineKeyboardButton(text="💸 Вывод", callback_data="withdrawal"),
         ],
         [
             InlineKeyboardButton(
                 text="🤝 Рефералы", callback_data="referrals"
             ),
-            InlineKeyboardButton(
-                text="👤 Профиль", callback_data="profile"
-            ),
+            InlineKeyboardButton(text="👤 Профиль", callback_data="profile"),
         ],
         [
             InlineKeyboardButton(
                 text="📊 История", callback_data="transaction_history"
             ),
-            InlineKeyboardButton(
-                text="🆘 Поддержка", callback_data="support"
-            ),
+            InlineKeyboardButton(text="🆘 Поддержка", callback_data="support"),
         ],
     ]
 

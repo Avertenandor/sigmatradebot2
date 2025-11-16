@@ -4,7 +4,6 @@ AdminSession repository.
 Data access layer for AdminSession model.
 """
 
-from typing import List, Optional
 from datetime import datetime
 
 from sqlalchemy import select
@@ -23,7 +22,7 @@ class AdminSessionRepository(BaseRepository[AdminSession]):
 
     async def get_by_token(
         self, session_token: str
-    ) -> Optional[AdminSession]:
+    ) -> AdminSession | None:
         """
         Get session by token.
 
@@ -37,7 +36,7 @@ class AdminSessionRepository(BaseRepository[AdminSession]):
 
     async def get_active_sessions(
         self, admin_id: int
-    ) -> List[AdminSession]:
+    ) -> list[AdminSession]:
         """
         Get active sessions for admin.
 
@@ -82,7 +81,7 @@ class AdminSessionRepository(BaseRepository[AdminSession]):
 
         stmt = (
             select(AdminSession)
-            .where(AdminSession.is_active == True)
+            .where(AdminSession.is_active)
             .where(AdminSession.expires_at < now)
         )
         result = await self.session.execute(stmt)

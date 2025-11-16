@@ -4,13 +4,11 @@ Transaction repository.
 Data access layer for Transaction model.
 """
 
-from typing import List, Optional
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.enums import TransactionStatus, TransactionType
 from app.models.transaction import Transaction
-from app.models.enums import TransactionType, TransactionStatus
 from app.repositories.base import BaseRepository
 
 
@@ -24,9 +22,9 @@ class TransactionRepository(BaseRepository[Transaction]):
     async def get_by_user(
         self,
         user_id: int,
-        type: Optional[str] = None,
-        status: Optional[str] = None,
-    ) -> List[Transaction]:
+        type: str | None = None,
+        status: str | None = None,
+    ) -> list[Transaction]:
         """
         Get transactions by user.
 
@@ -48,7 +46,7 @@ class TransactionRepository(BaseRepository[Transaction]):
 
     async def get_by_tx_hash(
         self, tx_hash: str
-    ) -> Optional[Transaction]:
+    ) -> Transaction | None:
         """
         Get transaction by hash.
 
@@ -62,7 +60,7 @@ class TransactionRepository(BaseRepository[Transaction]):
 
     async def get_withdrawals(
         self, user_id: int
-    ) -> List[Transaction]:
+    ) -> list[Transaction]:
         """
         Get user withdrawals.
 
@@ -78,8 +76,8 @@ class TransactionRepository(BaseRepository[Transaction]):
         )
 
     async def get_pending_transactions(
-        self, type: Optional[str] = None
-    ) -> List[Transaction]:
+        self, type: str | None = None
+    ) -> list[Transaction]:
         """
         Get pending transactions.
 

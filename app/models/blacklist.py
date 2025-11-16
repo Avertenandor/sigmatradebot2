@@ -4,10 +4,9 @@ Blacklist model.
 Tracks banned users with reason and admin who banned them.
 """
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
-from sqlalchemy import BigInteger, DateTime, Index, Integer, String, Text
+from sqlalchemy import BigInteger, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -15,7 +14,7 @@ from app.models.base import Base
 
 class BlacklistActionType(str):
     """Blacklist action types."""
-    
+
     REGISTRATION_DENIED = "registration_denied"  # Отказ в регистрации
     TERMINATED = "terminated"  # Терминация аккаунта
     BLOCKED = "blocked"  # Блокировка аккаунта (с возможностью апелляции)
@@ -38,7 +37,7 @@ class Blacklist(Base):
         action_type: Type of action (registration_denied, terminated, blocked)
         reason: Ban reason (optional)
         created_by_admin_id: Admin ID who created ban
-        appeal_deadline: Deadline for appeal (for blocked users, 3 working days)
+        appeal_deadline: Deadline for appeal (blocked users, 3 days)
         created_at: Ban timestamp
         is_active: Whether the blacklist entry is active
     """
@@ -57,19 +56,22 @@ class Blacklist(Base):
 
     # Action type
     action_type: Mapped[str] = mapped_column(
-        String(50), nullable=False, default=BlacklistActionType.REGISTRATION_DENIED, index=True
+        String(50),
+        nullable=False,
+        default=BlacklistActionType.REGISTRATION_DENIED,
+        index=True
     )
 
     # Ban details
-    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Admin who banned (stored as int, no FK for simplicity)
-    created_by_admin_id: Mapped[Optional[int]] = mapped_column(
+    created_by_admin_id: Mapped[int | None] = mapped_column(
         Integer, nullable=True
     )
 
     # Appeal deadline for blocked users (3 working days from creation)
-    appeal_deadline: Mapped[Optional[datetime]] = mapped_column(
+    appeal_deadline: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 
@@ -80,9 +82,14 @@ class Blacklist(Base):
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False
     )
 
     def __repr__(self) -> str:
         """String representation."""
-        return f"Blacklist(id={self.id}, telegram_id={self.telegram_id}, action_type={self.action_type})"
+        return (
+            f"Blacklist(id={self.id}, telegram_id={self.telegram_id}, "
+            f"action_type={self.action_type})"
+        )

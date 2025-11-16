@@ -2,9 +2,9 @@
 User Support Handler - УПРОЩЕННАЯ ВЕРСИЯ с Reply Keyboards
 """
 
-from aiogram import Router, F
-from aiogram.types import Message
+from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
+from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
@@ -22,16 +22,11 @@ async def handle_support_menu(
 ) -> None:
     """Show support menu."""
     await state.clear()
-    
-    text = (
-        f"💬 *Служба поддержки*\n\n"
-        f"Выберите действие из меню ниже:"
-    )
-    
+
+    text = "💬 *Служба поддержки*\n\nВыберите действие из меню ниже:"
+
     await message.answer(
-        text,
-        reply_markup=support_keyboard(),
-        parse_mode="Markdown"
+        text, reply_markup=support_keyboard(), parse_mode="Markdown"
     )
 
 
@@ -43,12 +38,12 @@ async def handle_create_ticket(
 ) -> None:
     """Start ticket creation."""
     text = (
-        f"✉️ *Создать обращение*\n\n"
-        f"Опишите вашу проблему или вопрос.\n"
-        f"Отправьте текстовое сообщение.\n\n"
-        f"Для отмены нажмите '📊 Главное меню'"
+        "✉️ *Создать обращение*\n\n"
+        "Опишите вашу проблему или вопрос.\n"
+        "Отправьте текстовое сообщение.\n\n"
+        "Для отмены нажмите '📊 Главное меню'"
     )
-    
+
     await state.set_state(SupportStates.awaiting_input)
     await message.answer(text, parse_mode="Markdown")
 
@@ -62,18 +57,18 @@ async def process_ticket_message(
 ) -> None:
     """Process ticket message."""
     from bot.utils.menu_buttons import is_menu_button
-    
+
     # Check if user pressed menu button
     if is_menu_button(message.text):
         await state.clear()
         return
-    
+
     # Save ticket to database
+    from app.models.enums import SupportCategory
     from app.services.support_service import SupportService
-    from app.models.enums import SupportCategory, SupportStatus
-    
+
     support_service = SupportService(session)
-    
+
     try:
         ticket = await support_service.create_ticket(
             user_id=user.id,
@@ -81,39 +76,38 @@ async def process_ticket_message(
             subject="Обращение от пользователя",
             message=message.text,
         )
-        
+
         await state.clear()
-        
+
         text = (
             f"✅ *Обращение создано!*\n\n"
             f"Номер: `#{ticket.id}`\n"
             f"Статус: Открыто\n\n"
             f"Мы ответим вам в ближайшее время."
         )
-        
+
         await message.answer(text, parse_mode="Markdown")
-        
+
         # Notify admins
         from app.config.settings import settings
         from bot.main import bot_instance
-        
+
         if bot_instance:
             admin_text = (
                 f"🆕 *Новое обращение #{ticket.id}*\n\n"
-                f"От: @{user.username or 'пользователь'} (`{user.telegram_id}`)\n"
+                f"От: @{user.username or 'пользователь'}"
+                    "(`{user.telegram_id}`)\n"
                 f"Текст: {message.text}"
             )
-            
+
             for admin_id in settings.get_admin_ids():
                 try:
                     await bot_instance.send_message(
-                        admin_id,
-                        admin_text,
-                        parse_mode="Markdown"
+                        admin_id, admin_text, parse_mode="Markdown"
                     )
-                except:
+                except Exception:
                     pass
-        
+
     except Exception as e:
         await state.clear()
         await message.answer(f"❌ Ошибка создания обращения: {e}")
@@ -127,28 +121,29 @@ async def handle_my_tickets(
 ) -> None:
     """Show user's tickets."""
     from app.services.support_service import SupportService
-    
+
     support_service = SupportService(session)
     tickets = await support_service.get_user_tickets(user.id)
-    
+
     if not tickets:
         text = "📋 У вас пока нет обращений"
     else:
         text = "📋 *Ваши обращения:*\n\n"
-        
+
         for ticket in tickets[:10]:  # Show last 10
             status_emoji = {
                 "open": "🔵",
                 "in_progress": "🟡",
                 "answered": "🟢",
-                "closed": "⚫"
+                "closed": "⚫",
             }.get(ticket.status, "⚪")
-            
+
+            created_date = ticket.created_at.strftime('%d.%m.%Y %H:%M')
             text += (
                 f"{status_emoji} #{ticket.id} - {ticket.subject}\n"
-                f"   Создано: {ticket.created_at.strftime('%d.%m.%Y %H:%M')}\n\n"
+                f"   Создано: {created_date}\n\n"
             )
-    
+
     await message.answer(text, parse_mode="Markdown")
 
 
@@ -158,17 +153,19 @@ async def handle_faq(
 ) -> None:
     """Show FAQ."""
     text = (
-        f"❓ *Часто задаваемые вопросы*\n\n"
-        f"*Q: Как сделать депозит?*\n"
-        f"A: Выберите '💰 Депозит' → Выберите уровень → Отправьте USDT на указанный адрес\n\n"
-        f"*Q: Как вывести средства?*\n"
-        f"A: Выберите '💸 Вывод' → Укажите сумму → Подтвердите финансовым паролем\n\n"
-        f"*Q: Как работает реферальная программа?*\n"
-        f"A: Пригласите друга по своей реферальной ссылке → Получайте % от его депозитов\n\n"
-        f"*Q: Что делать если забыл финансовый пароль?*\n"
-        f"A: Обратитесь в поддержку через '✉️ Создать обращение'\n\n"
-        f"Для других вопросов создайте обращение в поддержку."
+        "❓ *Часто задаваемые вопросы*\n\n"
+        "*Q: Как сделать депозит?*\n"
+        "A: Выберите '💰 Депозит' → Выберите уровень → Отправьте USDT на "
+        "указанный адрес\n\n"
+        "*Q: Как вывести средства?*\n"
+        "A: Выберите '💸 Вывод' → Укажите сумму → Подтвердите финансовым "
+        "паролем\n\n"
+        "*Q: Как работает реферальная программа?*\n"
+        "A: Пригласите друга по своей реферальной ссылке → Получайте % "
+        "от его депозитов\n\n"
+        "*Q: Что делать если забыл финансовый пароль?*\n"
+        "A: Обратитесь в поддержку через '✉️ Создать обращение'\n\n"
+        "Для других вопросов создайте обращение в поддержку."
     )
-    
-    await message.answer(text, parse_mode="Markdown")
 
+    await message.answer(text, parse_mode="Markdown")

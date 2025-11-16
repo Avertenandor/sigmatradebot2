@@ -4,7 +4,6 @@ FinancialPasswordRecovery repository.
 Data access layer for FinancialPasswordRecovery model.
 """
 
-from typing import List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,8 +24,8 @@ class FinancialPasswordRecoveryRepository(
         super().__init__(FinancialPasswordRecovery, session)
 
     async def get_by_user(
-        self, user_id: int, status: Optional[str] = None
-    ) -> List[FinancialPasswordRecovery]:
+        self, user_id: int, status: str | None = None
+    ) -> list[FinancialPasswordRecovery]:
         """
         Get recovery requests by user.
 
@@ -45,7 +44,7 @@ class FinancialPasswordRecoveryRepository(
 
     async def get_pending_requests(
         self,
-    ) -> List[FinancialPasswordRecovery]:
+    ) -> list[FinancialPasswordRecovery]:
         """
         Get all pending recovery requests.
 

@@ -5,7 +5,6 @@ Handles withdrawal requests, balance validation, and admin processing.
 """
 
 from decimal import Decimal
-from typing import Optional
 
 from loguru import logger
 from sqlalchemy import select
@@ -15,7 +14,6 @@ from app.models.enums import TransactionStatus, TransactionType
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.repositories.transaction_repository import TransactionRepository
-
 
 # Minimum withdrawal amount in USDT
 MIN_WITHDRAWAL_AMOUNT = Decimal("5.0")
@@ -34,7 +32,7 @@ class WithdrawalService:
         user_id: int,
         amount: Decimal,
         available_balance: Decimal,
-    ) -> tuple[Optional[Transaction], Optional[str]]:
+    ) -> tuple[Transaction | None, str | None]:
         """
         Request withdrawal with balance deduction.
 
@@ -179,7 +177,7 @@ class WithdrawalService:
 
     async def cancel_withdrawal(
         self, transaction_id: int, user_id: int
-    ) -> tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         """
         Cancel withdrawal and RETURN BALANCE to user.
 
@@ -206,7 +204,9 @@ class WithdrawalService:
                 return False, "Заявка не найдена или не может быть отменена"
 
             # Get user with lock
-            stmt_user = select(User).where(User.id == user_id).with_for_update()
+            stmt_user = (
+                select(User).where(User.id == user_id).with_for_update()
+            )
             result_user = await self.session.execute(stmt_user)
             user = result_user.scalar_one_or_none()
 
@@ -218,7 +218,7 @@ class WithdrawalService:
 
             # Update transaction status
             transaction.status = TransactionStatus.FAILED.value
-            
+
             await self.session.commit()
 
             logger.info(
@@ -240,7 +240,7 @@ class WithdrawalService:
 
     async def approve_withdrawal(
         self, transaction_id: int, tx_hash: str
-    ) -> tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         """
         Approve withdrawal (admin only).
 
@@ -290,8 +290,8 @@ class WithdrawalService:
             return False, "Ошибка подтверждения заявки"
 
     async def reject_withdrawal(
-        self, transaction_id: int, reason: Optional[str] = None
-    ) -> tuple[bool, Optional[str]]:
+        self, transaction_id: int, reason: str | None = None
+    ) -> tuple[bool, str | None]:
         """
         Reject withdrawal and RETURN BALANCE to user (admin only).
 
@@ -320,7 +320,11 @@ class WithdrawalService:
                 )
 
             # Get user with lock
-            stmt_user = select(User).where(User.id == withdrawal.user_id).with_for_update()
+            stmt_user = (
+                select(User)
+                .where(User.id == withdrawal.user_id)
+                .with_for_update()
+            )
             result_user = await self.session.execute(stmt_user)
             user = result_user.scalar_one_or_none()
 
@@ -352,7 +356,7 @@ class WithdrawalService:
 
     async def get_withdrawal_by_id(
         self, transaction_id: int
-    ) -> Optional[Transaction]:
+    ) -> Transaction | None:
         """
         Get withdrawal by ID (admin only).
 

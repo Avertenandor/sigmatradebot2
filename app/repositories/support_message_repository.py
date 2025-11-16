@@ -4,7 +4,6 @@ SupportMessage repository.
 Data access layer for SupportMessage model.
 """
 
-from typing import List
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,7 +22,7 @@ class SupportMessageRepository(
 
     async def get_by_ticket(
         self, ticket_id: int
-    ) -> List[SupportMessage]:
+    ) -> list[SupportMessage]:
         """
         Get messages by ticket.
 
@@ -39,7 +38,7 @@ class SupportMessageRepository(
 
     async def get_by_sender(
         self, ticket_id: int, sender: str
-    ) -> List[SupportMessage]:
+    ) -> list[SupportMessage]:
         """
         Get messages by ticket and sender.
 

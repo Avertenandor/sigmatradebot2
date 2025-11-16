@@ -5,8 +5,8 @@ Monitors blockchain for incoming USDT transfers to system wallet.
 """
 
 import asyncio
+from collections.abc import Callable
 from decimal import Decimal
-from typing import Callable, Optional
 
 from loguru import logger
 from web3 import AsyncWeb3
@@ -50,7 +50,7 @@ class EventMonitor:
         # Monitoring state
         self._monitoring = False
         self._last_processed_block = 0
-        self._event_callback: Optional[Callable] = None
+        self._event_callback: Callable | None = None
 
         logger.info(
             f"EventMonitor initialized for USDT contract: "
@@ -61,7 +61,7 @@ class EventMonitor:
         self,
         watch_address: str,
         from_block: int | str = "latest",
-        event_callback: Optional[Callable] = None,
+        event_callback: Callable | None = None,
     ) -> None:
         """
         Start monitoring USDT transfers to address.
@@ -113,10 +113,12 @@ class EventMonitor:
 
             # Get Transfer events filter
             # Filter transfers TO the watch address
-            event_filter = await self.usdt_contract.events.Transfer.create_filter(
-                from_block=self._last_processed_block + 1,
-                to_block=current_block,
-                argument_filters={"to": watch_address},
+            event_filter = (
+                await self.usdt_contract.events.Transfer.create_filter(
+                    from_block=self._last_processed_block + 1,
+                    to_block=current_block,
+                    argument_filters={"to": watch_address},
+                )
             )
 
             # Get all events

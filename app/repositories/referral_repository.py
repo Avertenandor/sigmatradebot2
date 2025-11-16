@@ -4,9 +4,7 @@ Referral repository.
 Data access layer for Referral model.
 """
 
-from typing import List
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.referral import Referral
@@ -22,7 +20,7 @@ class ReferralRepository(BaseRepository[Referral]):
 
     async def get_by_referrer(
         self, referrer_id: int, level: int = None
-    ) -> List[Referral]:
+    ) -> list[Referral]:
         """
         Get referrals by referrer.
 
@@ -41,7 +39,7 @@ class ReferralRepository(BaseRepository[Referral]):
 
     async def get_by_referral_user(
         self, referral_user_id: int
-    ) -> List[Referral]:
+    ) -> list[Referral]:
         """
         Get referrals where user is the referral.
 
@@ -54,10 +52,10 @@ class ReferralRepository(BaseRepository[Referral]):
         return await self.find_by(
             referral_id=referral_user_id
         )
-    
+
     async def get_referrals_for_user(
         self, user_id: int
-    ) -> List[Referral]:
+    ) -> list[Referral]:
         """
         Get all referral relationships where user is the referral.
 
@@ -71,7 +69,7 @@ class ReferralRepository(BaseRepository[Referral]):
 
     async def get_level_1_referrals(
         self, referrer_id: int
-    ) -> List[Referral]:
+    ) -> list[Referral]:
         """
         Get level 1 (direct) referrals.
 

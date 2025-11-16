@@ -4,19 +4,16 @@ Reply keyboards.
 Reply keyboard builders for main navigation.
 """
 
-from typing import Optional
-
 from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
-from app.models.blacklist import Blacklist
-from app.models.blacklist import BlacklistActionType
+from app.models.blacklist import Blacklist, BlacklistActionType
 from app.models.user import User
 
 
 def main_menu_reply_keyboard(
-    user: Optional[User] = None,
-    blacklist_entry: Optional[Blacklist] = None,
+    user: User | None = None,
+    blacklist_entry: Blacklist | None = None,
     is_admin: bool = False,
 ) -> ReplyKeyboardMarkup:
     """
@@ -65,7 +62,7 @@ def main_menu_reply_keyboard(
         builder.row(
             KeyboardButton(text="✅ Пройти верификацию"),
         )
-        
+
         # Add admin panel button for admins
         if is_admin:
             builder.row(

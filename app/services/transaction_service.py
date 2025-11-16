@@ -7,15 +7,13 @@ Provides unified transaction history across all types.
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
 
 from loguru import logger
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.deposit import Deposit
 from app.models.enums import TransactionStatus, TransactionType
-from app.models.referral_earning import ReferralEarning
 from app.models.transaction import Transaction
 from app.repositories.deposit_repository import DepositRepository
 from app.repositories.referral_earning_repository import (
@@ -34,10 +32,10 @@ class UnifiedTransaction:
     status: TransactionStatus
     created_at: datetime
     description: str
-    tx_hash: Optional[str] = None
-    explorer_link: Optional[str] = None
-    level: Optional[int] = None  # For deposits
-    referral_level: Optional[int] = None  # For referral rewards
+    tx_hash: str | None = None
+    explorer_link: str | None = None
+    level: int | None = None  # For deposits
+    referral_level: int | None = None  # For referral rewards
 
 
 class TransactionService:
@@ -55,8 +53,8 @@ class TransactionService:
         user_id: int,
         limit: int = 20,
         offset: int = 0,
-        transaction_type: Optional[TransactionType] = None,
-        status: Optional[TransactionStatus] = None,
+        transaction_type: TransactionType | None = None,
+        status: TransactionStatus | None = None,
     ) -> dict:
         """
         Get all transactions for user (deposits, withdrawals, earnings).
@@ -123,7 +121,7 @@ class TransactionService:
         }
 
     async def _get_deposits(
-        self, user_id: int, status_filter: Optional[TransactionStatus]
+        self, user_id: int, status_filter: TransactionStatus | None
     ) -> list[UnifiedTransaction]:
         """Get deposits as unified transactions."""
         stmt = select(Deposit).where(Deposit.user_id == user_id)
@@ -157,7 +155,7 @@ class TransactionService:
         return unified
 
     async def _get_withdrawals(
-        self, user_id: int, status_filter: Optional[TransactionStatus]
+        self, user_id: int, status_filter: TransactionStatus | None
     ) -> list[UnifiedTransaction]:
         """Get withdrawals as unified transactions."""
         stmt = select(Transaction).where(

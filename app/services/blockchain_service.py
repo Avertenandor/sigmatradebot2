@@ -1,20 +1,20 @@
 """
 Blockchain service.
 
-Full Web3.py implementation for BSC blockchain operations (USDT transfers, monitoring).
+Full Web3.py implementation for BSC blockchain operations
+(USDT transfers, monitoring).
 """
 
-from decimal import Decimal
-from typing import Dict, Optional
-from datetime import datetime
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+from decimal import Decimal
 
+from eth_account import Account
+from eth_utils import is_address, to_checksum_address
+from loguru import logger
 from web3 import Web3
 from web3.middleware import geth_poa_middleware
-from eth_account import Account
-from eth_utils import to_checksum_address, is_address
-from loguru import logger
 
 # USDT contract ABI (ERC-20 standard functions)
 USDT_ABI = [
@@ -82,7 +82,9 @@ class BlockchainService:
         self.wallet_private_key = wallet_private_key
 
         # Thread pool executor for running synchronous Web3 calls
-        self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="web3")
+        self._executor = ThreadPoolExecutor(
+            max_workers=4, thread_name_prefix="web3"
+        )
 
         # Initialize Web3 connection
         try:
@@ -96,7 +98,9 @@ class BlockchainService:
 
             # Get wallet address from private key
             self.wallet_account = Account.from_key(wallet_private_key)
-            self.wallet_address = to_checksum_address(self.wallet_account.address)
+            self.wallet_address = to_checksum_address(
+                self.wallet_account.address
+            )
 
             # Initialize USDT contract
             self.usdt_contract = self.web3.eth.contract(
@@ -120,19 +124,21 @@ class BlockchainService:
     def __del__(self) -> None:
         """
         Cleanup ThreadPoolExecutor on garbage collection.
-        
-        This ensures resources are properly released even if close() is not called.
+
+        This ensures resources are properly released
+        even if close() is not called.
         """
         if hasattr(self, '_executor') and self._executor:
             try:
-                self._executor.shutdown(wait=False)  # Don't wait in __del__ to avoid blocking
+                # Don't wait in __del__ to avoid blocking
+                self._executor.shutdown(wait=False)
             except Exception:
                 pass  # Ignore errors during cleanup
 
     def close(self) -> None:
         """
         Explicitly close ThreadPoolExecutor and release resources.
-        
+
         Should be called when BlockchainService is no longer needed.
         """
         if hasattr(self, '_executor') and self._executor:
@@ -142,7 +148,7 @@ class BlockchainService:
 
     async def send_payment(
         self, to_address: str, amount: float
-    ) -> Dict[str, any]:
+    ) -> dict[str, any]:
         """
         Send USDT payment.
 
@@ -178,7 +184,7 @@ class BlockchainService:
 
             # Run synchronous Web3 calls in thread pool
             loop = asyncio.get_event_loop()
-            
+
             # Get current gas price
             gas_price = await loop.run_in_executor(
                 self._executor, lambda: self.web3.eth.gas_price
@@ -188,7 +194,9 @@ class BlockchainService:
             try:
                 gas_estimate = await loop.run_in_executor(
                     self._executor,
-                    lambda: transfer_function.estimate_gas({"from": self.wallet_address}),
+                    lambda: transfer_function.estimate_gas(
+                        {"from": self.wallet_address}
+                    ),
                 )
             except Exception as e:
                 logger.error(f"Gas estimation failed: {e}")
@@ -201,7 +209,9 @@ class BlockchainService:
             # Get nonce
             nonce = await loop.run_in_executor(
                 self._executor,
-                lambda: self.web3.eth.get_transaction_count(self.wallet_address),
+                lambda: self.web3.eth.get_transaction_count(
+                    self.wallet_address
+                ),
             )
 
             # Build transaction
@@ -220,17 +230,22 @@ class BlockchainService:
             # Send transaction
             tx_hash = await loop.run_in_executor(
                 self._executor,
-                lambda: self.web3.eth.send_raw_transaction(signed_txn.rawTransaction),
+                lambda: self.web3.eth.send_raw_transaction(
+                    signed_txn.rawTransaction
+                ),
             )
 
             # Convert bytes to hex string if needed
-            tx_hash_str = tx_hash.hex() if isinstance(tx_hash, bytes) else str(tx_hash)
-            
+            tx_hash_str = (
+                tx_hash.hex() if isinstance(tx_hash, bytes)
+                else str(tx_hash)
+            )
+
             logger.info(
                 f"USDT payment sent: {amount} USDT to {to_address}, "
                 f"tx_hash: {tx_hash_str}"
             )
-            
+
             return {
                 "success": True,
                 "tx_hash": tx_hash_str,
@@ -247,7 +262,7 @@ class BlockchainService:
 
     async def check_transaction_status(
         self, tx_hash: str
-    ) -> Dict[str, any]:
+    ) -> dict[str, any]:
         """
         Check transaction status on blockchain.
 
@@ -258,11 +273,15 @@ class BlockchainService:
             Dict with:
                 - status: str ("pending", "confirmed", "failed", "unknown")
                 - confirmations: int (number of block confirmations)
-                - block_number: int | None (block number where transaction was mined)
+                - block_number: int | None
+                  (block number where transaction was mined)
         """
         try:
             # Validate tx_hash format
-            if not tx_hash or not tx_hash.startswith("0x") or len(tx_hash) != 66:
+            if (
+                not tx_hash or not tx_hash.startswith("0x")
+                or len(tx_hash) != 66
+            ):
                 return {
                     "status": "invalid",
                     "confirmations": 0,
@@ -316,7 +335,7 @@ class BlockchainService:
 
     async def get_transaction_details(
         self, tx_hash: str
-    ) -> Optional[Dict[str, any]]:
+    ) -> dict[str, any] | None:
         """
         Get transaction details.
 
@@ -328,7 +347,10 @@ class BlockchainService:
         """
         try:
             # Validate tx_hash
-            if not tx_hash or not tx_hash.startswith("0x") or len(tx_hash) != 66:
+            if (
+                not tx_hash or not tx_hash.startswith("0x")
+                or len(tx_hash) != 66
+            ):
                 return None
 
             # Run synchronous Web3 calls in thread pool
@@ -337,7 +359,8 @@ class BlockchainService:
             # Get transaction
             try:
                 tx = await loop.run_in_executor(
-                    self._executor, lambda: self.web3.eth.get_transaction(tx_hash)
+                    self._executor,
+                    lambda: self.web3.eth.get_transaction(tx_hash)
                 )
             except Exception:
                 return None
@@ -362,14 +385,22 @@ class BlockchainService:
 
             # Check if this is a USDT contract call
             value = Decimal(0)
-            if to_address and to_address.lower() == self.usdt_contract_address.lower():
+            if (
+                to_address and
+                to_address.lower() == self.usdt_contract_address.lower()
+            ):
                 # Decode contract call data
                 try:
-                    decoded = self.usdt_contract.decode_function_input(tx["input"])
+                    decoded = self.usdt_contract.decode_function_input(
+                        tx["input"]
+                    )
                     if decoded[0].fn_name == "transfer":
                         # Extract amount from transfer function
                         amount_wei = decoded[1]["_value"]
-                        value = Decimal(amount_wei) / Decimal(10 ** USDT_DECIMALS)
+                        value = (
+                            Decimal(amount_wei) /
+                            Decimal(10 ** USDT_DECIMALS)
+                        )
                         # Update to_address to actual recipient
                         to_address = to_checksum_address(decoded[1]["_to"])
                 except Exception as e:
@@ -388,7 +419,10 @@ class BlockchainService:
                 "gas_price": tx.gasPrice,
                 "block_number": receipt.blockNumber if receipt else None,
                 "confirmations": confirmations,
-                "status": "confirmed" if receipt and receipt.status == 1 else "pending",
+                "status": (
+                    "confirmed" if receipt and receipt.status == 1
+                    else "pending"
+                ),
             }
 
         except Exception as e:
@@ -449,7 +483,7 @@ class BlockchainService:
 
     async def get_usdt_balance(
         self, address: str
-    ) -> Optional[Decimal]:
+    ) -> Decimal | None:
         """
         Get USDT balance for address.
 
@@ -486,7 +520,7 @@ class BlockchainService:
 
     async def estimate_gas_fee(
         self, to_address: str, amount: Decimal
-    ) -> Optional[Decimal]:
+    ) -> Decimal | None:
         """
         Estimate gas fee for USDT transfer.
 
@@ -500,7 +534,9 @@ class BlockchainService:
         try:
             # Validate address
             if not await self.validate_wallet_address(to_address):
-                logger.warning(f"Invalid address for gas estimation: {to_address}")
+                logger.warning(
+                    f"Invalid address for gas estimation: {to_address}"
+                )
                 return None
 
             # Convert to checksum address
@@ -520,7 +556,9 @@ class BlockchainService:
             # Estimate gas
             gas_estimate = await loop.run_in_executor(
                 self._executor,
-                lambda: transfer_function.estimate_gas({"from": self.wallet_address}),
+                lambda: transfer_function.estimate_gas(
+                    {"from": self.wallet_address}
+                ),
             )
 
             # Get current gas price
@@ -542,7 +580,7 @@ class BlockchainService:
 
     async def monitor_incoming_deposits(
         self, wallet_address: str, from_block: int
-    ) -> list[Dict[str, any]]:
+    ) -> list[dict[str, any]]:
         """
         Monitor incoming USDT deposits to wallet.
 
@@ -556,7 +594,10 @@ class BlockchainService:
         try:
             # Validate address
             if not await self.validate_wallet_address(wallet_address):
-                logger.warning(f"Invalid address for deposit monitoring: {wallet_address}")
+                logger.warning(
+                    f"Invalid address for deposit monitoring: "
+                    f"{wallet_address}"
+                )
                 return []
 
             # Convert to checksum address
@@ -590,22 +631,34 @@ class BlockchainService:
             for event in events:
                 try:
                     # Get transaction details
-                    tx_hash = event.transactionHash.hex() if hasattr(event.transactionHash, 'hex') else str(event.transactionHash)
+                    tx_hash = (
+                        event.transactionHash.hex()
+                        if hasattr(event.transactionHash, 'hex')
+                        else str(event.transactionHash)
+                    )
                     tx_details = await self.get_transaction_details(tx_hash)
 
                     if tx_details:
                         deposits.append({
                             "tx_hash": tx_hash,
-                            "from_address": to_checksum_address(event.args["from"]),
+                            "from_address": to_checksum_address(
+                                event.args["from"]
+                            ),
                             "to_address": wallet_address,
-                            "amount": Decimal(event.args["value"]) / Decimal(10 ** USDT_DECIMALS),
+                            "amount": (
+                                Decimal(event.args["value"]) /
+                                Decimal(10 ** USDT_DECIMALS)
+                            ),
                             "block_number": event.blockNumber,
                             "timestamp": datetime.utcnow(),  # Approximate
                         })
                 except Exception as e:
                     logger.warning(f"Failed to parse deposit event: {e}")
 
-            logger.info(f"Found {len(deposits)} deposits to {wallet_address} from block {from_block}")
+            logger.info(
+                f"Found {len(deposits)} deposits to {wallet_address} "
+                f"from block {from_block}"
+            )
 
             return deposits
 
@@ -615,7 +668,7 @@ class BlockchainService:
 
 
 # Singleton instance (to be initialized with config)
-_blockchain_service: Optional[BlockchainService] = None
+_blockchain_service: BlockchainService | None = None
 
 
 def get_blockchain_service() -> BlockchainService:

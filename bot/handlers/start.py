@@ -8,10 +8,10 @@ from aiogram import F, Router
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
-    Message,
     CallbackQuery,
-    InlineKeyboardMarkup,
     InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
 )
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -98,7 +98,7 @@ async def cmd_start(
         "Формат: `0x...` (42 символа)\n\n"
         "❗️ **Внимание:** убедитесь, что адрес указан правильно!"
     )
-    
+
     if referrer_telegram_id:
         # Save referrer to state for later use
         await state.update_data(referrer_telegram_id=referrer_telegram_id)
@@ -132,10 +132,11 @@ async def process_wallet(
     """
     # Check if message is a menu button - if so, clear state and ignore
     from bot.utils.menu_buttons import is_menu_button
+
     if is_menu_button(message.text):
         await state.clear()
         return  # Let menu handlers process this
-    
+
     wallet_address = message.text.strip()
 
     # Validate wallet format (0x + 40 hex chars)
@@ -153,8 +154,7 @@ async def process_wallet(
 
     if existing:
         await message.answer(
-            "❌ Этот кошелек уже зарегистрирован!\n\n"
-            "Используйте другой адрес:"
+            "❌ Этот кошелек уже зарегистрирован!\n\nИспользуйте другой адрес:"
         )
         return
 
@@ -172,9 +172,7 @@ async def process_wallet(
         "Введите пароль:"
     )
 
-    await state.set_state(
-        RegistrationStates.waiting_for_financial_password
-    )
+    await state.set_state(RegistrationStates.waiting_for_financial_password)
 
 
 @router.message(RegistrationStates.waiting_for_financial_password)
@@ -190,10 +188,11 @@ async def process_financial_password(
     """
     # Check if message is a menu button - if so, clear state and ignore
     from bot.utils.menu_buttons import is_menu_button
+
     if is_menu_button(message.text):
         await state.clear()
         return  # Let menu handlers process this
-    
+
     password = message.text.strip()
 
     # Validate password
@@ -218,9 +217,7 @@ async def process_financial_password(
         "Введите пароль еще раз:"
     )
 
-    await state.set_state(
-        RegistrationStates.waiting_for_password_confirmation
-    )
+    await state.set_state(RegistrationStates.waiting_for_password_confirmation)
 
 
 @router.message(RegistrationStates.waiting_for_password_confirmation)
@@ -237,10 +234,11 @@ async def process_password_confirmation(
     """
     # Check if message is a menu button - if so, clear state and ignore
     from bot.utils.menu_buttons import is_menu_button
+
     if is_menu_button(message.text):
         await state.clear()
         return  # Let menu handlers process this
-    
+
     confirmation = message.text.strip()
 
     # Delete message with password
@@ -253,8 +251,7 @@ async def process_password_confirmation(
     # Check if passwords match
     if confirmation != password:
         await message.answer(
-            "❌ Пароли не совпадают!\n\n"
-            "Введите пароль еще раз:"
+            "❌ Пароли не совпадают!\n\nВведите пароль еще раз:"
         )
         await state.set_state(
             RegistrationStates.waiting_for_financial_password
@@ -276,12 +273,12 @@ async def process_password_confirmation(
         )
     except ValueError as e:
         error_msg = str(e)
-        
+
         # Check if it's a blacklist error
         if error_msg.startswith("BLACKLISTED:"):
             action_type = error_msg.split(":")[1]
             from app.models.blacklist import BlacklistActionType
-            
+
             if action_type == BlacklistActionType.REGISTRATION_DENIED:
                 await message.answer(
                     "Здравствуйте, по решению участников нашего "
@@ -324,18 +321,18 @@ async def process_password_confirmation(
             [
                 InlineKeyboardButton(
                     text="✅ Да, оставить контакты",
-                    callback_data="registration:add_contacts"
+                    callback_data="registration:add_contacts",
                 ),
             ],
             [
                 InlineKeyboardButton(
                     text="⏭ Пропустить",
-                    callback_data="registration:skip_contacts"
+                    callback_data="registration:skip_contacts",
                 ),
             ],
         ]
     )
-    
+
     await message.answer(
         "📝 **Опционально:** Вы можете оставить контакты для связи "
         "(телефон и/или email). Это необязательно.\n\n"
@@ -343,7 +340,7 @@ async def process_password_confirmation(
         parse_mode="Markdown",
         reply_markup=contacts_keyboard,
     )
-    
+
     await state.set_state(RegistrationStates.waiting_for_contacts_choice)
 
 
@@ -384,10 +381,11 @@ async def process_phone(
     """Process phone number."""
     # Check if message is a menu button - if so, clear state and ignore
     from bot.utils.menu_buttons import is_menu_button
+
     if is_menu_button(message.text):
         await state.clear()
         return  # Let menu handlers process this
-    
+
     skip_commands = ["/skip", "пропустить", "skip"]
     if message.text and message.text.strip().lower() in skip_commands:
         await state.update_data(phone=None)
@@ -396,9 +394,9 @@ async def process_phone(
             "📧 Введите email (или отправьте /skip чтобы пропустить):",
         )
         return
-    
+
     phone = message.text.strip() if message.text else ""
-    
+
     # Basic phone validation (can be improved)
     if phone and len(phone) < 5:
         await message.answer(
@@ -406,10 +404,10 @@ async def process_phone(
             "Введите корректный номер или /skip чтобы пропустить:"
         )
         return
-    
+
     await state.update_data(phone=phone if phone else None)
     await state.set_state(RegistrationStates.waiting_for_email)
-    
+
     if phone:
         await message.answer(
             "✅ Телефон сохранен!\n\n"
@@ -431,16 +429,17 @@ async def process_email(
     """Process email and save contacts."""
     # Check if message is a menu button - if so, clear state and ignore
     from bot.utils.menu_buttons import is_menu_button
+
     if is_menu_button(message.text):
         await state.clear()
         return  # Let menu handlers process this
-    
+
     skip_commands = ["/skip", "пропустить", "skip"]
     if message.text and message.text.strip().lower() in skip_commands:
         email = None
     else:
         email = message.text.strip() if message.text else None
-        
+
         # Basic email validation
         if email and ("@" not in email or "." not in email):
             await message.answer(
@@ -448,11 +447,11 @@ async def process_email(
                 "Введите корректный email или /skip чтобы пропустить:"
             )
             return
-    
+
     # Get phone from state
     data = await state.get_data()
     phone = data.get("phone")
-    
+
     # Update user with contacts
     user_service = UserService(session)
     await user_service.update_profile(
@@ -460,19 +459,19 @@ async def process_email(
         phone=phone,
         email=email,
     )
-    
+
     contacts_text = "✅ Контакты сохранены!\n\n"
     if phone:
         contacts_text += f"📞 Телефон: {phone}\n"
     if email:
         contacts_text += f"📧 Email: {email}\n"
-    
+
     if not phone and not email:
         contacts_text = "✅ Регистрация завершена без контактов.\n\n"
         contacts_text += "Вы можете добавить их позже в настройках профиля."
     else:
         contacts_text += "\nВы можете изменить их позже в настройках профиля."
-    
+
     await message.answer(
         contacts_text,
         reply_markup=main_menu_reply_keyboard(),

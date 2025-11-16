@@ -5,18 +5,15 @@ Handles retrying failed notification deliveries with exponential backoff.
 Ensures users don't miss critical notifications.
 """
 
-from datetime import datetime, timedelta
-from typing import Optional
+from datetime import datetime
 
 from aiogram import Bot
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.failed_notification import FailedNotification
 from app.repositories.failed_notification_repository import (
     FailedNotificationRepository,
 )
-
 
 # Retry configuration: 1min, 5min, 15min, 1h, 2h
 RETRY_DELAYS_MINUTES = [1, 5, 15, 60, 120]
@@ -156,7 +153,9 @@ class NotificationRetryService:
                                 "id": notification.id,
                                 "telegram_id": notification.user_telegram_id,
                                 "type": notification.notification_type,
-                                "attempt_count": notification.attempt_count + 1,
+                                "attempt_count": (
+                                    notification.attempt_count + 1
+                                ),
                             },
                         )
 

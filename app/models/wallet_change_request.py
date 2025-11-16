@@ -4,14 +4,14 @@ WalletChangeRequest model.
 Tracks admin-initiated wallet change requests with approval workflow.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import DateTime, Index, Integer, String, Text, ForeignKey
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
-from app.models.enums import WalletChangeType, WalletChangeStatus
+from app.models.enums import WalletChangeStatus, WalletChangeType
 
 if TYPE_CHECKING:
     from app.models.admin import Admin
@@ -57,7 +57,7 @@ class WalletChangeRequest(Base):
     new_address: Mapped[str] = mapped_column(
         String(42), nullable=False
     )
-    secret_ref: Mapped[Optional[str]] = mapped_column(
+    secret_ref: Mapped[str | None] = mapped_column(
         String(255), nullable=True
     )
 
@@ -65,7 +65,7 @@ class WalletChangeRequest(Base):
     initiated_by_admin_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("admins.id"), nullable=False, index=True
     )
-    approved_by_admin_id: Mapped[Optional[int]] = mapped_column(
+    approved_by_admin_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("admins.id"), nullable=True
     )
 
@@ -78,16 +78,18 @@ class WalletChangeRequest(Base):
     )
 
     # Additional info
-    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False
     )
-    approved_at: Mapped[Optional[datetime]] = mapped_column(
+    approved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    applied_at: Mapped[Optional[datetime]] = mapped_column(
+    applied_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 

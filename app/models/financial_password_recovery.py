@@ -4,24 +4,24 @@ FinancialPasswordRecovery model.
 Tracks financial password recovery requests with video verification.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import (
     Boolean,
     DateTime,
+    ForeignKey,
     Integer,
     String,
     Text,
-    ForeignKey,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
 if TYPE_CHECKING:
-    from app.models.user import User
     from app.models.admin import Admin
+    from app.models.user import User
 
 
 class FinancialPasswordRecovery(Base):
@@ -80,26 +80,26 @@ class FinancialPasswordRecovery(Base):
     )
 
     # Admin processing
-    processed_by_admin_id: Mapped[Optional[int]] = mapped_column(
+    processed_by_admin_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("admins.id"), nullable=True
     )
-    processed_at: Mapped[Optional[datetime]] = mapped_column(
+    processed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    admin_comment: Mapped[Optional[str]] = mapped_column(
+    admin_comment: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )
 
     # Audit timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
 

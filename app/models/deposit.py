@@ -4,9 +4,9 @@ Deposit model.
 Represents user deposits into the platform.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     DECIMAL,
@@ -31,11 +31,25 @@ class Deposit(Base):
 
     __tablename__ = "deposits"
     __table_args__ = (
-        CheckConstraint('level >= 1 AND level <= 5', name='check_deposit_level_range'),
-        CheckConstraint('amount > 0', name='check_deposit_amount_positive'),
-        CheckConstraint('roi_cap_amount >= 0', name='check_deposit_roi_cap_non_negative'),
-        CheckConstraint('roi_paid_amount >= 0', name='check_deposit_roi_paid_non_negative'),
-        CheckConstraint('roi_paid_amount <= roi_cap_amount', name='check_deposit_roi_paid_not_exceeds_cap'),
+        CheckConstraint(
+            'level >= 1 AND level <= 5',
+            name='check_deposit_level_range'
+        ),
+        CheckConstraint(
+            'amount > 0', name='check_deposit_amount_positive'
+        ),
+        CheckConstraint(
+            'roi_cap_amount >= 0',
+            name='check_deposit_roi_cap_non_negative'
+        ),
+        CheckConstraint(
+            'roi_paid_amount >= 0',
+            name='check_deposit_roi_paid_non_negative'
+        ),
+        CheckConstraint(
+            'roi_paid_amount <= roi_cap_amount',
+            name='check_deposit_roi_paid_not_exceeds_cap'
+        ),
     )
 
     # Primary key
@@ -57,13 +71,13 @@ class Deposit(Base):
     )
 
     # Blockchain data
-    tx_hash: Mapped[Optional[str]] = mapped_column(
+    tx_hash: Mapped[str | None] = mapped_column(
         String(255), nullable=True, unique=True
     )
-    block_number: Mapped[Optional[int]] = mapped_column(
+    block_number: Mapped[int | None] = mapped_column(
         BigInteger, nullable=True
     )
-    wallet_address: Mapped[Optional[str]] = mapped_column(
+    wallet_address: Mapped[str | None] = mapped_column(
         String(255), nullable=True
     )
 
@@ -85,15 +99,15 @@ class Deposit(Base):
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+        DateTime, default=lambda: datetime.now(UTC), nullable=False
     )
-    confirmed_at: Mapped[Optional[datetime]] = mapped_column(
+    confirmed_at: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False
     )
 

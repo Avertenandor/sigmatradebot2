@@ -4,7 +4,6 @@ RewardSession repository.
 Data access layer for RewardSession model.
 """
 
-from typing import Optional
 from datetime import datetime
 
 from sqlalchemy import select
@@ -23,7 +22,7 @@ class RewardSessionRepository(BaseRepository[RewardSession]):
 
     async def get_active_session(
         self,
-    ) -> Optional[RewardSession]:
+    ) -> RewardSession | None:
         """
         Get currently active reward session.
 
@@ -34,7 +33,7 @@ class RewardSessionRepository(BaseRepository[RewardSession]):
 
         stmt = (
             select(RewardSession)
-            .where(RewardSession.is_active == True)
+            .where(RewardSession.is_active)
             .where(RewardSession.start_date <= now)
             .where(RewardSession.end_date >= now)
         )
@@ -43,7 +42,7 @@ class RewardSessionRepository(BaseRepository[RewardSession]):
 
     async def get_latest_session(
         self,
-    ) -> Optional[RewardSession]:
+    ) -> RewardSession | None:
         """
         Get latest reward session.
 

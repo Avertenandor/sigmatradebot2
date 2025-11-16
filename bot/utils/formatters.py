@@ -4,10 +4,9 @@ Utility functions for formatting data
 """
 
 from decimal import Decimal
-from typing import Union
 
 
-def format_usdt(amount: Union[Decimal, float, int]) -> str:
+def format_usdt(amount: Decimal | float | int) -> str:
     """
     Format USDT amount to 2 decimal places
 

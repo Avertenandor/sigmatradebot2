@@ -4,11 +4,10 @@ Base repository.
 Generic CRUD operations for all repositories.
 """
 
-from typing import Any, Generic, List, Optional, Type, TypeVar, Dict
+from typing import Any, Generic, TypeVar
 
-from sqlalchemy import select, func, update, delete
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import DeclarativeMeta
 
 from app.models.base import Base
 
@@ -32,7 +31,7 @@ class BaseRepository(Generic[ModelType]):
     """
 
     def __init__(
-        self, model: Type[ModelType], session: AsyncSession
+        self, model: type[ModelType], session: AsyncSession
     ) -> None:
         """
         Initialize repository.
@@ -44,7 +43,7 @@ class BaseRepository(Generic[ModelType]):
         self.model = model
         self.session = session
 
-    async def get_by_id(self, id: int) -> Optional[ModelType]:
+    async def get_by_id(self, id: int) -> ModelType | None:
         """
         Get entity by ID.
 
@@ -58,7 +57,7 @@ class BaseRepository(Generic[ModelType]):
 
     async def get_by(
         self, **filters: Any
-    ) -> Optional[ModelType]:
+    ) -> ModelType | None:
         """
         Get single entity by filters.
 
@@ -74,10 +73,10 @@ class BaseRepository(Generic[ModelType]):
 
     async def find_all(
         self,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
+        limit: int | None = None,
+        offset: int | None = None,
         **filters: Any,
-    ) -> List[ModelType]:
+    ) -> list[ModelType]:
         """
         Find all entities matching filters.
 
@@ -101,7 +100,7 @@ class BaseRepository(Generic[ModelType]):
 
     async def find_by(
         self, **filters: Any
-    ) -> List[ModelType]:
+    ) -> list[ModelType]:
         """
         Find entities by filters.
 
@@ -131,7 +130,7 @@ class BaseRepository(Generic[ModelType]):
 
     async def update(
         self, id: int, **data: Any
-    ) -> Optional[ModelType]:
+    ) -> ModelType | None:
         """
         Update entity by ID.
 
@@ -203,8 +202,8 @@ class BaseRepository(Generic[ModelType]):
         return count > 0
 
     async def bulk_create(
-        self, items: List[Dict[str, Any]]
-    ) -> List[ModelType]:
+        self, items: list[dict[str, Any]]
+    ) -> list[ModelType]:
         """
         Create multiple entities.
 

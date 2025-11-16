@@ -11,4 +11,3 @@ class AppealStates(StatesGroup):
     """Appeal flow states."""
 
     waiting_for_appeal_text = State()
-

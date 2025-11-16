@@ -5,22 +5,20 @@ Supports: text, photo, voice, audio
 """
 
 import asyncio
-from typing import List
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from aiogram import Router, F
+from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
 from aiogram.types import (
     CallbackQuery,
-    Message,
-    InlineKeyboardMarkup,
     InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
 )
-from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.user_service import UserService
 from bot.states.admin_states import AdminStates
-
 
 router = Router(name="admin_broadcast")
 
@@ -32,11 +30,7 @@ BROADCAST_COOLDOWN_MS = 15 * 60 * 1000  # 15 minutes in milliseconds
 def get_cancel_button() -> InlineKeyboardMarkup:
     """Get cancel button keyboard"""
     buttons = [
-        [
-            InlineKeyboardButton(
-                text="❌ Отмена", callback_data="admin_panel"
-            )
-        ]
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_panel")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -103,7 +97,7 @@ async def handle_start_broadcast(
 
 
 @router.message(AdminStates.awaiting_broadcast_message)
-async def handle_broadcast_message(
+async def handle_broadcast_message(  # noqa: C901
     message: Message,
     state: FSMContext,
     session: AsyncSession,
@@ -119,6 +113,7 @@ async def handle_broadcast_message(
 
     # Check if message is a menu button - if so, clear state and ignore
     from bot.utils.menu_buttons import is_menu_button
+
     if message.text and is_menu_button(message.text):
         await state.clear()
         return  # Let menu handlers process this
@@ -189,18 +184,24 @@ async def handle_broadcast_message(
                 )
             elif broadcast_type == "photo":
                 await message.bot.send_photo(
-                    telegram_id, file_id, caption=caption,
-                    parse_mode="Markdown" if caption else None
+                    telegram_id,
+                    file_id,
+                    caption=caption,
+                    parse_mode="Markdown" if caption else None,
                 )
             elif broadcast_type == "voice":
                 await message.bot.send_voice(
-                    telegram_id, file_id, caption=caption,
-                    parse_mode="Markdown" if caption else None
+                    telegram_id,
+                    file_id,
+                    caption=caption,
+                    parse_mode="Markdown" if caption else None,
                 )
             elif broadcast_type == "audio":
                 await message.bot.send_audio(
-                    telegram_id, file_id, caption=caption,
-                    parse_mode="Markdown" if caption else None
+                    telegram_id,
+                    file_id,
+                    caption=caption,
+                    parse_mode="Markdown" if caption else None,
                 )
 
             success_count += 1

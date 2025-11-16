@@ -19,6 +19,7 @@ try:
 except ImportError:
     # Fallback for older redis versions
     import redis.asyncio as aioredis
+
     AsyncRedis = aioredis.Redis
 
 # Add project root to path
@@ -26,18 +27,24 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.config.database import async_session_maker  # noqa: E402
 from app.config.settings import settings  # noqa: E402
-from app.services.blockchain_service import init_blockchain_service  # noqa: E402
+from app.services.blockchain_service import (
+    init_blockchain_service,  # noqa: E402
+)
 from app.utils.admin_init import ensure_default_super_admin  # noqa: E402
 from bot.middlewares.auth import AuthMiddleware  # noqa: E402
 from bot.middlewares.ban_middleware import BanMiddleware  # noqa: E402
 from bot.middlewares.database import DatabaseMiddleware  # noqa: E402
 from bot.middlewares.logger_middleware import LoggerMiddleware  # noqa: E402
-from bot.middlewares.menu_state_clear import MenuStateClearMiddleware  # noqa: E402
-from bot.middlewares.rate_limit_middleware import RateLimitMiddleware  # noqa: E402
+from bot.middlewares.menu_state_clear import (
+    MenuStateClearMiddleware,  # noqa: E402
+)
+from bot.middlewares.rate_limit_middleware import (
+    RateLimitMiddleware,  # noqa: E402
+)
 from bot.middlewares.request_id import RequestIDMiddleware  # noqa: E402
 
 
-async def main() -> None:
+async def main() -> None:  # noqa: C901
     """Initialize and run the bot."""
     # Configure logger
     logger.add(
@@ -52,11 +59,20 @@ async def main() -> None:
     # Validate environment variables (basic check)
     try:
         # Quick validation of critical settings
-        if not settings.telegram_bot_token or "your_" in settings.telegram_bot_token.lower():
+        if (
+            not settings.telegram_bot_token
+            or "your_" in settings.telegram_bot_token.lower()
+        ):
             logger.error("TELEGRAM_BOT_TOKEN is not properly configured")
-        if not settings.database_url or "your_" in settings.database_url.lower():
+        if (
+            not settings.database_url
+            or "your_" in settings.database_url.lower()
+        ):
             logger.error("DATABASE_URL is not properly configured")
-        if not settings.wallet_private_key or "your_" in settings.wallet_private_key.lower():
+        if (
+            not settings.wallet_private_key
+            or "your_" in settings.wallet_private_key.lower()
+        ):
             logger.error("WALLET_PRIVATE_KEY is not properly configured")
     except Exception as e:
         logger.warning(f"Could not validate environment: {e}")
@@ -89,8 +105,11 @@ async def main() -> None:
         storage = RedisStorage(redis=redis_client)
     except Exception as e:
         logger.error(f"Failed to initialize Redis storage: {e}")
-        logger.warning("Falling back to MemoryStorage (states will not persist)")
+        logger.warning(
+            "Falling back to MemoryStorage (states will not persist)"
+        )
         from aiogram.fsm.storage.memory import MemoryStorage
+
         storage = MemoryStorage()
         redis_client = None
 
@@ -108,15 +127,13 @@ async def main() -> None:
     # Register middlewares (PART5: RequestID must be first!)
     dp.update.middleware(RequestIDMiddleware())
     dp.update.middleware(LoggerMiddleware())
-    dp.update.middleware(
-        DatabaseMiddleware(session_pool=async_session_maker)
-    )
+    dp.update.middleware(DatabaseMiddleware(session_pool=async_session_maker))
     # Menu state clear must be after DatabaseMiddleware (needs session)
     # but before AuthMiddleware to clear state early
     dp.update.middleware(MenuStateClearMiddleware())
     dp.update.middleware(AuthMiddleware())
     dp.update.middleware(BanMiddleware())
-    
+
     # Rate limiting (optional, requires Redis)
     if redis_client:
         try:
@@ -137,20 +154,25 @@ async def main() -> None:
         """Global error handler for unhandled exceptions."""
         logger.exception(
             f"Unhandled error in bot: {exc.__class__.__name__}: {exc}",
-            extra={"update": str(event.update) if hasattr(event, 'update') else None}
+            extra={
+                "update": str(event.update)
+                if hasattr(event, "update")
+                else None
+            },
         )
-        
+
         # Try to send error message to user
         try:
-            if hasattr(event, 'update') and event.update.message:
+            if hasattr(event, "update") and event.update.message:
                 await event.update.message.answer(
-                    "⚠️ Произошла ошибка. Пожалуйста, попробуйте позже или обратитесь в поддержку."
+                    "⚠️ Произошла ошибка. Пожалуйста, попробуйте позже"
+                        "или обратитесь в поддержку."
                 )
         except Exception as send_error:
             logger.error(f"Failed to send error message: {send_error}")
-        
+
         return True  # Mark error as handled
-    
+
     # Register handlers
     from bot.handlers import (
         appeal,
@@ -158,33 +180,34 @@ async def main() -> None:
         # finpass_recovery,  # Temporarily disabled due to encoding issues
         instructions,
         menu,
+        profile,
+        referral,
         start,
+        support,
+        transaction,
         verification,
         withdrawal,
-        referral,
-        profile,
-        transaction,
-        support,
     )
     from bot.handlers.admin import (
         blacklist,
         broadcast,
         deposit_settings,
-        # finpass_recovery as admin_finpass,  # Temporarily disabled due to encoding issues
+        # finpass_recovery as admin_finpass,
+            # Temporarily disabled due to encoding issues
         management,
         panel,
         users,
-        wallets,
         wallet_key_setup,
+        wallets,
         withdrawals,
     )
 
-    # Core handlers (menu must be registered BEFORE deposit/withdrawal 
+    # Core handlers (menu must be registered BEFORE deposit/withdrawal
     # to have priority over FSM state handlers)
     dp.include_router(start.router)
     dp.include_router(menu.router)
-    
-    # User handlers (registered AFTER menu to ensure menu handlers 
+
+    # User handlers (registered AFTER menu to ensure menu handlers
     # process menu buttons first, even if user is in FSM state)
     dp.include_router(deposit.router)
     dp.include_router(withdrawal.router)
@@ -216,7 +239,7 @@ async def main() -> None:
     except Exception as e:
         logger.error(f"Failed to connect to Telegram API: {e}")
         raise
-    
+
     # Initialize default super admin (after bot connection is established)
     logger.info("Initializing default super admin...")
     try:
@@ -225,14 +248,18 @@ async def main() -> None:
         logger.info("Default super admin initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize default super admin: {e}")
-        logger.warning("Bot will continue, but admin may need to be created manually")
+        logger.warning(
+            "Bot will continue, but admin may need to be created manually"
+        )
 
     # Start polling
     logger.info("Bot started successfully")
-    
+
     try:
         logger.info("Starting polling...")
-        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+        await dp.start_polling(
+            bot, allowed_updates=dp.resolve_used_update_types()
+        )
     except Exception as e:
         logger.exception(f"Polling error: {e}")
         raise

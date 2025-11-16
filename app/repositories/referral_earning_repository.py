@@ -4,10 +4,9 @@ ReferralEarning repository.
 Data access layer for ReferralEarning model.
 """
 
-from typing import List, Optional
 from decimal import Decimal
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.referral_earning import ReferralEarning
@@ -24,8 +23,8 @@ class ReferralEarningRepository(
         super().__init__(ReferralEarning, session)
 
     async def get_by_referral(
-        self, referral_id: int, paid: Optional[bool] = None
-    ) -> List[ReferralEarning]:
+        self, referral_id: int, paid: bool | None = None
+    ) -> list[ReferralEarning]:
         """
         Get earnings by referral.
 
@@ -43,8 +42,8 @@ class ReferralEarningRepository(
         return await self.find_by(**filters)
 
     async def get_unpaid_earnings(
-        self, referral_id: Optional[int] = None
-    ) -> List[ReferralEarning]:
+        self, referral_id: int | None = None
+    ) -> list[ReferralEarning]:
         """
         Get unpaid earnings.
 
@@ -75,15 +74,15 @@ class ReferralEarningRepository(
         stmt = (
             select(func.sum(ReferralEarning.amount))
             .where(ReferralEarning.referral_id == referral_id)
-            .where(ReferralEarning.paid == False)
+            .where(not ReferralEarning.paid)
         )
         result = await self.session.execute(stmt)
         total = result.scalar()
         return total or Decimal("0")
 
     async def find_by_referral_ids(
-        self, referral_ids: List[int]
-    ) -> List[ReferralEarning]:
+        self, referral_ids: list[int]
+    ) -> list[ReferralEarning]:
         """
         Get all earnings for multiple referral IDs.
 
@@ -104,10 +103,10 @@ class ReferralEarningRepository(
 
     async def get_unpaid_by_referral_ids(
         self,
-        referral_ids: List[int],
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
-    ) -> List[ReferralEarning]:
+        referral_ids: list[int],
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> list[ReferralEarning]:
         """
         Get unpaid earnings for multiple referral IDs.
 
@@ -125,7 +124,7 @@ class ReferralEarningRepository(
         stmt = (
             select(ReferralEarning)
             .where(ReferralEarning.referral_id.in_(referral_ids))
-            .where(ReferralEarning.paid == False)
+            .where(not ReferralEarning.paid)
             .order_by(ReferralEarning.created_at.desc())
         )
 

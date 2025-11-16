@@ -4,19 +4,18 @@ ReferralEarning model.
 Tracks individual referral earnings for payment.
 """
 
+from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Optional
-
-from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
     DateTime,
+    ForeignKey,
     Index,
     Integer,
     Numeric,
     String,
-    ForeignKey,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -64,12 +63,12 @@ class ReferralEarning(Base):
     )
 
     # Source transaction (optional)
-    source_transaction_id: Mapped[Optional[int]] = mapped_column(
+    source_transaction_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("transactions.id"), nullable=True
     )
 
     # Payment tracking
-    tx_hash: Mapped[Optional[str]] = mapped_column(
+    tx_hash: Mapped[str | None] = mapped_column(
         String(66), nullable=True
     )
     paid: Mapped[bool] = mapped_column(

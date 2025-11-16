@@ -4,7 +4,6 @@ WalletChangeRequest repository.
 Data access layer for WalletChangeRequest model.
 """
 
-from typing import List
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,7 +24,7 @@ class WalletChangeRequestRepository(
 
     async def get_by_status(
         self, status: str
-    ) -> List[WalletChangeRequest]:
+    ) -> list[WalletChangeRequest]:
         """
         Get requests by status.
 
@@ -39,7 +38,7 @@ class WalletChangeRequestRepository(
 
     async def get_by_type(
         self, type: str
-    ) -> List[WalletChangeRequest]:
+    ) -> list[WalletChangeRequest]:
         """
         Get requests by type.
 
@@ -53,7 +52,7 @@ class WalletChangeRequestRepository(
 
     async def get_pending_requests(
         self,
-    ) -> List[WalletChangeRequest]:
+    ) -> list[WalletChangeRequest]:
         """
         Get all pending requests.
 
@@ -64,7 +63,7 @@ class WalletChangeRequestRepository(
 
     async def get_active_requests(
         self,
-    ) -> List[WalletChangeRequest]:
+    ) -> list[WalletChangeRequest]:
         """
         Get active (pending or approved) requests.
 

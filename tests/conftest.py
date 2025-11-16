@@ -6,9 +6,10 @@ Pytest configuration and shared fixtures.
 
 import asyncio
 import os
-from datetime import datetime, timezone
+from collections.abc import AsyncGenerator, Callable, Generator
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any, AsyncGenerator, Callable, Generator
+from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -56,7 +57,6 @@ from app.services import (
 )
 from app.utils.encryption import hash_password
 
-
 # ==================== PYTEST CONFIGURATION ====================
 
 
@@ -64,32 +64,16 @@ def pytest_configure(config: Any) -> None:
     """Configure pytest with custom markers."""
     config.addinivalue_line(
         "markers",
-        'slow: marks tests as slow (deselect with \'-m "not slow"\')'
+        "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     )
+    config.addinivalue_line("markers", "critical: marks tests as critical")
     config.addinivalue_line(
-        "markers",
-        "critical: marks tests as critical"
+        "markers", "blockchain: marks tests that interact with blockchain"
     )
-    config.addinivalue_line(
-        "markers",
-        "blockchain: marks tests that interact with blockchain"
-    )
-    config.addinivalue_line(
-        "markers",
-        "integration: marks integration tests"
-    )
-    config.addinivalue_line(
-        "markers",
-        "e2e: marks end-to-end tests"
-    )
-    config.addinivalue_line(
-        "markers",
-        "security: marks security tests"
-    )
-    config.addinivalue_line(
-        "markers",
-        "performance: marks performance tests"
-    )
+    config.addinivalue_line("markers", "integration: marks integration tests")
+    config.addinivalue_line("markers", "e2e: marks end-to-end tests")
+    config.addinivalue_line("markers", "security: marks security tests")
+    config.addinivalue_line("markers", "performance: marks performance tests")
 
 
 # ==================== EVENT LOOP ====================
@@ -108,8 +92,7 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
 # Test database URL
 TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL",
-    "postgresql+asyncpg://postgres:postgres@"
-    "localhost:5432/sigmatradebot_test"
+    "postgresql+asyncpg://postgres:postgres@localhost:5432/sigmatradebot_test",
 )
 
 SYNC_TEST_DATABASE_URL = TEST_DATABASE_URL.replace("+asyncpg", "")
@@ -148,9 +131,7 @@ async def db_session(
         AsyncSession: Database session
     """
     async_session = async_sessionmaker(
-        async_engine,
-        class_=AsyncSession,
-        expire_on_commit=False
+        async_engine, class_=AsyncSession, expire_on_commit=False
     )
 
     async with async_session() as session:
@@ -271,7 +252,7 @@ async def test_deposit(
         status="confirmed",
         roi_cap_amount=Decimal("500"),  # 500% cap
         roi_paid_amount=Decimal("0"),
-        tx_hash="0x" + "a" * 64
+        tx_hash="0x" + "a" * 64,
     )
     db_session.add(deposit)
     await db_session.commit()
@@ -293,7 +274,7 @@ async def test_transaction(
         balance_after=Decimal("100"),
         status="confirmed",
         description="Test deposit",
-        tx_hash="0x" + "b" * 64
+        tx_hash="0x" + "b" * 64,
     )
     db_session.add(transaction)
     await db_session.commit()
@@ -328,7 +309,7 @@ async def test_referral_chain(
         username="level1",
         wallet_address="0x" + "1" * 40,
         financial_password=hash_password("l1_123"),
-        referrer_id=referrer.id
+        referrer_id=referrer.id,
     )
     db_session.add(level1)
     await db_session.commit()
@@ -340,7 +321,7 @@ async def test_referral_chain(
         username="level2",
         wallet_address="0x" + "2" * 40,
         financial_password=hash_password("l2_123"),
-        referrer_id=level1.id
+        referrer_id=level1.id,
     )
     db_session.add(level2)
     await db_session.commit()
@@ -352,7 +333,7 @@ async def test_referral_chain(
         username="level3",
         wallet_address="0x" + "3" * 40,
         financial_password=hash_password("l3_123"),
-        referrer_id=level2.id
+        referrer_id=level2.id,
     )
     db_session.add(level3)
     await db_session.commit()
@@ -566,17 +547,18 @@ def create_user_helper(
     db_session: AsyncSession,  # pylint: disable=redefined-outer-name
 ) -> Callable[..., Any]:
     """Helper function to create users dynamically."""
+
     async def _create_user(
         telegram_id: int | None = None,
         username: str | None = None,
         wallet_address: str | None = None,
         balance: Decimal = Decimal("0"),
         referrer_id: int | None = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> User:
         if telegram_id is None:
             base_id = 100000000
-            timestamp = int(datetime.now(timezone.utc).timestamp())
+            timestamp = int(datetime.now(UTC).timestamp())
             telegram_id = base_id + timestamp
         if username is None:
             username = f"user_{telegram_id}"
@@ -590,7 +572,7 @@ def create_user_helper(
             financial_password=hash_password("test123"),
             balance=balance,
             referrer_id=referrer_id,
-            **kwargs
+            **kwargs,
         )
         db_session.add(user)
         await db_session.commit()
@@ -605,12 +587,13 @@ def create_deposit_helper(
     db_session: AsyncSession,  # pylint: disable=redefined-outer-name
 ) -> Callable[..., Any]:
     """Helper function to create deposits dynamically."""
+
     async def _create_deposit(
         user: User,
         level: int = 1,
         amount: Decimal = Decimal("10"),
         status: str = "confirmed",
-        **kwargs: Any
+        **kwargs: Any,
     ) -> Deposit:
         deposit = Deposit(
             user_id=user.id,
@@ -619,7 +602,7 @@ def create_deposit_helper(
             status=status,
             roi_cap_amount=amount * 5,  # 500% cap
             roi_paid_amount=Decimal("0"),
-            **kwargs
+            **kwargs,
         )
         db_session.add(deposit)
         await db_session.commit()
@@ -634,12 +617,13 @@ def create_transaction_helper(
     db_session: AsyncSession,  # pylint: disable=redefined-outer-name
 ) -> Callable[..., Any]:
     """Helper function to create transactions dynamically."""
+
     async def _create_transaction(
         user: User,
         transaction_type: str = "deposit",
         amount: Decimal = Decimal("10"),
         status: str = "confirmed",
-        **kwargs: Any
+        **kwargs: Any,
     ) -> Transaction:
         transaction = Transaction(
             user_id=user.id,
@@ -648,7 +632,7 @@ def create_transaction_helper(
             balance_before=user.balance,
             balance_after=user.balance + amount,
             status=status,
-            **kwargs
+            **kwargs,
         )
         db_session.add(transaction)
         await db_session.commit()
@@ -680,15 +664,11 @@ async def cleanup_test_data(
     if test_user_ids:
         # Delete transactions
         await db_session.execute(
-            delete(Transaction).where(
-                Transaction.user_id.in_(test_user_ids)
-            )
+            delete(Transaction).where(Transaction.user_id.in_(test_user_ids))
         )
         # Delete deposits
         await db_session.execute(
-            delete(Deposit).where(
-                Deposit.user_id.in_(test_user_ids)
-            )
+            delete(Deposit).where(Deposit.user_id.in_(test_user_ids))
         )
         # Delete users
         await db_session.execute(
@@ -703,50 +683,35 @@ async def cleanup_test_data(
 class MockBlockchainService:
     """Mock blockchain service for testing."""
 
-    async def send_payment(
-        self,
-        _to_address: str,
-        _amount: Decimal
-    ) -> str:
+    async def send_payment(self, _to_address: str, _amount: Decimal) -> str:
         """Mock send payment."""
         return "0x" + "mock_tx_hash" + "0" * 40
 
     async def get_deposit_events(
-        self,
-        _from_block: int | None = None
+        self, _from_block: int | None = None
     ) -> list[Any]:
         """Mock get deposit events."""
         return []
 
-    async def verify_transaction(
-        self,
-        _tx_hash: str
-    ) -> dict[str, Any]:
+    async def verify_transaction(self, _tx_hash: str) -> dict[str, Any]:
         """Mock verify transaction."""
         return {
             "status": "confirmed",
             "block_number": 123456,
             "from": "0x" + "a" * 40,
             "to": "0x" + "b" * 40,
-            "value": "100000000000000000000"  # 100 USDT
+            "value": "100000000000000000000",  # 100 USDT
         }
 
 
 class MockNotificationService:
     """Mock notification service for testing."""
 
-    async def send_notification(
-        self,
-        _user_id: int,
-        _message: str
-    ) -> bool:
+    async def send_notification(self, _user_id: int, _message: str) -> bool:
         """Mock send notification."""
         return True
 
-    async def send_admin_notification(
-        self,
-        _message: str
-    ) -> bool:
+    async def send_admin_notification(self, _message: str) -> bool:
         """Mock send admin notification."""
         return True
 

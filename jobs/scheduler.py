@@ -28,7 +28,9 @@ try:
     logger.info("BlockchainService initialized for scheduler")
 except Exception as e:
     logger.error(f"Failed to initialize BlockchainService: {e}")
-    logger.warning("Scheduler will continue, but blockchain operations may fail")
+    logger.warning(
+        "Scheduler will continue, but blockchain operations may fail"
+    )
 
 from jobs.tasks.daily_rewards import process_daily_rewards
 from jobs.tasks.deposit_monitoring import monitor_deposits

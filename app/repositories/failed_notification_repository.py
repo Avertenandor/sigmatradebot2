@@ -4,7 +4,6 @@ FailedNotification repository (КРИТИЧНО - PART5).
 Data access layer for FailedNotification model.
 """
 
-from typing import List
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,7 +27,7 @@ class FailedNotificationRepository(
 
     async def get_unresolved(
         self, critical_only: bool = False
-    ) -> List[FailedNotification]:
+    ) -> list[FailedNotification]:
         """
         Get unresolved failed notifications.
 
@@ -46,7 +45,7 @@ class FailedNotificationRepository(
 
     async def get_critical_unresolved(
         self,
-    ) -> List[FailedNotification]:
+    ) -> list[FailedNotification]:
         """
         Get critical unresolved notifications.
 
@@ -57,7 +56,7 @@ class FailedNotificationRepository(
 
     async def get_by_user(
         self, user_telegram_id: int
-    ) -> List[FailedNotification]:
+    ) -> list[FailedNotification]:
         """
         Get failed notifications by user.
 
@@ -73,7 +72,7 @@ class FailedNotificationRepository(
 
     async def get_by_type(
         self, notification_type: str
-    ) -> List[FailedNotification]:
+    ) -> list[FailedNotification]:
         """
         Get failed notifications by type.
 
@@ -89,7 +88,7 @@ class FailedNotificationRepository(
 
     async def get_pending_for_retry(
         self, max_attempts: int = 5, limit: int = 100
-    ) -> List[FailedNotification]:
+    ) -> list[FailedNotification]:
         """
         Get failed notifications ready for retry.
 
@@ -102,7 +101,7 @@ class FailedNotificationRepository(
         """
         stmt = (
             select(FailedNotification)
-            .where(FailedNotification.resolved == False)
+            .where(not FailedNotification.resolved)
             .where(FailedNotification.attempt_count < max_attempts)
             .order_by(FailedNotification.created_at.asc())
             .limit(limit)

@@ -4,11 +4,19 @@ User model.
 Represents a registered Telegram user in the system.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, DECIMAL, ForeignKey, String
+from sqlalchemy import (
+    DECIMAL,
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    String,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -23,9 +31,17 @@ class User(Base):
 
     __tablename__ = "users"
     __table_args__ = (
-        CheckConstraint('balance >= 0', name='check_user_balance_non_negative'),
-        CheckConstraint('total_earned >= 0', name='check_user_total_earned_non_negative'),
-        CheckConstraint('pending_earnings >= 0', name='check_user_pending_earnings_non_negative'),
+        CheckConstraint(
+            'balance >= 0', name='check_user_balance_non_negative'
+        ),
+        CheckConstraint(
+            'total_earned >= 0',
+            name='check_user_total_earned_non_negative'
+        ),
+        CheckConstraint(
+            'pending_earnings >= 0',
+            name='check_user_pending_earnings_non_negative'
+        ),
     )
 
     # Primary key
@@ -35,7 +51,7 @@ class User(Base):
     telegram_id: Mapped[int] = mapped_column(
         BigInteger, unique=True, index=True, nullable=False
     )
-    username: Mapped[Optional[str]] = mapped_column(
+    username: Mapped[str | None] = mapped_column(
         String(255), nullable=True, index=True
     )
 
@@ -48,10 +64,10 @@ class User(Base):
     )
 
     # Optional contacts (from TZ)
-    phone: Mapped[Optional[str]] = mapped_column(
+    phone: Mapped[str | None] = mapped_column(
         String(50), nullable=True
     )
-    email: Mapped[Optional[str]] = mapped_column(
+    email: Mapped[str | None] = mapped_column(
         String(255), nullable=True
     )
 
@@ -67,7 +83,7 @@ class User(Base):
     )
 
     # Referral
-    referrer_id: Mapped[Optional[int]] = mapped_column(
+    referrer_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
         index=True
@@ -92,15 +108,15 @@ class User(Base):
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+        DateTime, default=lambda: datetime.now(UTC), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False
     )
-    last_active: Mapped[Optional[datetime]] = mapped_column(
+    last_active: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True
     )
 
@@ -111,21 +127,21 @@ class User(Base):
         back_populates="referrals",
         foreign_keys=[referrer_id],
     )
-    referrals: Mapped[List["User"]] = relationship(
+    referrals: Mapped[list["User"]] = relationship(
         "User",
         back_populates="referrer",
         foreign_keys=[referrer_id]
     )
 
     # Deposits relationship
-    deposits: Mapped[List["Deposit"]] = relationship(
+    deposits: Mapped[list["Deposit"]] = relationship(
         "Deposit",
         back_populates="user",
         cascade="all, delete-orphan",
     )
 
     # Transactions relationship
-    transactions: Mapped[List["Transaction"]] = relationship(
+    transactions: Mapped[list["Transaction"]] = relationship(
         "Transaction",
         back_populates="user",
         cascade="all, delete-orphan",
@@ -135,9 +151,9 @@ class User(Base):
     def masked_wallet(self) -> str:
         """
         Get masked wallet address for display.
-        
+
         Returns:
-            Masked wallet address (first 10 + ... + last 8 chars)
+            Masked wallet address (first 10 + ... + last 8)
         """
         if len(self.wallet_address) > 20:
             return f"{self.wallet_address[:10]}...{self.wallet_address[-8:]}"
@@ -145,4 +161,7 @@ class User(Base):
 
     def __repr__(self) -> str:
         """String representation."""
-        return f"<User(id={self.id}, telegram_id={self.telegram_id}, username={self.username})>"
+        return (
+            f"<User(id={self.id}, telegram_id={self.telegram_id}, "
+            f"username={self.username})>"
+        )

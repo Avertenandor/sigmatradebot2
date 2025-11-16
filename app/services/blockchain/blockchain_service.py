@@ -4,8 +4,8 @@ Blockchain Service - Main Interface.
 Orchestrates all blockchain operations using component services.
 """
 
+from collections.abc import Callable
 from decimal import Decimal
-from typing import Callable, Dict, Optional
 
 from loguru import logger
 
@@ -33,7 +33,7 @@ class BlockchainService:
         usdt_contract_address: str,
         system_wallet_address: str,
         payout_wallet_address: str,
-        payout_wallet_private_key: Optional[str] = None,
+        payout_wallet_private_key: str | None = None,
         chain_id: int = 56,
         confirmation_blocks: int = 12,
         poll_interval: int = 3,
@@ -68,9 +68,9 @@ class BlockchainService:
         )
 
         # Component services (initialized after provider connection)
-        self._event_monitor: Optional[EventMonitor] = None
-        self._deposit_processor: Optional[DepositProcessor] = None
-        self._payment_sender: Optional[PaymentSender] = None
+        self._event_monitor: EventMonitor | None = None
+        self._deposit_processor: DepositProcessor | None = None
+        self._payment_sender: PaymentSender | None = None
 
         # Store private key (will be used when initializing payment sender)
         self._payout_wallet_private_key = payout_wallet_private_key
@@ -138,7 +138,7 @@ class BlockchainService:
 
     async def start_deposit_monitoring(
         self,
-        event_callback: Optional[Callable] = None,
+        event_callback: Callable | None = None,
         from_block: int | str = "latest",
     ) -> None:
         """
@@ -166,9 +166,9 @@ class BlockchainService:
     async def check_deposit_transaction(
         self,
         tx_hash: str,
-        expected_amount: Optional[Decimal] = None,
+        expected_amount: Decimal | None = None,
         tolerance_percent: float = 0.05,
-    ) -> Dict[str, any]:
+    ) -> dict[str, any]:
         """
         Check deposit transaction status.
 
@@ -209,7 +209,7 @@ class BlockchainService:
         to_address: str,
         amount_usdt: Decimal,
         max_retries: int = 5,
-    ) -> Dict[str, any]:
+    ) -> dict[str, any]:
         """
         Send USDT payment.
 
@@ -233,7 +233,7 @@ class BlockchainService:
         self,
         to_address: str,
         amount_usdt: Decimal,
-    ) -> Optional[Dict[str, any]]:
+    ) -> dict[str, any] | None:
         """
         Estimate gas cost for payment.
 
@@ -255,8 +255,8 @@ class BlockchainService:
 
     async def get_usdt_balance(
         self,
-        address: Optional[str] = None,
-    ) -> Optional[Decimal]:
+        address: str | None = None,
+    ) -> Decimal | None:
         """
         Get USDT balance for address.
 
@@ -271,8 +271,8 @@ class BlockchainService:
 
     async def get_bnb_balance(
         self,
-        address: Optional[str] = None,
-    ) -> Optional[Decimal]:
+        address: str | None = None,
+    ) -> Decimal | None:
         """
         Get BNB balance for address (for gas fees).
 
@@ -315,7 +315,7 @@ class BlockchainService:
 
     # === Health & Status ===
 
-    async def health_check(self) -> Dict[str, any]:
+    async def health_check(self) -> dict[str, any]:
         """
         Perform health check on blockchain service.
 
@@ -336,7 +336,9 @@ class BlockchainService:
         try:
             payout_usdt = await self.get_usdt_balance()
             payout_bnb = await self.get_bnb_balance()
-            system_usdt = await self.get_usdt_balance(self.system_wallet_address)
+            system_usdt = await self.get_usdt_balance(
+                self.system_wallet_address
+            )
         except Exception as e:
             logger.error(f"Error checking balances: {e}")
             payout_usdt = None
@@ -379,7 +381,7 @@ class BlockchainService:
 
 # === Singleton Pattern ===
 
-_blockchain_service: Optional[BlockchainService] = None
+_blockchain_service: BlockchainService | None = None
 
 
 def get_blockchain_service() -> BlockchainService:
@@ -409,7 +411,7 @@ def init_blockchain_service(
     usdt_contract_address: str,
     system_wallet_address: str,
     payout_wallet_address: str,
-    payout_wallet_private_key: Optional[str] = None,
+    payout_wallet_private_key: str | None = None,
     chain_id: int = 56,
     confirmation_blocks: int = 12,
     poll_interval: int = 3,

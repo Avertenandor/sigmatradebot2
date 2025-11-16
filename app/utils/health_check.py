@@ -5,21 +5,19 @@ Provides health check functionality for the bot.
 """
 
 import asyncio
-from typing import Dict, Optional
 
 from loguru import logger
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.database import async_session_maker
 from app.config.settings import settings
 from app.services.blockchain_service import get_blockchain_service
 
 
-async def check_database() -> Dict[str, any]:
+async def check_database() -> dict[str, any]:
     """
     Check database connectivity.
-    
+
     Returns:
         Dict with status and details
     """
@@ -27,7 +25,7 @@ async def check_database() -> Dict[str, any]:
         async with async_session_maker() as session:
             result = await session.execute(text("SELECT 1"))
             result.scalar()
-            
+
         return {
             "status": "healthy",
             "message": "Database connection successful",
@@ -40,16 +38,16 @@ async def check_database() -> Dict[str, any]:
         }
 
 
-async def check_redis() -> Dict[str, any]:
+async def check_redis() -> dict[str, any]:
     """
     Check Redis connectivity.
-    
+
     Returns:
         Dict with status and details
     """
     try:
         import redis.asyncio as redis
-        
+
         redis_client = redis.Redis(
             host=settings.redis_host,
             port=settings.redis_port,
@@ -57,10 +55,10 @@ async def check_redis() -> Dict[str, any]:
             db=settings.redis_db,
             decode_responses=True,
         )
-        
+
         await redis_client.ping()
         await redis_client.close()
-        
+
         return {
             "status": "healthy",
             "message": "Redis connection successful",
@@ -78,26 +76,28 @@ async def check_redis() -> Dict[str, any]:
         }
 
 
-async def check_blockchain() -> Dict[str, any]:
+async def check_blockchain() -> dict[str, any]:
     """
     Check blockchain service connectivity.
-    
+
     Returns:
         Dict with status and details
     """
     try:
         blockchain_service = get_blockchain_service()
-        
+
         # Try to get chain ID (lightweight check)
         loop = asyncio.get_event_loop()
         chain_id = await loop.run_in_executor(
             None,
             lambda: blockchain_service.web3.eth.chain_id
         )
-        
+
         return {
             "status": "healthy",
-            "message": f"Blockchain connection successful (Chain ID: {chain_id})",
+            "message": (
+                f"Blockchain connection successful (Chain ID: {chain_id})"
+            ),
             "chain_id": chain_id,
         }
     except RuntimeError as e:
@@ -115,10 +115,10 @@ async def check_blockchain() -> Dict[str, any]:
         }
 
 
-async def check_all() -> Dict[str, any]:
+async def check_all() -> dict[str, any]:
     """
     Perform all health checks.
-    
+
     Returns:
         Dict with overall status and individual check results
     """
@@ -127,22 +127,22 @@ async def check_all() -> Dict[str, any]:
         "redis": await check_redis(),
         "blockchain": await check_blockchain(),
     }
-    
+
     # Determine overall status
     all_healthy = all(
         check.get("status") == "healthy" for check in results.values()
     )
-    
+
     return {
         "status": "healthy" if all_healthy else "degraded",
         "checks": results,
     }
 
 
-def get_health_status_sync() -> Dict[str, any]:
+def get_health_status_sync() -> dict[str, any]:
     """
     Get health status synchronously (for use in HTTP endpoints).
-    
+
     Returns:
         Dict with health status
     """
@@ -154,7 +154,7 @@ def get_health_status_sync() -> Dict[str, any]:
             result = loop.run_until_complete(check_all())
         finally:
             loop.close()
-        
+
         return result
     except Exception as e:
         logger.error(f"Health check failed: {e}")
@@ -162,4 +162,3 @@ def get_health_status_sync() -> Dict[str, any]:
             "status": "unhealthy",
             "error": str(e),
         }
-

@@ -1,7 +1,8 @@
 """
 Menu buttons constants.
 
-Centralized list of menu button texts to prevent handlers from intercepting them.
+Centralized list of menu button texts to prevent handlers from intercepting
+    them.
 """
 
 # Main menu buttons
@@ -109,12 +110,11 @@ ALL_MENU_BUTTONS = (
 def is_menu_button(text: str) -> bool:
     """
     Check if text is a menu button.
-    
+
     Args:
         text: Message text to check
-        
+
     Returns:
         True if text is a menu button, False otherwise
     """
     return text in ALL_MENU_BUTTONS
-

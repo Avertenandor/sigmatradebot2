@@ -4,7 +4,6 @@ User repository.
 Data access layer for User model.
 """
 
-from typing import List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +22,7 @@ class UserRepository(BaseRepository[User]):
 
     async def get_by_telegram_id(
         self, telegram_id: int
-    ) -> Optional[User]:
+    ) -> User | None:
         """
         Get user by Telegram ID.
 
@@ -37,7 +36,7 @@ class UserRepository(BaseRepository[User]):
 
     async def get_by_wallet_address(
         self, wallet_address: str
-    ) -> Optional[User]:
+    ) -> User | None:
         """
         Get user by wallet address.
 
@@ -51,7 +50,7 @@ class UserRepository(BaseRepository[User]):
 
     async def get_with_referrals(
         self, user_id: int
-    ) -> Optional[User]:
+    ) -> User | None:
         """
         Get user with referrals loaded.
 
@@ -72,18 +71,18 @@ class UserRepository(BaseRepository[User]):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_all_telegram_ids(self) -> List[int]:
+    async def get_all_telegram_ids(self) -> list[int]:
         """
         Get all user Telegram IDs.
 
         Returns:
             List of Telegram IDs
         """
-        stmt = select(User.telegram_id).where(User.is_banned == False)
+        stmt = select(User.telegram_id).where(not User.is_banned)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
-    async def get_banned_users(self) -> List[User]:
+    async def get_banned_users(self) -> list[User]:
         """
         Get all banned users.
 
@@ -92,7 +91,7 @@ class UserRepository(BaseRepository[User]):
         """
         return await self.find_by(is_banned=True)
 
-    async def get_verified_users(self) -> List[User]:
+    async def get_verified_users(self) -> list[User]:
         """
         Get all verified users.
 

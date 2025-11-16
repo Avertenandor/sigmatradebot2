@@ -7,10 +7,10 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
+from app.config.settings import settings
 
 # Import all models to ensure they are registered with Base.metadata
 from app.models import Base
-from app.config.settings import settings
 
 # this is the Alembic Config object
 config = context.config

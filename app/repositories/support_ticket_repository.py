@@ -4,7 +4,6 @@ SupportTicket repository.
 Data access layer for SupportTicket model.
 """
 
-from typing import List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,8 +21,8 @@ class SupportTicketRepository(BaseRepository[SupportTicket]):
         super().__init__(SupportTicket, session)
 
     async def get_by_user(
-        self, user_id: int, status: Optional[str] = None
-    ) -> List[SupportTicket]:
+        self, user_id: int, status: str | None = None
+    ) -> list[SupportTicket]:
         """
         Get tickets by user.
 
@@ -42,7 +41,7 @@ class SupportTicketRepository(BaseRepository[SupportTicket]):
 
     async def get_with_messages(
         self, ticket_id: int
-    ) -> Optional[SupportTicket]:
+    ) -> SupportTicket | None:
         """
         Get ticket with messages loaded.
 
@@ -62,7 +61,7 @@ class SupportTicketRepository(BaseRepository[SupportTicket]):
 
     async def get_by_status(
         self, status: str
-    ) -> List[SupportTicket]:
+    ) -> list[SupportTicket]:
         """
         Get tickets by status.
 
@@ -76,7 +75,7 @@ class SupportTicketRepository(BaseRepository[SupportTicket]):
 
     async def get_assigned_to_admin(
         self, admin_id: int
-    ) -> List[SupportTicket]:
+    ) -> list[SupportTicket]:
         """
         Get tickets assigned to admin.
 

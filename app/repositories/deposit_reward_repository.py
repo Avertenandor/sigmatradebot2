@@ -4,10 +4,9 @@ DepositReward repository.
 Data access layer for DepositReward model.
 """
 
-from typing import List, Optional
 from decimal import Decimal
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.deposit_reward import DepositReward
@@ -22,8 +21,8 @@ class DepositRewardRepository(BaseRepository[DepositReward]):
         super().__init__(DepositReward, session)
 
     async def get_by_user(
-        self, user_id: int, paid: Optional[bool] = None
-    ) -> List[DepositReward]:
+        self, user_id: int, paid: bool | None = None
+    ) -> list[DepositReward]:
         """
         Get rewards by user.
 
@@ -41,8 +40,8 @@ class DepositRewardRepository(BaseRepository[DepositReward]):
         return await self.find_by(**filters)
 
     async def get_unpaid_rewards(
-        self, user_id: Optional[int] = None
-    ) -> List[DepositReward]:
+        self, user_id: int | None = None
+    ) -> list[DepositReward]:
         """
         Get unpaid rewards.
 
@@ -60,7 +59,7 @@ class DepositRewardRepository(BaseRepository[DepositReward]):
 
     async def get_by_session(
         self, reward_session_id: int
-    ) -> List[DepositReward]:
+    ) -> list[DepositReward]:
         """
         Get rewards by session.
 
@@ -89,7 +88,7 @@ class DepositRewardRepository(BaseRepository[DepositReward]):
         stmt = (
             select(func.sum(DepositReward.reward_amount))
             .where(DepositReward.user_id == user_id)
-            .where(DepositReward.paid == False)
+            .where(not DepositReward.paid)
         )
         result = await self.session.execute(stmt)
         total = result.scalar()

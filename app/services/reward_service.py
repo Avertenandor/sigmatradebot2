@@ -6,10 +6,9 @@ Manages reward sessions and deposit reward calculations with ROI caps.
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
 
 from loguru import logger
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.deposit import Deposit
@@ -42,7 +41,7 @@ class RewardService:
         start_date: datetime,
         end_date: datetime,
         created_by: int,
-    ) -> tuple[Optional[RewardSession], Optional[str]]:
+    ) -> tuple[RewardSession | None, str | None]:
         """
         Create new reward session.
 
@@ -95,12 +94,12 @@ class RewardService:
     async def update_session(
         self,
         session_id: int,
-        name: Optional[str] = None,
-        reward_rates: Optional[dict[int, Decimal]] = None,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-        is_active: Optional[bool] = None,
-    ) -> tuple[bool, Optional[str]]:
+        name: str | None = None,
+        reward_rates: dict[int, Decimal] | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+        is_active: bool | None = None,
+    ) -> tuple[bool, str | None]:
         """
         Update reward session.
 
@@ -156,7 +155,7 @@ class RewardService:
 
     async def delete_session(
         self, session_id: int
-    ) -> tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         """
         Delete reward session (only if no rewards calculated).
 
@@ -200,13 +199,13 @@ class RewardService:
 
     async def get_session_by_id(
         self, session_id: int
-    ) -> Optional[RewardSession]:
+    ) -> RewardSession | None:
         """Get reward session by ID."""
         return await self.session_repo.get_by_id(session_id)
 
-    async def calculate_rewards_for_session(
+    async def calculate_rewards_for_session(  # noqa: C901
         self, session_id: int
-    ) -> tuple[bool, int, Decimal, Optional[str]]:
+    ) -> tuple[bool, int, Decimal, str | None]:
         """
         Calculate rewards for session.
 
@@ -300,7 +299,8 @@ class RewardService:
             # CRITICAL: For Level 1, cap to remaining ROI space
             if deposit.level == 1 and deposit.roi_cap_amount:
                 roi_remaining = (
-                    deposit.roi_cap_amount - (deposit.roi_paid_amount or Decimal("0"))
+                    deposit.roi_cap_amount -
+                    (deposit.roi_paid_amount or Decimal("0"))
                 )
 
                 if reward_amount > roi_remaining:
@@ -387,7 +387,7 @@ class RewardService:
 
     async def mark_rewards_as_paid(
         self, reward_ids: list[int], tx_hash: str
-    ) -> tuple[bool, int, Optional[str]]:
+    ) -> tuple[bool, int, str | None]:
         """
         Mark rewards as paid (bulk operation).
 

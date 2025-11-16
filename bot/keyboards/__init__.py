@@ -15,6 +15,8 @@ from bot.keyboards.inline import (
 )
 from bot.keyboards.reply import (
     main_menu_reply_keyboard,
+)
+from bot.keyboards.reply import (
     support_keyboard as support_reply_keyboard,
 )
 

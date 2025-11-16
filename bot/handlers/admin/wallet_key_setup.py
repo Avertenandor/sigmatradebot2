@@ -8,23 +8,28 @@ Admin handler for secure wallet private key management.
 - Безопасное хранение
 """
 
-from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+import subprocess
+
+from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
+from eth_account import Account
 
 from app.config.settings import settings
-from eth_account import Account
-import os
-import subprocess
 
 router = Router()
 
 
 class WalletKeySetup(StatesGroup):
     """States for wallet key setup."""
-    
+
     waiting_for_key = State()
     confirming = State()
     confirming_removal = State()
@@ -34,7 +39,7 @@ class WalletKeySetup(StatesGroup):
 async def cmd_setup_wallet_key(message: Message, state: FSMContext):
     """
     Команда для настройки приватного ключа кошелька.
-    
+
     Доступна только super admin.
     """
     # Проверка что пользователь - super admin
@@ -42,7 +47,7 @@ async def cmd_setup_wallet_key(message: Message, state: FSMContext):
     if not admin_ids or message.from_user.id != admin_ids[0]:
         await message.answer("❌ Команда доступна только super admin")
         return
-    
+
     await message.answer(
         "🔐 <b>НАСТРОЙКА ПРИВАТНОГО КЛЮЧА КОШЕЛЬКА</b>\n\n"
         "⚠️ <b>ВНИМАНИЕ!</b> Это критически важная операция!\n\n"
@@ -53,9 +58,9 @@ async def cmd_setup_wallet_key(message: Message, state: FSMContext):
         "4. Ключ будет зашифрован и сохранён\n\n"
         "🔒 После сохранения бот автоматически перезапустится\n\n"
         "❌ Для отмены используйте /cancel",
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
-    
+
     await state.set_state(WalletKeySetup.waiting_for_key)
 
 
@@ -67,14 +72,14 @@ async def process_wallet_key(message: Message, state: FSMContext):
     try:
         # Немедленно удаляем сообщение с ключом
         await message.delete()
-        
+
         # Получаем ключ из сообщения
         private_key = message.text.strip()
-        
+
         # Удаляем префикс 0x если есть
         if private_key.startswith("0x"):
             private_key = private_key[2:]
-        
+
         # Валидация: проверяем что это hex и 64 символа
         if len(private_key) != 64:
             await message.answer(
@@ -84,7 +89,7 @@ async def process_wallet_key(message: Message, state: FSMContext):
                 "Попробуйте ещё раз или /cancel для отмены"
             )
             return
-        
+
         try:
             int(private_key, 16)  # Проверка что это hex
         except ValueError:
@@ -94,7 +99,7 @@ async def process_wallet_key(message: Message, state: FSMContext):
                 "Попробуйте ещё раз или /cancel для отмены"
             )
             return
-        
+
         # Валидация через eth_account
         try:
             account = Account.from_key(private_key)
@@ -106,13 +111,12 @@ async def process_wallet_key(message: Message, state: FSMContext):
                 "Попробуйте ещё раз или /cancel для отмены"
             )
             return
-        
+
         # Сохраняем ключ и адрес в state для подтверждения
         await state.update_data(
-            private_key=private_key,
-            wallet_address=wallet_address
+            private_key=private_key, wallet_address=wallet_address
         )
-        
+
         await message.answer(
             f"✅ <b>Ключ валиден!</b>\n\n"
             f"🔑 <b>Адрес кошелька:</b>\n"
@@ -124,11 +128,11 @@ async def process_wallet_key(message: Message, state: FSMContext):
             "• Бот будет перезапущен\n"
             "• Blockchain операции будут использовать этот кошелёк\n\n"
             "Используйте /confirm для подтверждения или /cancel для отмены",
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
-        
+
         await state.set_state(WalletKeySetup.confirming)
-        
+
     except Exception as e:
         await message.answer(
             f"❌ Ошибка при обработке ключа:\n{str(e)}\n\n"
@@ -145,25 +149,27 @@ async def confirm_wallet_key(message: Message, state: FSMContext):
     data = await state.get_data()
     private_key = data.get("private_key")
     wallet_address = data.get("wallet_address")
-    
+
     if not private_key or not wallet_address:
-        await message.answer("❌ Ошибка: данные потеряны. Начните заново с /setup_wallet_key")
+        await message.answer(
+            "❌ Ошибка: данные потеряны. Начните заново с /setup_wallet_key"
+        )
         await state.clear()
         return
-    
+
     try:
         # Путь к .env файлу
         env_file = "/opt/sigmatrade/.env"
-        
+
         # Читаем текущий .env
-        with open(env_file, "r") as f:
+        with open(env_file) as f:
             env_lines = f.readlines()
-        
+
         # Обновляем wallet_private_key и wallet_address
         updated = False
         updated_address = False
         new_lines = []
-        
+
         for line in env_lines:
             if line.startswith("wallet_private_key="):
                 new_lines.append(f"wallet_private_key={private_key}\n")
@@ -173,35 +179,44 @@ async def confirm_wallet_key(message: Message, state: FSMContext):
                 updated_address = True
             else:
                 new_lines.append(line)
-        
+
         # Если переменная не найдена, добавляем в конец
         if not updated:
-            new_lines.append(f"\n# Wallet Private Key (updated via Telegram)\n")
+            new_lines.append("\n# Wallet Private Key (updated via Telegram)\n")
             new_lines.append(f"wallet_private_key={private_key}\n")
         if not updated_address:
             new_lines.append(f"wallet_address={wallet_address}\n")
-        
+
         # Записываем обновлённый .env
         with open(env_file, "w") as f:
             f.writelines(new_lines)
-        
+
         await message.answer(
             "✅ <b>Приватный ключ успешно сохранён!</b>\n\n"
             f"🔑 Адрес: <code>{wallet_address}</code>\n\n"
             "🔄 Перезапускаю бота для применения изменений...",
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
-        
+
         # Очищаем state
         await state.clear()
-        
+
         # Перезапускаем Docker контейнеры
         subprocess.run(
-            ["docker", "compose", "-f", "/opt/sigmatrade/docker-compose.python.yml", "restart", "bot", "worker", "scheduler"],
+            [
+                "docker",
+                "compose",
+                "-f",
+                "/opt/sigmatrade/docker-compose.python.yml",
+                "restart",
+                "bot",
+                "worker",
+                "scheduler",
+            ],
             check=True,
-            capture_output=True
+            capture_output=True,
         )
-        
+
     except Exception as e:
         await message.answer(
             f"❌ Ошибка при сохранении:\n{str(e)}\n\n"
@@ -226,20 +241,31 @@ async def cancel_wallet_key_setup(message: Message, state: FSMContext):
 
 def get_wallet_management_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура управления кошельком."""
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="📊 Статус кошелька", callback_data="wallet_status"),
-        ],
-        [
-            InlineKeyboardButton(text="➕ Добавить/обновить ключ", callback_data="wallet_add"),
-        ],
-        [
-            InlineKeyboardButton(text="🗑️ Удалить ключ", callback_data="wallet_remove"),
-        ],
-        [
-            InlineKeyboardButton(text="❌ Закрыть", callback_data="wallet_close"),
-        ],
-    ])
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📊 Статус кошелька", callback_data="wallet_status"
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="➕ Добавить/обновить ключ",
+                    callback_data="wallet_add",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🗑️ Удалить ключ", callback_data="wallet_remove"
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="❌ Закрыть", callback_data="wallet_close"
+                ),
+            ],
+        ]
+    )
     return keyboard
 
 
@@ -247,7 +273,7 @@ def get_wallet_management_keyboard() -> InlineKeyboardMarkup:
 async def cmd_wallet_menu(message: Message):
     """
     Главное меню управления кошельком.
-    
+
     Доступно только super admin.
     """
     # Проверка что пользователь - super admin
@@ -255,12 +281,11 @@ async def cmd_wallet_menu(message: Message):
     if not admin_ids or message.from_user.id != admin_ids[0]:
         await message.answer("❌ Команда доступна только super admin")
         return
-    
+
     await message.answer(
-        "🔐 <b>УПРАВЛЕНИЕ КОШЕЛЬКОМ</b>\n\n"
-        "Выберите действие:",
+        "🔐 <b>УПРАВЛЕНИЕ КОШЕЛЬКОМ</b>\n\nВыберите действие:",
         parse_mode="HTML",
-        reply_markup=get_wallet_management_keyboard()
+        reply_markup=get_wallet_management_keyboard(),
     )
 
 
@@ -272,11 +297,11 @@ async def callback_wallet_status(callback: CallbackQuery):
     if not admin_ids or callback.from_user.id != admin_ids[0]:
         await callback.answer("❌ Доступ запрещён", show_alert=True)
         return
-    
+
     # Проверяем текущий ключ
     current_key = settings.wallet_private_key
     is_test_key = current_key == "0" * 64 or not current_key
-    
+
     if is_test_key:
         status_text = (
             "⚠️ <b>СТАТУС КОШЕЛЬКА</b>\n\n"
@@ -291,17 +316,21 @@ async def callback_wallet_status(callback: CallbackQuery):
             # Валидация ключа
             account = Account.from_key(settings.wallet_private_key)
             actual_address = account.address
-            
+
             # Проверка соответствия адресов
             if actual_address.lower() == settings.wallet_address.lower():
                 match_status = "✅ Соответствует"
             else:
-                match_status = f"⚠️ НЕ соответствует!\nФактический: <code>{actual_address}</code>"
-            
+                match_status = (
+                    f"⚠️ НЕ соответствует!\nФактический: "
+                    f"<code>{actual_address}</code>"
+                )
+
             status_text = (
                 "✅ <b>СТАТУС КОШЕЛЬКА</b>\n\n"
                 "🟢 <b>Статус:</b> Ключ установлен\n"
-                f"📍 <b>Адрес в конфиге:</b>\n<code>{settings.wallet_address}</code>\n\n"
+                f"📍 <b>Адрес в конфиге:</b>\n"
+                f"<code>{settings.wallet_address}</code>\n\n"
                 f"🔍 <b>Проверка:</b> {match_status}\n\n"
                 "✅ Blockchain операции доступны"
             )
@@ -309,15 +338,16 @@ async def callback_wallet_status(callback: CallbackQuery):
             status_text = (
                 "❌ <b>ОШИБКА КЛЮЧА</b>\n\n"
                 "🔴 <b>Статус:</b> Неверный ключ\n"
-                f"📍 <b>Адрес в конфиге:</b> <code>{settings.wallet_address}</code>\n\n"
+                f"📍 <b>Адрес в конфиге:</b>"
+                    "<code>{settings.wallet_address}</code>\n\n"
                 f"⚠️ <b>Ошибка:</b> {str(e)}\n\n"
                 "💡 Установите корректный ключ."
             )
-    
+
     await callback.message.edit_text(
         status_text,
         parse_mode="HTML",
-        reply_markup=get_wallet_management_keyboard()
+        reply_markup=get_wallet_management_keyboard(),
     )
     await callback.answer()
 
@@ -330,7 +360,7 @@ async def callback_wallet_add(callback: CallbackQuery, state: FSMContext):
     if not admin_ids or callback.from_user.id != admin_ids[0]:
         await callback.answer("❌ Доступ запрещён", show_alert=True)
         return
-    
+
     await callback.message.edit_text(
         "🔐 <b>ДОБАВЛЕНИЕ ПРИВАТНОГО КЛЮЧА</b>\n\n"
         "⚠️ <b>ВНИМАНИЕ!</b> Это критически важная операция!\n\n"
@@ -341,9 +371,9 @@ async def callback_wallet_add(callback: CallbackQuery, state: FSMContext):
         "4. Ключ будет зашифрован и сохранён\n\n"
         "🔒 После сохранения бот автоматически перезапустится\n\n"
         "❌ Для отмены используйте /cancel",
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
-    
+
     await state.set_state(WalletKeySetup.waiting_for_key)
     await callback.answer()
 
@@ -356,23 +386,32 @@ async def callback_wallet_remove(callback: CallbackQuery, state: FSMContext):
     if not admin_ids or callback.from_user.id != admin_ids[0]:
         await callback.answer("❌ Доступ запрещён", show_alert=True)
         return
-    
+
     # Проверяем есть ли ключ
     current_key = settings.wallet_private_key
     is_test_key = current_key == "0" * 64 or not current_key
-    
+
     if is_test_key:
-        await callback.answer("⚠️ Ключ уже удалён или не установлен", show_alert=True)
+        await callback.answer(
+            "⚠️ Ключ уже удалён или не установлен", show_alert=True
+        )
         return
-    
+
     # Создаём клавиатуру подтверждения
-    confirm_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="✅ Да, удалить", callback_data="wallet_remove_confirm"),
-            InlineKeyboardButton(text="❌ Отмена", callback_data="wallet_status"),
+    confirm_keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Да, удалить",
+                    callback_data="wallet_remove_confirm",
+                ),
+                InlineKeyboardButton(
+                    text="❌ Отмена", callback_data="wallet_status"
+                ),
+            ]
         ]
-    ])
-    
+    )
+
     await callback.message.edit_text(
         "🗑️ <b>УДАЛЕНИЕ ПРИВАТНОГО КЛЮЧА</b>\n\n"
         f"📍 <b>Текущий адрес:</b>\n<code>{settings.wallet_address}</code>\n\n"
@@ -384,9 +423,9 @@ async def callback_wallet_remove(callback: CallbackQuery, state: FSMContext):
         "• Бот будет перезапущен\n\n"
         "❓ Вы уверены что хотите удалить ключ?",
         parse_mode="HTML",
-        reply_markup=confirm_keyboard
+        reply_markup=confirm_keyboard,
     )
-    
+
     await callback.answer()
 
 
@@ -398,51 +437,60 @@ async def callback_wallet_remove_confirm(callback: CallbackQuery):
     if not admin_ids or callback.from_user.id != admin_ids[0]:
         await callback.answer("❌ Доступ запрещён", show_alert=True)
         return
-    
+
     try:
         # Путь к .env файлу
         env_file = "/opt/sigmatrade/.env"
-        
+
         # Читаем текущий .env
-        with open(env_file, "r") as f:
+        with open(env_file) as f:
             env_lines = f.readlines()
-        
+
         # Заменяем ключ на тестовый
         test_key = "0" * 64
         new_lines = []
-        
+
         for line in env_lines:
             if line.startswith("wallet_private_key="):
                 new_lines.append(f"wallet_private_key={test_key}\n")
             else:
                 new_lines.append(line)
-        
+
         # Записываем обновлённый .env
         with open(env_file, "w") as f:
             f.writelines(new_lines)
-        
+
         await callback.message.edit_text(
             "✅ <b>Приватный ключ успешно удалён!</b>\n\n"
             "🔄 Перезапускаю бота для применения изменений...\n\n"
             "⚠️ Не забудьте установить новый ключ для работы с blockchain!",
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
-        
+
         # Перезапускаем Docker контейнеры
         subprocess.run(
-            ["docker", "compose", "-f", "/opt/sigmatrade/docker-compose.python.yml", "restart", "bot", "worker", "scheduler"],
+            [
+                "docker",
+                "compose",
+                "-f",
+                "/opt/sigmatrade/docker-compose.python.yml",
+                "restart",
+                "bot",
+                "worker",
+                "scheduler",
+            ],
             check=True,
-            capture_output=True
+            capture_output=True,
         )
-        
+
     except Exception as e:
         await callback.message.edit_text(
             f"❌ <b>Ошибка при удалении:</b>\n{str(e)}\n\n"
             "Обратитесь к администратору сервера",
             parse_mode="HTML",
-            reply_markup=get_wallet_management_keyboard()
+            reply_markup=get_wallet_management_keyboard(),
         )
-    
+
     await callback.answer()
 
 
@@ -468,11 +516,11 @@ async def cmd_wallet_status(message: Message):
     if not admin_ids or message.from_user.id != admin_ids[0]:
         await message.answer("❌ Команда доступна только super admin")
         return
-    
+
     # Показываем статус
     current_key = settings.wallet_private_key
     is_test_key = current_key == "0" * 64 or not current_key
-    
+
     if is_test_key:
         status_emoji = "🔴"
         status_text = "Тестовый ключ"
@@ -481,25 +529,26 @@ async def cmd_wallet_status(message: Message):
         try:
             account = Account.from_key(settings.wallet_private_key)
             actual_address = account.address
-            
+
             if actual_address.lower() == settings.wallet_address.lower():
                 status_emoji = "🟢"
                 status_text = "Ключ установлен и валиден"
                 warning = ""
             else:
                 status_emoji = "⚠️"
-                status_text = f"Ключ установлен, но адреса не совпадают"
-                warning = f"\n\nФактический адрес: <code>{actual_address}</code>"
+                status_text = "Ключ установлен, но адреса не совпадают"
+                warning = (
+                    f"\n\nФактический адрес: <code>{actual_address}</code>"
+                )
         except Exception as e:
             status_emoji = "🔴"
             status_text = f"Ошибка ключа: {str(e)}"
             warning = "\n\n⚠️ Установите корректный ключ через /wallet_menu"
-    
+
     await message.answer(
         f"{status_emoji} <b>СТАТУС КОШЕЛЬКА</b>\n\n"
         f"<b>Статус:</b> {status_text}\n"
         f"<b>Адрес:</b> <code>{settings.wallet_address}</code>{warning}\n\n"
         f"💡 Полное управление: /wallet_menu",
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
-

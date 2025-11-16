@@ -4,13 +4,13 @@ Wallet admin service.
 Service for managing wallet change requests and approvals.
 """
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.wallet_change_request import WalletChangeRequest
 from app.models.enums import WalletChangeStatus
+from app.models.wallet_change_request import WalletChangeRequest
 from app.repositories.wallet_change_request_repository import (
     WalletChangeRequestRepository,
 )
@@ -24,7 +24,7 @@ class WalletAdminService:
         self.session = session
         self.repository = WalletChangeRequestRepository(session)
 
-    async def get_pending_requests(self) -> List[WalletChangeRequest]:
+    async def get_pending_requests(self) -> list[WalletChangeRequest]:
         """
         Get all pending wallet change requests.
 
@@ -37,7 +37,7 @@ class WalletAdminService:
         self,
         request_id: int,
         admin_id: int,
-        admin_notes: Optional[str] = None,
+        admin_notes: str | None = None,
     ) -> WalletChangeRequest:
         """
         Approve a wallet change request.
@@ -55,7 +55,7 @@ class WalletAdminService:
         """
         # Note: admin_notes parameter is reserved for future use
         _ = admin_notes  # Mark as intentionally unused
-        
+
         request = await self.repository.get_by_id(request_id)
 
         if not request:
@@ -72,7 +72,7 @@ class WalletAdminService:
             request.id,
             status=WalletChangeStatus.APPROVED.value,
             approved_by_admin_id=admin_id,
-            approved_at=datetime.now(timezone.utc),
+            approved_at=datetime.now(UTC),
         )
 
         if updated_request is None:
@@ -86,7 +86,7 @@ class WalletAdminService:
         self,
         request_id: int,
         admin_id: int,
-        admin_notes: Optional[str] = None,
+        admin_notes: str | None = None,
     ) -> WalletChangeRequest:
         """
         Reject a wallet change request.
@@ -118,10 +118,10 @@ class WalletAdminService:
             )
 
         # Update request
-        update_data: Dict[str, Any] = {
+        update_data: dict[str, Any] = {
             "status": WalletChangeStatus.REJECTED.value,
             "approved_by_admin_id": admin_id,
-            "approved_at": datetime.now(timezone.utc),
+            "approved_at": datetime.now(UTC),
         }
 
         # Update reason if admin notes provided

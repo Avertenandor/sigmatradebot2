@@ -3,16 +3,20 @@ Admin Panel Handler
 Handles admin panel main menu and platform statistics
 """
 
-from aiogram import Router, F
+from aiogram import F, Router
 from aiogram.filters import Command
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, Message
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.user_service import UserService
 from app.services.deposit_service import DepositService
 from app.services.referral_service import ReferralService
+from app.services.user_service import UserService
 from bot.utils.formatters import format_usdt
-
 
 router = Router(name="admin_panel")
 
@@ -186,27 +190,33 @@ async def handle_admin_stats(
 ❌ Не верифицированы: {total_users - verified_users}
 
 **Депозиты:**
-💰 Всего депозитов: {deposit_stats['total_deposits']}
-💵 Общая сумма: {format_usdt(deposit_stats['total_amount'])} USDT
-👤 Пользователей с депозитами: {deposit_stats['total_users']}
+💰 Всего депозитов: {deposit_stats["total_deposits"]}
+💵 Общая сумма: {format_usdt(deposit_stats["total_amount"])} USDT
+👤 Пользователей с депозитами: {deposit_stats["total_users"]}
 
 **По уровням:**
-• Уровень 1: {deposit_stats['deposits_by_level'].get(1, 0)} депозитов
-• Уровень 2: {deposit_stats['deposits_by_level'].get(2, 0)} депозитов
-• Уровень 3: {deposit_stats['deposits_by_level'].get(3, 0)} депозитов
-• Уровень 4: {deposit_stats['deposits_by_level'].get(4, 0)} депозитов
-• Уровень 5: {deposit_stats['deposits_by_level'].get(5, 0)} депозитов
+• Уровень 1: {deposit_stats["deposits_by_level"].get(1, 0)} депозитов
+• Уровень 2: {deposit_stats["deposits_by_level"].get(2, 0)} депозитов
+• Уровень 3: {deposit_stats["deposits_by_level"].get(3, 0)} депозитов
+• Уровень 4: {deposit_stats["deposits_by_level"].get(4, 0)} депозитов
+• Уровень 5: {deposit_stats["deposits_by_level"].get(5, 0)} депозитов
 
 **Рефералы:**
-🤝 Всего связей: {referral_stats['total_referrals']}
-💰 Всего начислено: {format_usdt(referral_stats['total_earnings'])} USDT
-✅ Выплачено: {format_usdt(referral_stats['paid_earnings'])} USDT
-⏳ Ожидает выплаты: {format_usdt(referral_stats['pending_earnings'])} USDT
+🤝 Всего связей: {referral_stats["total_referrals"]}
+💰 Всего начислено: {format_usdt(referral_stats["total_earnings"])} USDT
+✅ Выплачено: {format_usdt(referral_stats["paid_earnings"])} USDT
+⏳ Ожидает выплаты: {format_usdt(referral_stats["pending_earnings"])} USDT
 
 **По уровням:**
-• Уровень 1: {referral_stats['by_level'].get(1, {}).get('count', 0)} ({format_usdt(referral_stats['by_level'].get(1, {}).get('earnings', 0))} USDT)
-• Уровень 2: {referral_stats['by_level'].get(2, {}).get('count', 0)} ({format_usdt(referral_stats['by_level'].get(2, {}).get('earnings', 0))} USDT)
-• Уровень 3: {referral_stats['by_level'].get(3, {}).get('count', 0)} ({format_usdt(referral_stats['by_level'].get(3, {}).get('earnings', 0))} USDT)
+• Уровень 1: {referral_stats["by_level"].get(1, {}).get("count",
+    0)} ({format_usdt(referral_stats["by_level"].get(1, {}).get("earnings",
+        0))} USDT)
+• Уровень 2: {referral_stats["by_level"].get(2, {}).get("count",
+    0)} ({format_usdt(referral_stats["by_level"].get(2, {}).get(
+        "earnings", 0))} USDT)
+• Уровень 3: {referral_stats["by_level"].get(3, {}).get("count",
+    0)} ({format_usdt(referral_stats["by_level"].get(3, {}).get(
+        "earnings", 0))} USDT)
     """.strip()
 
     await callback.message.edit_text(
