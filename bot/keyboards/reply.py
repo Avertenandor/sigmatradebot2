@@ -90,7 +90,233 @@ def support_keyboard() -> ReplyKeyboardMarkup:
         KeyboardButton(text="❓ FAQ"),
     )
     builder.row(
-        KeyboardButton(text="◀️ Назад"),
+        KeyboardButton(text="📊 Главное меню"),
+    )
+
+    return builder.as_markup(resize_keyboard=True)
+
+
+def deposit_keyboard() -> ReplyKeyboardMarkup:
+    """
+    Deposit menu reply keyboard.
+
+    Returns:
+        ReplyKeyboardMarkup with deposit options
+    """
+    builder = ReplyKeyboardBuilder()
+
+    builder.row(
+        KeyboardButton(text="💰 Пополнить Level 1 (50 USDT)"),
+    )
+    builder.row(
+        KeyboardButton(text="💰 Пополнить Level 2 (100 USDT)"),
+    )
+    builder.row(
+        KeyboardButton(text="💰 Пополнить Level 3 (250 USDT)"),
+    )
+    builder.row(
+        KeyboardButton(text="💰 Пополнить Level 4 (500 USDT)"),
+    )
+    builder.row(
+        KeyboardButton(text="💰 Пополнить Level 5 (1000 USDT)"),
+    )
+    builder.row(
+        KeyboardButton(text="📊 Главное меню"),
+    )
+
+    return builder.as_markup(resize_keyboard=True)
+
+
+def withdrawal_keyboard() -> ReplyKeyboardMarkup:
+    """
+    Withdrawal menu reply keyboard.
+
+    Returns:
+        ReplyKeyboardMarkup with withdrawal options
+    """
+    builder = ReplyKeyboardBuilder()
+
+    builder.row(
+        KeyboardButton(text="💸 Вывести всю сумму"),
+    )
+    builder.row(
+        KeyboardButton(text="💵 Вывести указанную сумму"),
+    )
+    builder.row(
+        KeyboardButton(text="📜 История выводов"),
+    )
+    builder.row(
+        KeyboardButton(text="📊 Главное меню"),
+    )
+
+    return builder.as_markup(resize_keyboard=True)
+
+
+def referral_keyboard() -> ReplyKeyboardMarkup:
+    """
+    Referral menu reply keyboard.
+
+    Returns:
+        ReplyKeyboardMarkup with referral options
+    """
+    builder = ReplyKeyboardBuilder()
+
+    builder.row(
+        KeyboardButton(text="👥 Мои рефералы"),
+    )
+    builder.row(
+        KeyboardButton(text="💰 Мой заработок"),
+    )
+    builder.row(
+        KeyboardButton(text="📊 Статистика рефералов"),
+    )
+    builder.row(
+        KeyboardButton(text="📊 Главное меню"),
+    )
+
+    return builder.as_markup(resize_keyboard=True)
+
+
+def settings_keyboard() -> ReplyKeyboardMarkup:
+    """
+    Settings menu reply keyboard.
+
+    Returns:
+        ReplyKeyboardMarkup with settings options
+    """
+    builder = ReplyKeyboardBuilder()
+
+    builder.row(
+        KeyboardButton(text="👤 Мой профиль"),
+    )
+    builder.row(
+        KeyboardButton(text="💳 Мой кошелек"),
+    )
+    builder.row(
+        KeyboardButton(text="🔔 Настройки уведомлений"),
+    )
+    builder.row(
+        KeyboardButton(text="📝 Обновить контакты"),
+    )
+    builder.row(
+        KeyboardButton(text="📊 Главное меню"),
+    )
+
+    return builder.as_markup(resize_keyboard=True)
+
+
+def admin_keyboard() -> ReplyKeyboardMarkup:
+    """
+    Admin panel reply keyboard.
+
+    Returns:
+        ReplyKeyboardMarkup with admin options
+    """
+    builder = ReplyKeyboardBuilder()
+
+    builder.row(
+        KeyboardButton(text="👥 Управление пользователями"),
+        KeyboardButton(text="💸 Управление выводами"),
+    )
+    builder.row(
+        KeyboardButton(text="📊 Статистика бота"),
+        KeyboardButton(text="📢 Рассылка"),
+    )
+    builder.row(
+        KeyboardButton(text="⚙️ Настройки депозитов"),
+        KeyboardButton(text="🔑 Настройки кошелька"),
+    )
+    builder.row(
+        KeyboardButton(text="🚫 Управление blacklist"),
+    )
+    builder.row(
+        KeyboardButton(text="📊 Главное меню"),
+    )
+
+    return builder.as_markup(resize_keyboard=True)
+
+
+def admin_users_keyboard() -> ReplyKeyboardMarkup:
+    """
+    Admin users management keyboard.
+
+    Returns:
+        ReplyKeyboardMarkup with user management options
+    """
+    builder = ReplyKeyboardBuilder()
+
+    builder.row(
+        KeyboardButton(text="🔍 Найти пользователя"),
+    )
+    builder.row(
+        KeyboardButton(text="👥 Список пользователей"),
+    )
+    builder.row(
+        KeyboardButton(text="🚫 Заблокировать пользователя"),
+    )
+    builder.row(
+        KeyboardButton(text="⚠️ Терминировать аккаунт"),
+    )
+    builder.row(
+        KeyboardButton(text="👑 Админ-панель"),
+    )
+
+    return builder.as_markup(resize_keyboard=True)
+
+
+def admin_withdrawals_keyboard() -> ReplyKeyboardMarkup:
+    """
+    Admin withdrawals management keyboard.
+
+    Returns:
+        ReplyKeyboardMarkup with withdrawal management options
+    """
+    builder = ReplyKeyboardBuilder()
+
+    builder.row(
+        KeyboardButton(text="⏳ Ожидающие выводы"),
+    )
+    builder.row(
+        KeyboardButton(text="✅ Одобренные выводы"),
+    )
+    builder.row(
+        KeyboardButton(text="❌ Отклоненные выводы"),
+    )
+    builder.row(
+        KeyboardButton(text="👑 Админ-панель"),
+    )
+
+    return builder.as_markup(resize_keyboard=True)
+
+
+def confirmation_keyboard() -> ReplyKeyboardMarkup:
+    """
+    Simple Yes/No confirmation keyboard.
+
+    Returns:
+        ReplyKeyboardMarkup with Yes/No options
+    """
+    builder = ReplyKeyboardBuilder()
+
+    builder.row(
+        KeyboardButton(text="✅ Да"),
+        KeyboardButton(text="❌ Нет"),
+    )
+
+    return builder.as_markup(resize_keyboard=True)
+
+
+def cancel_keyboard() -> ReplyKeyboardMarkup:
+    """
+    Simple cancel keyboard.
+
+    Returns:
+        ReplyKeyboardMarkup with cancel option
+    """
+    builder = ReplyKeyboardBuilder()
+
+    builder.row(
+        KeyboardButton(text="❌ Отмена"),
     )
 
     return builder.as_markup(resize_keyboard=True)
