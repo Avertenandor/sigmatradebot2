@@ -267,13 +267,95 @@ async def show_my_profile(
     session: AsyncSession,
     user: User,
 ) -> None:
-    """Show user profile."""
+    """Show detailed user profile."""
+    from app.services.deposit_service import DepositService
+    from bot.utils.formatters import format_usdt
+    
+    user_service = UserService(session)
+    deposit_service = DepositService(session)
+    
+    # Get user stats
+    stats = await user_service.get_user_stats(user.id)
+    
+    # Get user balance
+    balance = await user_service.get_user_balance(user.id)
+    
+    # Get ROI progress for level 1
+    roi_progress = await deposit_service.get_level1_roi_progress(user.id)
+    
+    # Get referral link
+    from app.config.settings import settings
+    bot_username = settings.telegram_bot_username
+    referral_link = user_service.generate_referral_link(user.id, bot_username)
+    
+    # Build ROI section
+    roi_section = ""
+    if roi_progress.get("has_active_deposit") and not roi_progress.get("is_completed"):
+        progress_percent = roi_progress.get("roi_percent", 0)
+        filled = round((progress_percent / 100) * 10)
+        empty = 10 - filled
+        progress_bar = "█" * filled + "░" * empty
+        
+        roi_section = (
+            f"\n*🎯 ROI Прогресс (Уровень 1):*\n"
+            f"💵 Депозит: {format_usdt(roi_progress.get('deposit_amount', 0))} USDT\n"
+            f"📊 Прогресс: {progress_bar} {progress_percent:.1f}%\n"
+            f"✅ Получено: {format_usdt(roi_progress.get('roi_paid', 0))} USDT\n"
+            f"⏳ Осталось: {format_usdt(roi_progress.get('roi_remaining', 0))} USDT\n"
+            f"🎯 Цель: {format_usdt(roi_progress.get('roi_cap', 0))} USDT (500%)\n\n"
+        )
+    elif roi_progress.get("has_active_deposit") and roi_progress.get("is_completed"):
+        roi_section = (
+            f"\n*🎯 ROI Завершён (Уровень 1):*\n"
+            f"✅ Достигнут максимум 500%!\n"
+            f"💰 Получено: {format_usdt(roi_progress.get('roi_paid', 0))} USDT\n"
+            f"📌 Создайте новый депозит чтобы продолжить\n\n"
+        )
+    
+    # Format wallet address
+    wallet_display = user.wallet_address
+    if len(user.wallet_address) > 20:
+        wallet_display = f"{user.wallet_address[:10]}...{user.wallet_address[-8:]}"
+    
     text = (
-        f"👤 *Мой профиль*\n\n"
-        f"Username: @{user.username or 'не указан'}\n"
-        f"Telegram ID: `{user.telegram_id}`\n"
-        f"Кошелек: `{user.wallet_address[:10]}...{user.wallet_address[-8:]}`\n"
-        f"Дата регистрации: {user.created_at.strftime('%d.%m.%Y')}"
+        f"👤 *Ваш профиль*\n\n"
+        f"*Основная информация:*\n"
+        f"🆔 ID: `{user.id}`\n"
+        f"👤 Username: @{user.username or 'не указан'}\n"
+        f"💳 Кошелек: `{wallet_display}`\n\n"
+        f"*Статус:*\n"
+        f"{'✅' if user.is_verified else '❌'} Верификация: {'Пройдена' if user.is_verified else 'Не пройдена'}\n"
+        f"{'🚫 Аккаунт заблокирован' if user.is_banned else '✅ Аккаунт активен'}\n\n"
+        f"*Баланс:*\n"
+        f"💰 Доступно для вывода: *{format_usdt(balance.get('available_balance', 0))} USDT*\n"
+        f"💸 Всего заработано: {format_usdt(balance.get('total_earned', 0))} USDT\n"
+        f"⏳ В ожидании выплаты: {format_usdt(balance.get('pending_earnings', 0))} USDT\n"
+    )
+    
+    if balance.get('pending_withdrawals', 0) > 0:
+        text += f"🔒 Заблокировано в выводах: {format_usdt(balance.get('pending_withdrawals', 0))} USDT\n"
+    
+    text += f"✅ Уже выплачено: {format_usdt(balance.get('total_paid', 0))} USDT\n"
+    text += roi_section
+    text += (
+        f"*Депозиты и рефералы:*\n"
+        f"💰 Всего депозитов: {format_usdt(stats.get('total_deposits', 0))} USDT\n"
+        f"👥 Рефералов: {stats.get('referral_count', 0)}\n"
+        f"📊 Активных уровней: {len(stats.get('activated_levels', []))}/5\n\n"
+    )
+    
+    if user.phone or user.email:
+        text += "*Контакты:*\n"
+        if user.phone:
+            text += f"📞 {user.phone}\n"
+        if user.email:
+            text += f"📧 {user.email}\n"
+        text += "\n"
+    
+    text += (
+        f"*Реферальная ссылка:*\n"
+        f"`{referral_link}`\n\n"
+        f"📅 Дата регистрации: {user.created_at.strftime('%d.%m.%Y')}"
     )
     
     await message.answer(text, parse_mode="Markdown")
