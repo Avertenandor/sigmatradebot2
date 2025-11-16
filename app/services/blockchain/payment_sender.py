@@ -6,7 +6,6 @@ Handles USDT payment sending with gas estimation and error handling.
 
 import asyncio
 from decimal import Decimal
-from typing import Dict, Optional
 
 from eth_account import Account
 from loguru import logger
@@ -38,7 +37,7 @@ class PaymentSender:
         self,
         web3: AsyncWeb3,
         usdt_contract_address: str,
-        payout_wallet_private_key: Optional[str] = None,
+        payout_wallet_private_key: str | None = None,
     ) -> None:
         """
         Initialize payment sender.
@@ -61,14 +60,15 @@ class PaymentSender:
 
         # Wallet setup
         self._private_key = payout_wallet_private_key
-        self._payout_address: Optional[str] = None
+        self._payout_address: str | None = None
 
         if self._private_key:
             # Derive address from private key
             account = Account.from_key(self._private_key)
             self._payout_address = account.address
             logger.info(
-                f"PaymentSender initialized with wallet: {self._payout_address}"
+                f"PaymentSender initialized with wallet: "
+                f"{self._payout_address}"
             )
         else:
             logger.warning(
@@ -81,7 +81,7 @@ class PaymentSender:
         to_address: str,
         amount_usdt: Decimal,
         max_retries: int = MAX_RETRIES,
-    ) -> Dict[str, any]:
+    ) -> dict[str, any]:
         """
         Send USDT payment.
 
@@ -161,7 +161,7 @@ class PaymentSender:
         self,
         to_address: str,
         amount_wei: int,
-    ) -> Dict[str, any]:
+    ) -> dict[str, any]:
         """
         Send a single USDT transaction.
 
@@ -231,7 +231,8 @@ class PaymentSender:
             logger.info(
                 f"Transaction sent! Hash: {tx_hash_hex}\n"
                 f"  Gas: {gas_limit}\n"
-                f"  Gas Price: {self.web3.from_wei(gas_price_wei, 'gwei')} Gwei"
+                f"  Gas Price: "
+                f"{self.web3.from_wei(gas_price_wei, 'gwei')} Gwei"
             )
 
             # Wait for receipt (with timeout)
@@ -255,7 +256,7 @@ class PaymentSender:
                         "error": "Transaction reverted",
                     }
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 return {
                     "success": False,
                     "tx_hash": tx_hash_hex,
@@ -274,7 +275,7 @@ class PaymentSender:
         self,
         to_address: str,
         amount_usdt: Decimal,
-    ) -> Optional[Dict[str, any]]:
+    ) -> dict[str, any] | None:
         """
         Estimate gas cost for USDT transfer.
 
@@ -308,7 +309,9 @@ class PaymentSender:
 
             return {
                 "gas_limit": gas_estimate,
-                "gas_price_gwei": float(self.web3.from_wei(gas_price_wei, "gwei")),
+                "gas_price_gwei": float(
+                    self.web3.from_wei(gas_price_wei, "gwei")
+                ),
                 "total_cost_bnb": float(total_cost_bnb),
             }
 
@@ -318,8 +321,8 @@ class PaymentSender:
 
     async def get_usdt_balance(
         self,
-        address: Optional[str] = None,
-    ) -> Optional[Decimal]:
+        address: str | None = None,
+    ) -> Decimal | None:
         """
         Get USDT balance for address.
 
@@ -352,8 +355,8 @@ class PaymentSender:
 
     async def get_bnb_balance(
         self,
-        address: Optional[str] = None,
-    ) -> Optional[Decimal]:
+        address: str | None = None,
+    ) -> Decimal | None:
         """
         Get BNB balance for address (for gas fees).
 
@@ -376,7 +379,9 @@ class PaymentSender:
                 check_address_checksum
             )
 
-            balance_bnb = Decimal(str(self.web3.from_wei(balance_wei, "ether")))
+            balance_bnb = Decimal(
+                str(self.web3.from_wei(balance_wei, "ether"))
+            )
 
             return balance_bnb
 

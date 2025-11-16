@@ -4,8 +4,7 @@ Blacklist Service.
 Manages user blacklist for pre-registration and ban prevention.
 """
 
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,8 +36,8 @@ class BlacklistService:
 
     async def is_blacklisted(
         self,
-        telegram_id: Optional[int] = None,
-        wallet_address: Optional[str] = None,
+        telegram_id: int | None = None,
+        wallet_address: str | None = None,
     ) -> bool:
         """
         Check if user is blacklisted.
@@ -66,10 +65,10 @@ class BlacklistService:
 
     async def add_to_blacklist(
         self,
-        telegram_id: Optional[int] = None,
-        wallet_address: Optional[str] = None,
+        telegram_id: int | None = None,
+        wallet_address: str | None = None,
         reason: str = "Manual blacklist",
-        added_by_admin_id: Optional[int] = None,
+        added_by_admin_id: int | None = None,
         action_type: str = "registration_denied",
     ) -> Blacklist:
         """
@@ -113,12 +112,12 @@ class BlacklistService:
                 existing.reason = reason
                 existing.created_by_admin_id = added_by_admin_id
                 existing.action_type = action_type
-                existing.created_at = datetime.now(timezone.utc)
+                existing.created_at = datetime.now(UTC)
 
                 # Update appeal deadline for blocked users
                 if action_type == BlacklistActionType.BLOCKED:
                     appeal_deadline = (
-                        datetime.now(timezone.utc) + timedelta(days=3)
+                        datetime.now(UTC) + timedelta(days=3)
                     )
                 else:
                     appeal_deadline = None
@@ -126,7 +125,7 @@ class BlacklistService:
                 await self.repository.update(
                     existing.id,
                     action_type=action_type,
-                    created_at=datetime.now(timezone.utc),
+                    created_at=datetime.now(UTC),
                     appeal_deadline=appeal_deadline,
                     is_active=True,
                 )
@@ -152,7 +151,7 @@ class BlacklistService:
         if action_type == BlacklistActionType.BLOCKED:
             # 3 working days = 3 calendar days (simplified)
             appeal_deadline = (
-                datetime.now(timezone.utc) + timedelta(days=3)
+                datetime.now(UTC) + timedelta(days=3)
             )
 
         # Create new entry
@@ -176,8 +175,8 @@ class BlacklistService:
 
     async def remove_from_blacklist(
         self,
-        telegram_id: Optional[int] = None,
-        wallet_address: Optional[str] = None,
+        telegram_id: int | None = None,
+        wallet_address: str | None = None,
     ) -> bool:
         """
         Remove user from blacklist.
@@ -229,9 +228,9 @@ class BlacklistService:
 
     async def get_blacklist_entry(
         self,
-        telegram_id: Optional[int] = None,
-        wallet_address: Optional[str] = None,
-    ) -> Optional[Blacklist]:
+        telegram_id: int | None = None,
+        wallet_address: str | None = None,
+    ) -> Blacklist | None:
         """
         Get blacklist entry.
 

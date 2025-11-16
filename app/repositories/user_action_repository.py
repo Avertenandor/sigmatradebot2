@@ -4,7 +4,6 @@ UserAction repository.
 Data access layer for UserAction model.
 """
 
-from typing import List, Optional
 from datetime import datetime, timedelta
 
 from sqlalchemy import select
@@ -22,8 +21,8 @@ class UserActionRepository(BaseRepository[UserAction]):
         super().__init__(UserAction, session)
 
     async def get_by_user(
-        self, user_id: int, action_type: Optional[str] = None
-    ) -> List[UserAction]:
+        self, user_id: int, action_type: str | None = None
+    ) -> list[UserAction]:
         """
         Get actions by user.
 
@@ -42,7 +41,7 @@ class UserActionRepository(BaseRepository[UserAction]):
 
     async def get_by_type(
         self, action_type: str
-    ) -> List[UserAction]:
+    ) -> list[UserAction]:
         """
         Get actions by type.
 

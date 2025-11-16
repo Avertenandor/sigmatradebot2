@@ -10,9 +10,9 @@ Business logic for managing financial password recovery requests.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from enum import Enum
-from typing import Iterable, List, Optional
+from collections.abc import Iterable
+from datetime import UTC, datetime
+from enum import StrEnum
 
 from loguru import logger
 from sqlalchemy import select
@@ -27,7 +27,7 @@ from app.repositories.financial_password_recovery_repository import (
 from app.repositories.user_repository import UserRepository
 
 
-class FinancialRecoveryStatus(str, Enum):
+class FinancialRecoveryStatus(StrEnum):
     """Lifecycle states for a financial password recovery request."""
 
     PENDING = "pending"
@@ -55,7 +55,7 @@ class FinpassRecoveryService:
 
     async def get_pending_by_user(
         self, user_id: int
-    ) -> Optional[FinancialPasswordRecovery]:
+    ) -> FinancialPasswordRecovery | None:
         """Return the pending request for a user, if any."""
         requests = await self.repository.get_by_user(
             user_id=user_id,
@@ -127,8 +127,8 @@ class FinpassRecoveryService:
         return request
 
     async def get_all_pending(
-        self, limit: Optional[int] = None
-    ) -> List[FinancialPasswordRecovery]:
+        self, limit: int | None = None
+    ) -> list[FinancialPasswordRecovery]:
         """Fetch pending requests, optionally limited for admin UI."""
         if limit is None:
             return await self.repository.get_pending_requests()
@@ -150,7 +150,7 @@ class FinpassRecoveryService:
         *,
         request_id: int,
         admin_id: int,
-        admin_notes: Optional[str] = None,
+        admin_notes: str | None = None,
     ) -> FinancialPasswordRecovery:
         """Approve a recovery request."""
         request = await self._get_request(request_id)
@@ -167,7 +167,7 @@ class FinpassRecoveryService:
             request.id,
             status=FinancialRecoveryStatus.APPROVED.value,
             processed_by_admin_id=admin_id,
-            processed_at=datetime.now(timezone.utc),
+            processed_at=datetime.now(UTC),
             admin_comment=admin_notes,
         )
 
@@ -185,7 +185,7 @@ class FinpassRecoveryService:
         *,
         request_id: int,
         admin_id: int,
-        admin_notes: Optional[str] = None,
+        admin_notes: str | None = None,
     ) -> FinancialPasswordRecovery:
         """Reject a recovery request."""
         request = await self._get_request(request_id)
@@ -203,7 +203,7 @@ class FinpassRecoveryService:
             request.id,
             status=FinancialRecoveryStatus.REJECTED.value,
             processed_by_admin_id=admin_id,
-            processed_at=datetime.now(timezone.utc),
+            processed_at=datetime.now(UTC),
             admin_comment=admin_notes,
         )
 
@@ -221,7 +221,7 @@ class FinpassRecoveryService:
         *,
         request_id: int,
         admin_id: int,
-        admin_notes: Optional[str] = None,
+        admin_notes: str | None = None,
     ) -> FinancialPasswordRecovery:
         """Mark an approved request as sent to the user."""
         request = await self._get_request(request_id)
@@ -235,7 +235,7 @@ class FinpassRecoveryService:
             request.id,
             status=FinancialRecoveryStatus.SENT.value,
             processed_by_admin_id=admin_id,
-            processed_at=datetime.now(timezone.utc),
+            processed_at=datetime.now(UTC),
             admin_comment=admin_notes,
         )
 
@@ -266,8 +266,8 @@ class FinpassRecoveryService:
         allowed_values = {status.value for status in allowed}
         if request.status not in allowed_values:
             raise ValueError(
-                (
+
                     f"Cannot {action} request {request.id} "
                     f"in status {request.status}"
-                )
+
             )

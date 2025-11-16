@@ -3,19 +3,18 @@ Admin Users Handler
 Handles user management (ban/unban)
 """
 
-from aiogram import Router, F
+from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
 from aiogram.types import (
     CallbackQuery,
-    Message,
-    InlineKeyboardMarkup,
     InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
 )
-from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.user_service import UserService
 from bot.states.admin_states import AdminStates
-
 
 router = Router(name="admin_users")
 
@@ -23,11 +22,7 @@ router = Router(name="admin_users")
 def get_cancel_button() -> InlineKeyboardMarkup:
     """Get cancel button keyboard"""
     buttons = [
-        [
-            InlineKeyboardButton(
-                text="❌ Отмена", callback_data="admin_panel"
-            )
-        ]
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_panel")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -100,7 +95,8 @@ async def handle_start_block_user(
 
 Отправьте username (с @) или Telegram ID пользователя для блокировки.
 
-Пользователь получит уведомление и сможет подать апелляцию в течение 3 рабочих дней.
+Пользователь получит уведомление и сможет подать апелляцию в течение 3
+    рабочих дней.
 
 Пример: `@username` или `123456789`
     """.strip()
@@ -141,7 +137,7 @@ async def handle_start_terminate_user(
 
 
 @router.message(AdminStates.awaiting_user_to_block)
-async def handle_block_user_input(
+async def handle_block_user_input(  # noqa: C901
     message: Message,
     state: FSMContext,
     session: AsyncSession,
@@ -153,13 +149,15 @@ async def handle_block_user_input(
 
     # Check if message is a menu button - if so, clear state and ignore
     from bot.utils.menu_buttons import is_menu_button
+
     if message.text and is_menu_button(message.text):
         await state.clear()
         return  # Let menu handlers process this
 
-    from app.services.blacklist_service import BlacklistService
-    from app.models.blacklist import BlacklistActionType
     from loguru import logger
+
+    from app.models.blacklist import BlacklistActionType
+    from app.services.blacklist_service import BlacklistService
 
     user_service = UserService(session)
     blacklist_service = BlacklistService(session)
@@ -195,6 +193,7 @@ async def handle_block_user_input(
     admin_id = None
     try:
         from app.repositories.admin_repository import AdminRepository
+
         admin_repo = AdminRepository(session)
         admin = await admin_repo.get_by(telegram_id=message.from_user.id)
         if admin:
@@ -204,13 +203,13 @@ async def handle_block_user_input(
 
     # Add to blacklist with BLOCKED action
     try:
-        blacklist_entry = await blacklist_service.add_to_blacklist(
+        await blacklist_service.add_to_blacklist(
             telegram_id=user.telegram_id,
             reason="Блокировка администратором",
             added_by_admin_id=admin_id,
             action_type=BlacklistActionType.BLOCKED,
         )
-        
+
         # Mark user as banned
         user.is_banned = True
         await session.commit()
@@ -218,21 +217,27 @@ async def handle_block_user_input(
         # Send notification to user
         try:
             from aiogram import Bot
+
             from app.config.settings import settings
+
             bot = Bot(token=settings.telegram_bot_token)
             await bot.send_message(
                 chat_id=user.telegram_id,
                 text=(
                     "Здравствуйте, по решению участников нашего сообщества "
-                    "за недопустимые высказывания и нарушение правил поведения "
+                    "за недопустимые высказывания и нарушение правил"
+                        "поведения "
                     "в нашем сообществе ваш аккаунт заблокирован. "
                     "Вы можете подать апелляцию в течение 3 рабочих дней. "
-                    "Ваша апелляция будет рассмотрена в течение 5 рабочих дней."
-                )
+                    "Ваша апелляция будет рассмотрена в течение 5"
+                        "рабочих дней."
+                ),
             )
             await bot.session.close()
         except Exception as e:
-            logger.warning(f"Failed to send notification to user {user.telegram_id}: {e}")
+            logger.warning(
+                f"Failed to send notification to user {user.telegram_id}: {e}"
+            )
 
         display_name = user.username or f"ID {user.telegram_id}"
         await message.reply(
@@ -248,7 +253,7 @@ async def handle_block_user_input(
 
 
 @router.message(AdminStates.awaiting_user_to_terminate)
-async def handle_terminate_user_input(
+async def handle_terminate_user_input(  # noqa: C901
     message: Message,
     state: FSMContext,
     session: AsyncSession,
@@ -260,13 +265,15 @@ async def handle_terminate_user_input(
 
     # Check if message is a menu button - if so, clear state and ignore
     from bot.utils.menu_buttons import is_menu_button
+
     if message.text and is_menu_button(message.text):
         await state.clear()
         return  # Let menu handlers process this
 
-    from app.services.blacklist_service import BlacklistService
-    from app.models.blacklist import BlacklistActionType
     from loguru import logger
+
+    from app.models.blacklist import BlacklistActionType
+    from app.services.blacklist_service import BlacklistService
 
     user_service = UserService(session)
     blacklist_service = BlacklistService(session)
@@ -302,6 +309,7 @@ async def handle_terminate_user_input(
     admin_id = None
     try:
         from app.repositories.admin_repository import AdminRepository
+
         admin_repo = AdminRepository(session)
         admin = await admin_repo.get_by(telegram_id=message.from_user.id)
         if admin:
@@ -311,13 +319,13 @@ async def handle_terminate_user_input(
 
     # Add to blacklist with TERMINATED action
     try:
-        blacklist_entry = await blacklist_service.add_to_blacklist(
+        await blacklist_service.add_to_blacklist(
             telegram_id=user.telegram_id,
             reason="Терминация администратором",
             added_by_admin_id=admin_id,
             action_type=BlacklistActionType.TERMINATED,
         )
-        
+
         # Mark user as banned
         user.is_banned = True
         await session.commit()
@@ -325,19 +333,24 @@ async def handle_terminate_user_input(
         # Send notification to user
         try:
             from aiogram import Bot
+
             from app.config.settings import settings
+
             bot = Bot(token=settings.telegram_bot_token)
             await bot.send_message(
                 chat_id=user.telegram_id,
                 text=(
                     "Здравствуйте, по решению участников нашего сообщества "
-                    "за недопустимые высказывания и нарушение правил поведения "
+                    "за недопустимые высказывания и нарушение правил"
+                        "поведения "
                     "в нашем сообществе ваш аккаунт терминирован."
-                )
+                ),
             )
             await bot.session.close()
         except Exception as e:
-            logger.warning(f"Failed to send notification to user {user.telegram_id}: {e}")
+            logger.warning(
+                f"Failed to send notification to user {user.telegram_id}: {e}"
+            )
 
         display_name = user.username or f"ID {user.telegram_id}"
         await message.reply(
@@ -365,6 +378,7 @@ async def handle_ban_user_input(
 
     # Check if message is a menu button - if so, clear state and ignore
     from bot.utils.menu_buttons import is_menu_button
+
     if message.text and is_menu_button(message.text):
         await state.clear()
         return  # Let menu handlers process this
@@ -444,6 +458,7 @@ async def handle_unban_user_input(
 
     # Check if message is a menu button - if so, clear state and ignore
     from bot.utils.menu_buttons import is_menu_button
+
     if message.text and is_menu_button(message.text):
         await state.clear()
         return  # Let menu handlers process this

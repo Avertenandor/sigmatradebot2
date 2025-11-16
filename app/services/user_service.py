@@ -4,17 +4,16 @@ User service.
 Business logic for user management.
 """
 
-from typing import Optional
 from decimal import Decimal
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
-from app.repositories.user_repository import UserRepository
 from app.repositories.blacklist_repository import (
     BlacklistRepository,
 )
+from app.repositories.user_repository import UserRepository
 from app.services.referral_service import ReferralService
 
 
@@ -37,7 +36,7 @@ class UserService:
         self.blacklist_repo = BlacklistRepository(session)
         self.referral_service = ReferralService(session)
 
-    async def get_by_id(self, user_id: int) -> Optional[User]:
+    async def get_by_id(self, user_id: int) -> User | None:
         """
         Get user by ID.
 
@@ -51,7 +50,7 @@ class UserService:
 
     async def get_by_telegram_id(
         self, telegram_id: int
-    ) -> Optional[User]:
+    ) -> User | None:
         """
         Get user by Telegram ID.
 
@@ -70,8 +69,8 @@ class UserService:
         telegram_id: int,
         wallet_address: str,
         financial_password: str,
-        username: Optional[str] = None,
-        referrer_telegram_id: Optional[int] = None,
+        username: str | None = None,
+        referrer_telegram_id: int | None = None,
     ) -> User:
         """
         Register new user with referral support.
@@ -95,9 +94,9 @@ class UserService:
         )
         if blacklist_entry and blacklist_entry.is_active:
             # Raise specific error with action type for proper message handling
-            from app.models.blacklist import BlacklistActionType
             raise ValueError(
-                f"BLACKLISTED:{blacklist_entry.action_type or BlacklistActionType.REGISTRATION_DENIED}"
+                f"BLACKLISTED:"
+                f"{blacklist_entry.action_type or 'REGISTRATION_DENIED'}"
             )
 
         # Check if already exists
@@ -129,10 +128,13 @@ class UserService:
 
         # Create referral relationships if referrer exists
         if referrer_id:
-            success, error_msg = await self.referral_service.create_referral_relationships(
-                new_user_id=user.id,
-                direct_referrer_id=referrer_id,
+            result = (
+                await self.referral_service.create_referral_relationships(
+                    new_user_id=user.id,
+                    direct_referrer_id=referrer_id,
+                )
             )
+            success, error_msg = result
             if not success:
                 logger.warning(
                     "Failed to create referral relationships",
@@ -164,7 +166,7 @@ class UserService:
 
     async def update_profile(
         self, user_id: int, **data
-    ) -> Optional[User]:
+    ) -> User | None:
         """
         Update user profile.
 
@@ -188,7 +190,7 @@ class UserService:
 
     async def block_earnings(
         self, user_id: int, block: bool = True
-    ) -> Optional[User]:
+    ) -> User | None:
         """
         Block/unblock user earnings.
 
@@ -207,7 +209,7 @@ class UserService:
 
     async def ban_user(
         self, user_id: int, ban: bool = True
-    ) -> Optional[User]:
+    ) -> User | None:
         """
         Ban/unban user.
 
@@ -326,10 +328,12 @@ class UserService:
         Returns:
             Balance dict with all statistics
         """
+        from app.models.enums import TransactionStatus, TransactionType
         from app.repositories.deposit_repository import DepositRepository
-        from app.repositories.transaction_repository import TransactionRepository
-        from app.models.enums import TransactionType, TransactionStatus
-        
+        from app.repositories.transaction_repository import (
+            TransactionRepository,
+        )
+
         user = await self.user_repo.get_by_id(user_id)
         if not user:
             return {
@@ -354,15 +358,21 @@ class UserService:
             type=TransactionType.WITHDRAWAL.value,
             status=TransactionStatus.CONFIRMED.value,
         )
-        total_withdrawals = sum(w.amount for w in withdrawals) if withdrawals else Decimal("0.00")
-        
+        total_withdrawals = (
+            sum(w.amount for w in withdrawals)
+            if withdrawals else Decimal("0.00")
+        )
+
         # Get pending withdrawals
         pending_withdrawals_list = await transaction_repo.get_by_user(
             user_id=user_id,
             type=TransactionType.WITHDRAWAL.value,
             status=TransactionStatus.PENDING.value,
         )
-        pending_withdrawals = sum(w.amount for w in pending_withdrawals_list) if pending_withdrawals_list else Decimal("0.00")
+        pending_withdrawals = (
+            sum(w.amount for w in pending_withdrawals_list)
+            if pending_withdrawals_list else Decimal("0.00")
+        )
 
         # Get earnings (deposit rewards + referral earnings)
         earnings_transactions = await transaction_repo.get_by_user(
@@ -370,8 +380,11 @@ class UserService:
             type=TransactionType.DEPOSIT_REWARD.value,
             status=TransactionStatus.CONFIRMED.value,
         )
-        total_earnings = sum(e.amount for e in earnings_transactions) if earnings_transactions else Decimal("0.00")
-        
+        total_earnings = (
+            sum(e.amount for e in earnings_transactions)
+            if earnings_transactions else Decimal("0.00")
+        )
+
         # Add referral earnings if any
         referral_earnings = await transaction_repo.get_by_user(
             user_id=user_id,
@@ -410,7 +423,7 @@ class UserService:
         """
         return f"https://t.me/{bot_username}?start=ref_{user_id}"
 
-    async def find_by_id(self, user_id: int) -> Optional[User]:
+    async def find_by_id(self, user_id: int) -> User | None:
         """
         Find user by ID (alias for get_by_id).
 
@@ -422,7 +435,7 @@ class UserService:
         """
         return await self.user_repo.get_by_id(user_id)
 
-    async def find_by_username(self, username: str) -> Optional[User]:
+    async def find_by_username(self, username: str) -> User | None:
         """
         Find user by username.
 
@@ -435,7 +448,7 @@ class UserService:
         users = await self.user_repo.find_by(username=username)
         return users[0] if users else None
 
-    async def find_by_telegram_id(self, telegram_id: int) -> Optional[User]:
+    async def find_by_telegram_id(self, telegram_id: int) -> User | None:
         """
         Find user by Telegram ID.
 
@@ -448,7 +461,7 @@ class UserService:
         users = await self.user_repo.find_by(telegram_id=telegram_id)
         return users[0] if users else None
 
-    async def get_by_wallet(self, wallet_address: str) -> Optional[User]:
+    async def get_by_wallet(self, wallet_address: str) -> User | None:
         """
         Get user by wallet address.
 

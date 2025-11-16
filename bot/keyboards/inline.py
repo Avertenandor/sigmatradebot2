@@ -18,28 +18,18 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
 
     builder.row(
-        InlineKeyboardButton(
-            text="💰 Депозит", callback_data="menu:deposit"
-        ),
-        InlineKeyboardButton(
-            text="💸 Вывод", callback_data="menu:withdrawal"
-        ),
+        InlineKeyboardButton(text="💰 Депозит", callback_data="menu:deposit"),
+        InlineKeyboardButton(text="💸 Вывод", callback_data="menu:withdrawal"),
     )
     builder.row(
         InlineKeyboardButton(
             text="👥 Рефералы", callback_data="menu:referral"
         ),
-        InlineKeyboardButton(
-            text="📊 Баланс", callback_data="menu:balance"
-        ),
+        InlineKeyboardButton(text="📊 Баланс", callback_data="menu:balance"),
     )
     builder.row(
-        InlineKeyboardButton(
-            text="🎁 Награды", callback_data="menu:rewards"
-        ),
-        InlineKeyboardButton(
-            text="📜 История", callback_data="menu:history"
-        ),
+        InlineKeyboardButton(text="🎁 Награды", callback_data="menu:rewards"),
+        InlineKeyboardButton(text="📜 История", callback_data="menu:history"),
     )
     builder.row(
         InlineKeyboardButton(
@@ -72,9 +62,7 @@ def deposit_keyboard() -> InlineKeyboardMarkup:
         )
 
     builder.row(
-        InlineKeyboardButton(
-            text="◀️ Назад", callback_data="menu:main"
-        )
+        InlineKeyboardButton(text="◀️ Назад", callback_data="menu:main")
     )
 
     return builder.as_markup()
@@ -105,9 +93,7 @@ def withdrawal_keyboard() -> InlineKeyboardMarkup:
         )
     )
     builder.row(
-        InlineKeyboardButton(
-            text="◀️ Назад", callback_data="menu:main"
-        )
+        InlineKeyboardButton(text="◀️ Назад", callback_data="menu:main")
     )
 
     return builder.as_markup()
@@ -141,9 +127,7 @@ def referral_keyboard(user_telegram_id: int) -> InlineKeyboardMarkup:
         )
     )
     builder.row(
-        InlineKeyboardButton(
-            text="◀️ Назад", callback_data="menu:main"
-        )
+        InlineKeyboardButton(text="◀️ Назад", callback_data="menu:main")
     )
 
     return builder.as_markup()
@@ -171,14 +155,10 @@ def support_keyboard() -> InlineKeyboardMarkup:
         )
     )
     builder.row(
-        InlineKeyboardButton(
-            text="❓ FAQ", callback_data="support:faq"
-        )
+        InlineKeyboardButton(text="❓ FAQ", callback_data="support:faq")
     )
     builder.row(
-        InlineKeyboardButton(
-            text="◀️ Назад", callback_data="menu:main"
-        )
+        InlineKeyboardButton(text="◀️ Назад", callback_data="menu:main")
     )
 
     return builder.as_markup()
@@ -205,9 +185,7 @@ def admin_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(
             text="💸 Выводы", callback_data="admin:withdrawals"
         ),
-        InlineKeyboardButton(
-            text="🎁 Награды", callback_data="admin:rewards"
-        ),
+        InlineKeyboardButton(text="🎁 Награды", callback_data="admin:rewards"),
     )
     builder.row(
         InlineKeyboardButton(
@@ -250,7 +228,8 @@ def settings_keyboard() -> InlineKeyboardMarkup:
     )
     builder.row(
         InlineKeyboardButton(
-            text="📝 Обновить контакты", callback_data="settings:update_contacts"
+            text="📝 Обновить контакты",
+            callback_data="settings:update_contacts",
         ),
     )
     builder.row(
@@ -259,9 +238,7 @@ def settings_keyboard() -> InlineKeyboardMarkup:
         ),
     )
     builder.row(
-        InlineKeyboardButton(
-            text="◀️ Главное меню", callback_data="menu:main"
-        ),
+        InlineKeyboardButton(text="◀️ Главное меню", callback_data="menu:main"),
     )
 
     return builder.as_markup()

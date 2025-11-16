@@ -3,7 +3,7 @@ Referral Keyboards
 Inline keyboards for referral program
 """
 
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 
 def get_referral_menu_keyboard() -> InlineKeyboardMarkup:
@@ -62,11 +62,7 @@ def get_referral_stats_keyboard(level: int) -> InlineKeyboardMarkup:
 
     # Back button
     buttons.append(
-        [
-            InlineKeyboardButton(
-                text="◀️ Назад", callback_data="referrals"
-            )
-        ]
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="referrals")]
     )
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -84,7 +80,8 @@ def get_referral_earnings_keyboard(
         if page > 1:
             pagination_row.append(
                 InlineKeyboardButton(
-                    text="◀️ Назад", callback_data=f"referral_earnings_{page - 1}"
+                    text="◀️ Назад",
+                    callback_data=f"referral_earnings_{page - 1}",
                 )
             )
         if page < total_pages:
@@ -99,11 +96,7 @@ def get_referral_earnings_keyboard(
 
     # Back button
     buttons.append(
-        [
-            InlineKeyboardButton(
-                text="◀️ К рефералам", callback_data="referrals"
-            )
-        ]
+        [InlineKeyboardButton(text="◀️ К рефералам", callback_data="referrals")]
     )
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)

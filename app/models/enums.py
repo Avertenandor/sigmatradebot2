@@ -4,10 +4,10 @@ Database enums.
 Centralized enums used across database models.
 """
 
-from enum import Enum
+from enum import StrEnum
 
 
-class TransactionStatus(str, Enum):
+class TransactionStatus(StrEnum):
     """Transaction status values."""
 
     PENDING = "pending"
@@ -15,7 +15,7 @@ class TransactionStatus(str, Enum):
     FAILED = "failed"
 
 
-class TransactionType(str, Enum):
+class TransactionType(StrEnum):
     """Transaction type values."""
 
     DEPOSIT = "deposit"
@@ -25,14 +25,14 @@ class TransactionType(str, Enum):
     SYSTEM_PAYOUT = "system_payout"
 
 
-class WalletChangeType(str, Enum):
+class WalletChangeType(StrEnum):
     """Wallet change request type values."""
 
     SYSTEM_DEPOSIT = "system_deposit"
     PAYOUT_WITHDRAWAL = "payout_withdrawal"
 
 
-class WalletChangeStatus(str, Enum):
+class WalletChangeStatus(StrEnum):
     """Wallet change request status values."""
 
     PENDING = "pending"
@@ -41,7 +41,7 @@ class WalletChangeStatus(str, Enum):
     REJECTED = "rejected"
 
 
-class SupportTicketStatus(str, Enum):
+class SupportTicketStatus(StrEnum):
     """Support ticket status values."""
 
     OPEN = "open"
@@ -56,7 +56,7 @@ class SupportTicketStatus(str, Enum):
 SupportStatus = SupportTicketStatus
 
 
-class SupportTicketPriority(str, Enum):
+class SupportTicketPriority(StrEnum):
     """Support ticket priority values."""
 
     LOW = "low"
@@ -65,7 +65,7 @@ class SupportTicketPriority(str, Enum):
     CRITICAL = "critical"
 
 
-class SupportCategory(str, Enum):
+class SupportCategory(StrEnum):
     """Support ticket category values."""
 
     PAYMENTS = "payments"
@@ -76,7 +76,7 @@ class SupportCategory(str, Enum):
     OTHER = "other"
 
 
-class SupportSender(str, Enum):
+class SupportSender(StrEnum):
     """Support message sender values."""
 
     USER = "user"

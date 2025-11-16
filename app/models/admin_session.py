@@ -5,15 +5,15 @@ Tracks admin authentication sessions with expiration.
 """
 
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
     DateTime,
+    ForeignKey,
     Index,
     Integer,
     String,
-    ForeignKey,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -67,10 +67,10 @@ class AdminSession(Base):
     )
 
     # Client Info
-    ip_address: Mapped[Optional[str]] = mapped_column(
+    ip_address: Mapped[str | None] = mapped_column(
         String(255), nullable=True
     )
-    user_agent: Mapped[Optional[str]] = mapped_column(
+    user_agent: Mapped[str | None] = mapped_column(
         String(255), nullable=True
     )
 
@@ -82,7 +82,7 @@ class AdminSession(Base):
         nullable=False,
         index=True,
     )
-    expires_at: Mapped[Optional[datetime]] = mapped_column(
+    expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 

@@ -5,12 +5,10 @@ Handles admin authentication and session management.
 """
 
 import secrets
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
 from loguru import logger
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.admin import Admin
@@ -19,7 +17,6 @@ from app.repositories.admin_repository import AdminRepository
 from app.repositories.admin_session_repository import (
     AdminSessionRepository,
 )
-
 
 # Admin session configuration
 SESSION_DURATION_HOURS = 24
@@ -93,8 +90,8 @@ class AdminService:
         telegram_id: int,
         role: str,
         created_by: int,
-        username: Optional[str] = None,
-    ) -> tuple[Optional[Admin], Optional[str], Optional[str]]:
+        username: str | None = None,
+    ) -> tuple[Admin | None, str | None, str | None]:
         """
         Create new admin with master key.
 
@@ -150,9 +147,9 @@ class AdminService:
         self,
         telegram_id: int,
         master_key: str,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None,
-    ) -> tuple[Optional[AdminSession], Optional[Admin], Optional[str]]:
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> tuple[AdminSession | None, Admin | None, str | None]:
         """
         Authenticate admin and create session.
 
@@ -199,7 +196,7 @@ class AdminService:
 
         # Create new session
         session_token = self.generate_session_token()
-        expires_at = datetime.now(timezone.utc) + timedelta(
+        expires_at = datetime.now(UTC) + timedelta(
             hours=SESSION_DURATION_HOURS
         )
 
@@ -258,7 +255,7 @@ class AdminService:
 
     async def validate_session(
         self, session_token: str
-    ) -> tuple[Optional[Admin], Optional[AdminSession], Optional[str]]:
+    ) -> tuple[Admin | None, AdminSession | None, str | None]:
         """
         Validate session and update activity.
 
@@ -292,7 +289,7 @@ class AdminService:
 
         # Update activity
         await self.session_repo.update(
-            session.id, last_activity_at=datetime.now(timezone.utc)
+            session.id, last_activity_at=datetime.now(UTC)
         )
 
         # Load admin
@@ -304,7 +301,7 @@ class AdminService:
 
     async def get_admin_by_telegram_id(
         self, telegram_id: int
-    ) -> Optional[Admin]:
+    ) -> Admin | None:
         """
         Get admin by Telegram ID.
 

@@ -65,9 +65,7 @@ async def _monitor_deposits_async() -> dict:
         )
 
         # Filter deposits with tx_hash
-        pending_with_tx = [
-            d for d in pending_deposits if d.tx_hash
-        ]
+        pending_with_tx = [d for d in pending_deposits if d.tx_hash]
 
         if not pending_with_tx:
             logger.debug("No pending deposits with tx_hash found")

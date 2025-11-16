@@ -4,7 +4,6 @@ Admin repository.
 Data access layer for Admin model.
 """
 
-from typing import List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,7 +20,7 @@ class AdminRepository(BaseRepository[Admin]):
 
     async def get_by_telegram_id(
         self, telegram_id: int
-    ) -> Optional[Admin]:
+    ) -> Admin | None:
         """
         Get admin by Telegram ID.
 
@@ -33,7 +32,7 @@ class AdminRepository(BaseRepository[Admin]):
         """
         return await self.get_by(telegram_id=telegram_id)
 
-    async def get_by_role(self, role: str) -> List[Admin]:
+    async def get_by_role(self, role: str) -> list[Admin]:
         """
         Get admins by role.
 
@@ -45,7 +44,7 @@ class AdminRepository(BaseRepository[Admin]):
         """
         return await self.find_by(role=role)
 
-    async def get_super_admins(self) -> List[Admin]:
+    async def get_super_admins(self) -> list[Admin]:
         """
         Get all super admins.
 
@@ -54,7 +53,7 @@ class AdminRepository(BaseRepository[Admin]):
         """
         return await self.get_by_role("super_admin")
 
-    async def get_extended_admins(self) -> List[Admin]:
+    async def get_extended_admins(self) -> list[Admin]:
         """
         Get all extended admins.
 

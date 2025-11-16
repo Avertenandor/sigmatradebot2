@@ -3,16 +3,19 @@ Admin Withdrawals Handler
 Handles withdrawal approval and rejection
 """
 
-from aiogram import Router, F
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram import F, Router
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.withdrawal_service import WithdrawalService
-from app.services.user_service import UserService
 from app.services.blockchain_service import get_blockchain_service
 from app.services.notification_service import NotificationService
+from app.services.user_service import UserService
+from app.services.withdrawal_service import WithdrawalService
 from bot.utils.formatters import format_usdt
-
 
 router = Router(name="admin_withdrawals")
 
@@ -31,7 +34,9 @@ async def handle_pending_withdrawals(
     withdrawal_service = WithdrawalService(session)
 
     try:
-        pending_withdrawals = await withdrawal_service.get_pending_withdrawals()
+        pending_withdrawals = (
+            await withdrawal_service.get_pending_withdrawals()
+        )
 
         message = "💸 **Ожидающие заявки на вывод**\n\n"
 
@@ -61,7 +66,11 @@ async def handle_pending_withdrawals(
             message += f"💰 Сумма: {format_usdt(withdrawal.amount)} USDT\n"
             message += f"👤 Пользователь ID: {withdrawal.user_id}\n"
 
-            if hasattr(withdrawal, "user") and withdrawal.user and withdrawal.user.username:
+            if (
+                hasattr(withdrawal, "user")
+                and withdrawal.user
+                and withdrawal.user.username
+            ):
                 message += f"📱 @{withdrawal.user.username}\n"
 
             message += f"💳 Кошелек: `{withdrawal.to_address}`\n"
@@ -87,11 +96,7 @@ async def handle_pending_withdrawals(
             )
 
         buttons.append(
-            [
-                InlineKeyboardButton(
-                    text="◀️ Назад", callback_data="admin_panel"
-                )
-            ]
+            [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_panel")]
         )
 
         keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -131,7 +136,9 @@ async def handle_approve_withdrawal(
 
     try:
         # Get withdrawal details
-        withdrawal = await withdrawal_service.get_withdrawal_by_id(withdrawal_id)
+        withdrawal = await withdrawal_service.get_withdrawal_by_id(
+            withdrawal_id
+        )
 
         if not withdrawal:
             await callback.answer("❌ Заявка не найдена")
@@ -153,7 +160,9 @@ async def handle_approve_withdrawal(
         )
 
         if not success:
-            await callback.answer(f"❌ Ошибка: {error_msg or 'Неизвестная ошибка'}")
+            await callback.answer(
+                f"❌ Ошибка: {error_msg or 'Неизвестная ошибка'}"
+            )
             return
 
         # Send notification to user about withdrawal approval
@@ -223,16 +232,22 @@ async def handle_reject_withdrawal(
 
     try:
         # Get withdrawal details
-        withdrawal = await withdrawal_service.get_withdrawal_by_id(withdrawal_id)
+        withdrawal = await withdrawal_service.get_withdrawal_by_id(
+            withdrawal_id
+        )
 
         if not withdrawal:
             await callback.answer("❌ Заявка не найдена")
             return
 
-        success, error_msg = await withdrawal_service.reject_withdrawal(withdrawal_id)
+        success, error_msg = await withdrawal_service.reject_withdrawal(
+            withdrawal_id
+        )
 
         if not success:
-            await callback.answer(f"❌ Ошибка: {error_msg or 'Неизвестная ошибка'}")
+            await callback.answer(
+                f"❌ Ошибка: {error_msg or 'Неизвестная ошибка'}"
+            )
             return
 
         # Send notification to user about withdrawal rejection

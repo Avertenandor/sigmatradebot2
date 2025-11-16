@@ -43,10 +43,10 @@ async def withdraw_all(
         await message.answer(
             "❌ Для вывода средств необходимо пройти верификацию!\n\n"
             "Используйте кнопку '✅ Пройти верификацию' в настройках.",
-            reply_markup=withdrawal_keyboard()
+            reply_markup=withdrawal_keyboard(),
         )
         return
-    
+
     # Get balance
     user_service = UserService(session)
     balance = await user_service.get_user_balance(user.id)
@@ -54,7 +54,7 @@ async def withdraw_all(
     if not balance or balance["available_balance"] == 0:
         await message.answer(
             "❌ Недостаточно средств для вывода",
-            reply_markup=withdrawal_keyboard()
+            reply_markup=withdrawal_keyboard(),
         )
         return
 
@@ -65,7 +65,7 @@ async def withdraw_all(
     if available < min_amount:
         await message.answer(
             f"❌ Минимальная сумма вывода: {min_amount} USDT",
-            reply_markup=withdrawal_keyboard()
+            reply_markup=withdrawal_keyboard(),
         )
         return
 
@@ -129,13 +129,12 @@ async def process_withdrawal_amount(
         )
         await state.clear()
         return
-    
+
     # Check if message is a menu button - if so, clear state and ignore
-    from bot.utils.menu_buttons import is_menu_button
     if is_menu_button(message.text):
         await state.clear()
         return  # Let menu handlers process this
-    
+
     try:
         amount = Decimal(message.text.strip())
     except (ValueError, ArithmeticError):
@@ -189,7 +188,7 @@ async def process_financial_password(
 ) -> None:
     """
     Process financial password and create withdrawal.
-    
+
     Args:
         message: Telegram message
         session: Database session
@@ -197,7 +196,6 @@ async def process_financial_password(
         state: FSM state
     """
     # Check if message is a menu button - if so, clear state and ignore
-    from bot.utils.menu_buttons import is_menu_button
     if is_menu_button(message.text):
         await state.clear()
         return  # Let menu handlers process this
@@ -210,8 +208,7 @@ async def process_financial_password(
     user_service = UserService(session)
     if not user_service.verify_financial_password(user, password):
         await message.answer(
-            "❌ Неверный финансовый пароль!\n\n"
-            "Попробуйте еще раз:"
+            "❌ Неверный финансовый пароль!\n\nПопробуйте еще раз:"
         )
         return
 
@@ -304,7 +301,5 @@ async def show_withdrawal_history(
             text += "\n"
 
     await message.answer(
-        text,
-        parse_mode="Markdown",
-        reply_markup=withdrawal_keyboard()
+        text, parse_mode="Markdown", reply_markup=withdrawal_keyboard()
     )

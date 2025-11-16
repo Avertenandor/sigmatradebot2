@@ -6,7 +6,6 @@ Runs once per day to calculate and distribute rewards.
 """
 
 import asyncio
-from datetime import datetime, timedelta
 
 import dramatiq
 from loguru import logger
@@ -37,9 +36,7 @@ def process_daily_rewards(session_id: int | None = None) -> dict:
 
     try:
         # Run async code
-        result = asyncio.run(
-            _process_daily_rewards_async(session_id)
-        )
+        result = asyncio.run(_process_daily_rewards_async(session_id))
 
         if result["success"]:
             logger.info(
@@ -73,11 +70,12 @@ async def _process_daily_rewards_async(
 
         # If session_id provided, process that session
         if session_id:
-            success, calculated, total, error = (
-                await reward_service.calculate_rewards_for_session(
-                    session_id
-                )
-            )
+            (
+                success,
+                calculated,
+                total,
+                error,
+            ) = await reward_service.calculate_rewards_for_session(session_id)
 
             return {
                 "success": success,
@@ -101,10 +99,13 @@ async def _process_daily_rewards_async(
         total_amount_sum = 0.0
 
         for session_obj in active_sessions:
-            success, calculated, total, error = (
-                await reward_service.calculate_rewards_for_session(
-                    session_obj.id
-                )
+            (
+                success,
+                calculated,
+                total,
+                error,
+            ) = await reward_service.calculate_rewards_for_session(
+                session_obj.id
             )
 
             if success:

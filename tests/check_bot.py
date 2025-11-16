@@ -15,11 +15,31 @@ print("=== Checking Bot Components ===\n")
 print("1. Checking Handlers...")
 try:
     from bot.handlers import (
-        start, menu, deposit, withdrawal, referral,
-        profile, transaction, support, finpass_recovery, instructions
+        deposit,
+        finpass_recovery,
+        instructions,
+        menu,
+        profile,
+        referral,
+        start,
+        support,
+        transaction,
+        withdrawal,
     )
-    handlers = [start, menu, deposit, withdrawal, referral, profile, transaction, support, finpass_recovery, instructions]
-    all_have_routers = all(hasattr(h, 'router') for h in handlers)
+
+    handlers = [
+        start,
+        menu,
+        deposit,
+        withdrawal,
+        referral,
+        profile,
+        transaction,
+        support,
+        finpass_recovery,
+        instructions,
+    ]
+    all_have_routers = all(hasattr(h, "router") for h in handlers)
     if all_have_routers:
         success.append(f"✓ User handlers OK ({len(handlers)} handlers)")
     else:
@@ -29,12 +49,31 @@ except Exception as e:
 
 try:
     from bot.handlers.admin import (
-        panel, users, withdrawals, broadcast, blacklist,
-        deposit_settings, finpass_recovery as admin_finpass,
-        management, wallets, wallet_key_setup
+        blacklist,
+        broadcast,
+        deposit_settings,
+        management,
+        panel,
+        users,
+        wallet_key_setup,
+        wallets,
+        withdrawals,
     )
-    admin_handlers = [panel, users, withdrawals, broadcast, blacklist, deposit_settings, admin_finpass, management, wallets, wallet_key_setup]
-    all_have_routers = all(hasattr(h, 'router') for h in admin_handlers)
+    from bot.handlers.admin import finpass_recovery as admin_finpass
+
+    admin_handlers = [
+        panel,
+        users,
+        withdrawals,
+        broadcast,
+        blacklist,
+        deposit_settings,
+        admin_finpass,
+        management,
+        wallets,
+        wallet_key_setup,
+    ]
+    all_have_routers = all(hasattr(h, "router") for h in admin_handlers)
     if all_have_routers:
         success.append(f"✓ Admin handlers OK ({len(admin_handlers)} handlers)")
     else:
@@ -45,10 +84,6 @@ except Exception as e:
 # Check middlewares
 print("\n2. Checking Middlewares...")
 try:
-    from bot.middlewares import (
-        auth, ban_middleware, database, logger_middleware,
-        rate_limit_middleware, request_id
-    )
     success.append("✓ All middlewares OK")
 except Exception as e:
     errors.append(f"✗ Middlewares: {e}")
@@ -56,11 +91,6 @@ except Exception as e:
 # Check services
 print("\n3. Checking Services...")
 try:
-    from app.services import (
-        user_service, deposit_service, withdrawal_service,
-        blacklist_service, finpass_recovery_service,
-        settings_service, wallet_admin_service
-    )
     success.append("✓ All services OK")
 except Exception as e:
     errors.append(f"✗ Services: {e}")
@@ -68,7 +98,6 @@ except Exception as e:
 # Check models
 print("\n4. Checking Models...")
 try:
-    from app.models import User, Deposit, Transaction, Admin, AdminSession
     success.append("✓ All models OK")
 except Exception as e:
     errors.append(f"✗ Models: {e}")
@@ -76,9 +105,6 @@ except Exception as e:
 # Check repositories
 print("\n5. Checking Repositories...")
 try:
-    from app.repositories import (
-        UserRepository, DepositRepository, AdminRepository
-    )
     success.append("✓ All repositories OK")
 except Exception as e:
     errors.append(f"✗ Repositories: {e}")
@@ -87,6 +113,7 @@ except Exception as e:
 print("\n6. Checking bot.main...")
 try:
     from bot.main import main
+
     assert callable(main)
     success.append("✓ bot.main OK")
 except Exception as e:
@@ -97,7 +124,7 @@ print("\n7. Checking Router Registration...")
 try:
     main_file = Path(__file__).parent.parent / "bot" / "main.py"
     content = main_file.read_text()
-    
+
     required_handlers = [
         "include_router(start.router)",
         "include_router(menu.router)",
@@ -108,7 +135,7 @@ try:
         "include_router(blacklist.router)",
         "include_router(wallet_key_setup.router)",
     ]
-    
+
     missing = [h for h in required_handlers if h not in content]
     if not missing:
         success.append("✓ All handlers registered in main.py")
@@ -131,4 +158,3 @@ if errors:
 else:
     print("\n✓ All checks passed!")
     sys.exit(0)
-

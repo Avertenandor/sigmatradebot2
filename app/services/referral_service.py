@@ -5,20 +5,17 @@ Manages referral chains, relationships, and reward processing.
 """
 
 from decimal import Decimal
-from typing import Optional
 
 from loguru import logger
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.referral import Referral
-from app.models.referral_earning import ReferralEarning
 from app.models.user import User
 from app.repositories.referral_earning_repository import (
     ReferralEarningRepository,
 )
 from app.repositories.referral_repository import ReferralRepository
-
 
 # Referral system configuration (from PART2 docs)
 REFERRAL_DEPTH = 3
@@ -120,14 +117,18 @@ class ReferralService:
 
         logger.debug(
             "Referral chain retrieved",
-            extra={"user_id": user_id, "depth": depth, "chain_length": len(chain)},
+            extra={
+                "user_id": user_id,
+                "depth": depth,
+                "chain_length": len(chain)
+            },
         )
 
         return chain
 
     async def create_referral_relationships(
         self, new_user_id: int, direct_referrer_id: int
-    ) -> tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         """
         Create referral relationships for new user.
 
@@ -214,7 +215,7 @@ class ReferralService:
 
     async def process_referral_rewards(
         self, user_id: int, deposit_amount: Decimal
-    ) -> tuple[bool, Decimal, Optional[str]]:
+    ) -> tuple[bool, Decimal, str | None]:
         """
         Process referral rewards for a deposit.
 
@@ -392,7 +393,7 @@ class ReferralService:
 
     async def mark_earning_as_paid(
         self, earning_id: int, tx_hash: str
-    ) -> tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         """
         Mark earning as paid (called by payment processor).
 
@@ -457,7 +458,9 @@ class ReferralService:
             )
             total_earned = sum(e.amount for e in all_earnings)
             paid_earnings = sum(e.amount for e in all_earnings if e.paid)
-            pending_earnings = sum(e.amount for e in all_earnings if not e.paid)
+            pending_earnings = sum(
+                e.amount for e in all_earnings if not e.paid
+            )
         else:
             total_earned = Decimal("0")
             paid_earnings = Decimal("0")
@@ -521,7 +524,9 @@ class ReferralService:
 
         # Build by_earnings leaderboard (sorted differently)
         sorted_by_earnings = sorted(
-            rows, key=lambda r: (r.total_earnings, r.referral_count), reverse=True
+            rows,
+            key=lambda r: (r.total_earnings, r.referral_count),
+            reverse=True
         )
         by_earnings = []
         for idx, row in enumerate(sorted_by_earnings[:limit], 1):
@@ -564,8 +569,10 @@ class ReferralService:
                 referrer_id,
                 referral_count,
                 total_earnings,
-                RANK() OVER (ORDER BY referral_count DESC, total_earnings DESC) as referral_rank,
-                RANK() OVER (ORDER BY total_earnings DESC, referral_count DESC) as earnings_rank
+                RANK() OVER (ORDER BY referral_count DESC,
+                             total_earnings DESC) as referral_rank,
+                RANK() OVER (ORDER BY total_earnings DESC,
+                             referral_count DESC) as earnings_rank
             FROM referral_stats
         """)
 

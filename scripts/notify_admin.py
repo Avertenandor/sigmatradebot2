@@ -15,20 +15,24 @@ Environment Variables:
 
 import asyncio
 import sys
-import os
 from pathlib import Path
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from aiogram import Bot
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
-from loguru import logger
+from aiogram import Bot  # noqa: E402
+from loguru import logger  # noqa: E402
+from sqlalchemy.ext.asyncio import (  # noqa: E402
+    AsyncSession,
+    create_async_engine,
+)
+from sqlalchemy.orm import sessionmaker  # noqa: E402
 
-from app.config.settings import settings
-from app.services.notification_service import NotificationService
+from app.config.settings import settings  # noqa: E402
+from app.services.notification_service import (  # noqa: E402
+    NotificationService,
+)
 
 
 async def notify_admins(message: str, critical: bool = False) -> bool:
@@ -43,7 +47,6 @@ async def notify_admins(message: str, critical: bool = False) -> bool:
         True if at least one admin was notified successfully
     """
     try:
-
         # Initialize bot
         bot = Bot(token=settings.telegram_bot_token)
 
@@ -77,7 +80,9 @@ async def notify_admins(message: str, critical: bool = False) -> bool:
 def main():
     """Main entry point."""
     if len(sys.argv) < 2:
-        print("Usage: python scripts/notify_admin.py 'Message text' [--critical]")
+        print(
+            "Usage: python scripts/notify_admin.py 'Message text' [--critical]"
+        )
         sys.exit(1)
 
     message = sys.argv[1]
@@ -99,4 +104,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

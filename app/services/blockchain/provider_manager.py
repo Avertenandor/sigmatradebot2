@@ -5,7 +5,6 @@ Manages HTTP and WebSocket providers with fallback logic and health monitoring.
 """
 
 import asyncio
-from typing import Optional
 
 from loguru import logger
 from web3 import AsyncHTTPProvider, AsyncWeb3
@@ -43,12 +42,12 @@ class ProviderManager:
         self.chain_id = chain_id
 
         # HTTP provider (always available)
-        self._http_provider: Optional[AsyncHTTPProvider] = None
-        self._http_web3: Optional[AsyncWeb3] = None
+        self._http_provider: AsyncHTTPProvider | None = None
+        self._http_web3: AsyncWeb3 | None = None
 
         # WebSocket provider (for real-time events)
-        self._ws_provider: Optional[AsyncBaseProvider] = None
-        self._ws_web3: Optional[AsyncWeb3] = None
+        self._ws_provider: AsyncBaseProvider | None = None
+        self._ws_web3: AsyncWeb3 | None = None
 
         # Health status
         self._http_connected = False
@@ -125,8 +124,8 @@ class ProviderManager:
 
         logger.info(
             f"Attempting WebSocket reconnection "
-            f"(attempt {self._ws_reconnect_attempts}/{WS_MAX_RECONNECT_ATTEMPTS}) "
-            f"in {delay}s"
+            f"(attempt {self._ws_reconnect_attempts}/"
+            f"{WS_MAX_RECONNECT_ATTEMPTS}) in {delay}s"
         )
 
         await asyncio.sleep(delay)
@@ -182,7 +181,7 @@ class ProviderManager:
 
         return self._http_web3
 
-    def get_ws_web3(self) -> Optional[AsyncWeb3]:
+    def get_ws_web3(self) -> AsyncWeb3 | None:
         """
         Get WebSocket Web3 instance.
 

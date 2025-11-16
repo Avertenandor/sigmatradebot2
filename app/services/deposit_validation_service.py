@@ -7,17 +7,14 @@ Validates deposit purchase eligibility based on:
 """
 
 from decimal import Decimal
-from typing import Optional, Tuple
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.deposit import Deposit
 from app.models.enums import TransactionStatus
 from app.repositories.deposit_repository import DepositRepository
 from app.repositories.referral_repository import ReferralRepository
 from app.services.referral_service import ReferralService
-
 
 # Deposit levels configuration (from TZ)
 DEPOSIT_LEVELS = {
@@ -52,7 +49,7 @@ class DepositValidationService:
 
     async def can_purchase_level(
         self, user_id: int, level: int
-    ) -> Tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         """
         Check if user can purchase a specific deposit level.
 
@@ -74,7 +71,8 @@ class DepositValidationService:
                 prev_level = level - 1
                 return (
                     False,
-                    f"Для покупки уровня {level} необходимо сначала купить уровень {prev_level}.\n\n"
+                    f"Для покупки уровня {level} необходимо сначала "
+                    f"купить уровень {prev_level}.\n\n"
                     f"Порядок покупки строгий: 1 → 2 → 3 → 4 → 5",
                 )
 
@@ -85,8 +83,9 @@ class DepositValidationService:
                 required = PARTNER_REQUIREMENTS[level]
                 return (
                     False,
-                    f"Для покупки уровня {level} необходимо минимум {required} "
-                    f"активный партнер уровня L1 с активным депозитом.",
+                    f"Для покупки уровня {level} необходимо минимум "
+                    f"{required} активный партнер уровня L1 с "
+                    f"активным депозитом.",
                 )
 
         return True, None
@@ -233,4 +232,3 @@ class DepositValidationService:
             }
 
         return levels_status
-

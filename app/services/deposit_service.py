@@ -5,7 +5,6 @@ Business logic for deposit management and ROI tracking.
 """
 
 from decimal import Decimal
-from typing import Optional
 
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,7 +30,7 @@ class DepositService:
         user_id: int,
         level: int,
         amount: Decimal,
-        tx_hash: Optional[str] = None,
+        tx_hash: str | None = None,
     ) -> Deposit:
         """
         Create new deposit with proper error handling.
@@ -51,7 +50,7 @@ class DepositService:
         # Validate level
         if not 1 <= level <= 5:
             raise ValueError("Level must be 1-5")
-        
+
         # Validate amount
         if amount <= 0:
             raise ValueError("Amount must be positive")
@@ -71,10 +70,10 @@ class DepositService:
             )
 
             await self.session.commit()
-            logger.info(f"Deposit created", extra={"deposit_id": deposit.id})
+            logger.info("Deposit created", extra={"deposit_id": deposit.id})
 
             return deposit
-        
+
         except Exception as e:
             await self.session.rollback()
             logger.error(f"Failed to create deposit: {e}")
@@ -82,7 +81,7 @@ class DepositService:
 
     async def confirm_deposit(
         self, deposit_id: int, block_number: int
-    ) -> Optional[Deposit]:
+    ) -> Deposit | None:
         """
         Confirm deposit after blockchain confirmation.
 
@@ -102,10 +101,12 @@ class DepositService:
 
             if deposit:
                 await self.session.commit()
-                logger.info(f"Deposit confirmed", extra={"deposit_id": deposit_id})
+                logger.info(
+                    "Deposit confirmed", extra={"deposit_id": deposit_id}
+                )
 
             return deposit
-        
+
         except Exception as e:
             await self.session.rollback()
             logger.error(f"Failed to confirm deposit: {e}")
@@ -150,7 +151,7 @@ class DepositService:
         roi_paid = getattr(deposit, "roi_paid_amount", Decimal("0"))
         roi_cap = deposit.roi_cap_amount
         roi_remaining = roi_cap - roi_paid
-        roi_percent = float((roi_paid / roi_cap * 100)) if roi_cap > 0 else 0.0
+        roi_percent = float(roi_paid / roi_cap * 100) if roi_cap > 0 else 0.0
         is_completed = roi_paid >= roi_cap
 
         return {

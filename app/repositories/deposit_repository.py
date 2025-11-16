@@ -4,7 +4,6 @@ Deposit repository.
 Data access layer for Deposit model.
 """
 
-from typing import List, Optional
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -23,8 +22,8 @@ class DepositRepository(BaseRepository[Deposit]):
         super().__init__(Deposit, session)
 
     async def get_by_user(
-        self, user_id: int, status: Optional[str] = None
-    ) -> List[Deposit]:
+        self, user_id: int, status: str | None = None
+    ) -> list[Deposit]:
         """
         Get deposits by user.
 
@@ -43,7 +42,7 @@ class DepositRepository(BaseRepository[Deposit]):
 
     async def get_by_tx_hash(
         self, tx_hash: str
-    ) -> Optional[Deposit]:
+    ) -> Deposit | None:
         """
         Get deposit by transaction hash.
 
@@ -57,7 +56,7 @@ class DepositRepository(BaseRepository[Deposit]):
 
     async def get_active_deposits(
         self, user_id: int
-    ) -> List[Deposit]:
+    ) -> list[Deposit]:
         """
         Get active deposits (ROI not completed).
 
@@ -70,7 +69,7 @@ class DepositRepository(BaseRepository[Deposit]):
         stmt = (
             select(Deposit)
             .where(Deposit.user_id == user_id)
-            .where(Deposit.is_roi_completed == False)
+            .where(not Deposit.is_roi_completed)
             .where(
                 Deposit.status == TransactionStatus.CONFIRMED.value
             )
@@ -80,7 +79,7 @@ class DepositRepository(BaseRepository[Deposit]):
 
     async def get_by_level(
         self, user_id: int, level: int
-    ) -> List[Deposit]:
+    ) -> list[Deposit]:
         """
         Get deposits by user and level.
 
@@ -93,7 +92,7 @@ class DepositRepository(BaseRepository[Deposit]):
         """
         return await self.find_by(user_id=user_id, level=level)
 
-    async def get_pending_deposits(self) -> List[Deposit]:
+    async def get_pending_deposits(self) -> list[Deposit]:
         """
         Get all pending deposits.
 

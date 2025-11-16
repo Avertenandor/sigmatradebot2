@@ -5,7 +5,6 @@ Processes and confirms deposit transactions.
 """
 
 from decimal import Decimal
-from typing import Dict, Optional
 
 from loguru import logger
 from web3 import AsyncWeb3
@@ -60,9 +59,9 @@ class DepositProcessor:
         self,
         tx_hash: str,
         expected_to_address: str,
-        expected_amount: Optional[Decimal] = None,
+        expected_amount: Decimal | None = None,
         tolerance_percent: float = 0.05,
-    ) -> Dict[str, any]:
+    ) -> dict[str, any]:
         """
         Check deposit transaction status.
 
@@ -178,7 +177,7 @@ class DepositProcessor:
 
     def _parse_transfer_logs(
         self, logs: list
-    ) -> Optional[Dict[str, any]]:
+    ) -> dict[str, any] | None:
         """
         Parse Transfer event from transaction logs.
 
@@ -190,12 +189,15 @@ class DepositProcessor:
         """
         try:
             # Transfer event topic
-            transfer_topic = self.web3.keccak(text="Transfer(address,address,uint256)")
+            transfer_topic = self.web3.keccak(
+                text="Transfer(address,address,uint256)"
+            )
 
             for log in logs:
                 # Check if this is a Transfer event from USDT contract
                 if (
-                    log["address"].lower() == self.usdt_contract_address.lower()
+                    log["address"].lower() ==
+                    self.usdt_contract_address.lower()
                     and len(log["topics"]) >= 3
                     and log["topics"][0] == transfer_topic
                 ):
@@ -204,7 +206,9 @@ class DepositProcessor:
                     to_address = "0x" + log["topics"][2].hex()[-40:]
                     amount_wei = int(log["data"].hex(), 16)
 
-                    amount_usdt = Decimal(amount_wei) / Decimal(10**USDT_DECIMALS)
+                    amount_usdt = (
+                        Decimal(amount_wei) / Decimal(10**USDT_DECIMALS)
+                    )
 
                     return {
                         "from": self.web3.to_checksum_address(from_address),

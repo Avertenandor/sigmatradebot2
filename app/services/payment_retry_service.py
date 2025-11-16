@@ -7,18 +7,13 @@ Prevents user fund loss from transient failures.
 
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Optional
 
 from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.deposit_reward import DepositReward
 from app.models.enums import TransactionStatus, TransactionType
-from app.models.payment_retry import PaymentType
-from app.models.payment_retry import PaymentRetry
-from app.models.referral_earning import ReferralEarning
-from app.models.transaction import Transaction
+from app.models.payment_retry import PaymentRetry, PaymentType
 from app.repositories.deposit_reward_repository import (
     DepositRewardRepository,
 )
@@ -29,7 +24,6 @@ from app.repositories.referral_earning_repository import (
     ReferralEarningRepository,
 )
 from app.repositories.transaction_repository import TransactionRepository
-
 
 # Exponential backoff: 1min, 2min, 4min, 8min, 16min
 BASE_RETRY_DELAY_MINUTES = 1
@@ -54,7 +48,7 @@ class PaymentRetryService:
         payment_type: PaymentType,
         earning_ids: list[int],
         error: str,
-        error_stack: Optional[str] = None,
+        error_stack: str | None = None,
     ) -> PaymentRetry:
         """
         Create retry record for failed payment.
@@ -373,7 +367,7 @@ class PaymentRetryService:
 
     async def retry_dlq_item(
         self, retry_id: int, blockchain_service
-    ) -> tuple[bool, Optional[str], Optional[str]]:
+    ) -> tuple[bool, str | None, str | None]:
         """
         Manually retry DLQ item (admin action).
 

@@ -4,24 +4,26 @@ PaymentRetry model (КРИТИЧНО - PART5).
 Tracks failed payment attempts with retry logic and DLQ.
 """
 
-from datetime import datetime, timezone
+import enum
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Optional, List
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     DateTime,
+    ForeignKey,
     Index,
     Integer,
-    JSON,
     Numeric,
     String,
     Text,
-    ForeignKey,
+)
+from sqlalchemy import (
     Enum as SQLEnum,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-import enum
 
 from app.models.base import Base
 
@@ -29,7 +31,7 @@ if TYPE_CHECKING:
     from app.models.user import User
 
 
-class PaymentType(str, enum.Enum):
+class PaymentType(enum.StrEnum):
     """Payment type enum."""
 
     REFERRAL_EARNING = "REFERRAL_EARNING"
@@ -86,7 +88,7 @@ class PaymentRetry(Base):
     )
 
     # Earning IDs (array of numbers stored as JSON)
-    earning_ids: Mapped[List[int]] = mapped_column(
+    earning_ids: Mapped[list[int]] = mapped_column(
         JSON, nullable=False
     )
 
@@ -97,18 +99,18 @@ class PaymentRetry(Base):
     max_retries: Mapped[int] = mapped_column(
         Integer, nullable=False, default=5
     )
-    last_attempt_at: Mapped[Optional[datetime]] = mapped_column(
+    last_attempt_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    next_retry_at: Mapped[Optional[datetime]] = mapped_column(
+    next_retry_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
 
     # Error tracking
-    last_error: Mapped[Optional[str]] = mapped_column(
+    last_error: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )
-    error_stack: Mapped[Optional[str]] = mapped_column(
+    error_stack: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )
 
@@ -121,18 +123,20 @@ class PaymentRetry(Base):
     )
 
     # Payment result
-    tx_hash: Mapped[Optional[str]] = mapped_column(
+    tx_hash: Mapped[str | None] = mapped_column(
         String(100), nullable=True
     )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
 
@@ -150,4 +154,8 @@ class PaymentRetry(Base):
 
 
 # Critical indexes for PART5
-Index("idx_payment_retry_resolved_dlq", PaymentRetry.resolved, PaymentRetry.in_dlq)
+Index(
+    "idx_payment_retry_resolved_dlq",
+    PaymentRetry.resolved,
+    PaymentRetry.in_dlq
+)

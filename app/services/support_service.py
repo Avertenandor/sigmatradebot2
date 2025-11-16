@@ -4,8 +4,8 @@ Support service.
 Manages support ticket system for users.
 """
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from loguru import logger
 from sqlalchemy import or_, select
@@ -35,9 +35,9 @@ class SupportService:
         self,
         user_id: int,
         category: str,
-        initial_message: Optional[str] = None,
-        attachments: Optional[List[Dict[str, Any]]] = None,
-    ) -> tuple[Optional[SupportTicket], Optional[str]]:
+        initial_message: str | None = None,
+        attachments: list[dict[str, Any]] | None = None,
+    ) -> tuple[SupportTicket | None, str | None]:
         """
         Create new support ticket.
 
@@ -64,7 +64,7 @@ class SupportService:
             user_id=user_id,
             category=category,
             status=SupportStatus.OPEN.value,
-            last_user_message_at=datetime.now(timezone.utc),
+            last_user_message_at=datetime.now(UTC),
         )
 
         # Add initial message if provided
@@ -91,8 +91,8 @@ class SupportService:
     async def add_user_message(
         self,
         ticket_id: int,
-        text: Optional[str] = None,
-        attachments: Optional[List[Dict[str, Any]]] = None,
+        text: str | None = None,
+        attachments: list[dict[str, Any]] | None = None,
     ) -> SupportMessage:
         """
         Add user message to ticket.
@@ -116,7 +116,7 @@ class SupportService:
         # Update ticket timestamp and reset to open
         await self.ticket_repo.update(
             ticket_id,
-            last_user_message_at=datetime.now(timezone.utc),
+            last_user_message_at=datetime.now(UTC),
             status=SupportStatus.OPEN.value,
         )
 
@@ -128,8 +128,8 @@ class SupportService:
         self,
         ticket_id: int,
         admin_id: int,
-        text: Optional[str] = None,
-        attachments: Optional[List[Dict[str, Any]]] = None,
+        text: str | None = None,
+        attachments: list[dict[str, Any]] | None = None,
     ) -> SupportMessage:
         """
         Add admin message to ticket.
@@ -155,7 +155,7 @@ class SupportService:
         # Update ticket timestamp and mark as answered
         await self.ticket_repo.update(
             ticket_id,
-            last_admin_message_at=datetime.now(timezone.utc),
+            last_admin_message_at=datetime.now(UTC),
             status=SupportStatus.ANSWERED.value,
         )
 
@@ -239,7 +239,7 @@ class SupportService:
 
         logger.info("Ticket reopened", extra={"ticket_id": ticket_id})
 
-    async def list_open_tickets(self) -> List[SupportTicket]:
+    async def list_open_tickets(self) -> list[SupportTicket]:
         """
         List all open tickets (for admin).
 
@@ -263,7 +263,7 @@ class SupportService:
 
     async def get_ticket_by_id(
         self, ticket_id: int
-    ) -> Optional[SupportTicket]:
+    ) -> SupportTicket | None:
         """
         Get ticket by ID with messages.
 
@@ -287,7 +287,7 @@ class SupportService:
 
     async def get_user_tickets(
         self, user_id: int
-    ) -> List[SupportTicket]:
+    ) -> list[SupportTicket]:
         """
         Get all tickets for user.
 
@@ -301,7 +301,7 @@ class SupportService:
 
     async def get_user_active_ticket(
         self, user_id: int
-    ) -> Optional[SupportTicket]:
+    ) -> SupportTicket | None:
         """
         Get user's active ticket if exists.
 

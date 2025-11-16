@@ -4,7 +4,6 @@ SystemSetting repository.
 Data access layer for SystemSetting model.
 """
 
-from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,8 +19,8 @@ class SystemSettingRepository(BaseRepository[SystemSetting]):
         super().__init__(SystemSetting, session)
 
     async def get_value(
-        self, key: str, default: Optional[str] = None
-    ) -> Optional[str]:
+        self, key: str, default: str | None = None
+    ) -> str | None:
         """
         Get setting value by key.
 

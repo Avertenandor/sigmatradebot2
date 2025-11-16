@@ -4,19 +4,19 @@ SupportTicket model.
 Represents user support tickets with admin assignment.
 """
 
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, List, Optional
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import DateTime, Index, Integer, String, ForeignKey
+from sqlalchemy import DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
-from app.models.enums import SupportTicketStatus, SupportCategory
+from app.models.enums import SupportTicketStatus
 
 if TYPE_CHECKING:
-    from app.models.user import User
     from app.models.admin import Admin
     from app.models.support_message import SupportMessage
+    from app.models.user import User
 
 
 class SupportTicket(Base):
@@ -65,26 +65,28 @@ class SupportTicket(Base):
     )
 
     # Admin assignment
-    assigned_admin_id: Mapped[Optional[int]] = mapped_column(
+    assigned_admin_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("admins.id"), nullable=True, index=True
     )
 
     # Activity tracking
-    last_user_message_at: Mapped[Optional[datetime]] = mapped_column(
+    last_user_message_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    last_admin_message_at: Mapped[Optional[datetime]] = mapped_column(
+    last_admin_message_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
 
@@ -93,7 +95,7 @@ class SupportTicket(Base):
     assigned_admin: Mapped[Optional["Admin"]] = relationship(
         "Admin", lazy="joined"
     )
-    messages: Mapped[List["SupportMessage"]] = relationship(
+    messages: Mapped[list["SupportMessage"]] = relationship(
         "SupportMessage",
         back_populates="ticket",
         lazy="selectin",

@@ -4,7 +4,8 @@ Auth middleware.
 Checks if user is registered and loads user data.
 """
 
-from typing import Any, Awaitable, Callable, Dict, Optional
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from aiogram import BaseMiddleware
 from aiogram.types import CallbackQuery, Message, TelegramObject
@@ -34,9 +35,9 @@ class AuthMiddleware(BaseMiddleware):
 
     async def __call__(
         self,
-        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]],
         event: TelegramObject,
-        data: Dict[str, Any],
+        data: dict[str, Any],
     ) -> Any:
         """
         Load user and check registration.
@@ -68,10 +69,8 @@ class AuthMiddleware(BaseMiddleware):
 
         # Load user from database
         user_repo = UserRepository(session)
-        users = await user_repo.find_by(
-            telegram_id=telegram_user.id
-        )
-        user: Optional[User] = users[0] if users else None
+        users = await user_repo.find_by(telegram_id=telegram_user.id)
+        user: User | None = users[0] if users else None
 
         # Add user to data
         data["user"] = user
@@ -84,11 +83,12 @@ class AuthMiddleware(BaseMiddleware):
             # Check if user is admin
             # Admin check: user.is_admin or check Admin table
             is_admin = False
-            if hasattr(user, 'is_admin'):
+            if hasattr(user, "is_admin"):
                 is_admin = user.is_admin
             else:
                 # Check if user exists in Admin table
                 from app.repositories.admin_repository import AdminRepository
+
                 admin_repo = AdminRepository(session)
                 admin = await admin_repo.get_by_telegram_id(telegram_user.id)
                 is_admin = admin is not None

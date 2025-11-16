@@ -5,7 +5,6 @@ Loads configuration from environment variables using pydantic-settings.
 """
 
 import re
-from typing import Optional
 
 from loguru import logger
 from pydantic import Field, field_validator, model_validator
@@ -17,7 +16,7 @@ class Settings(BaseSettings):
 
     # Telegram Bot
     telegram_bot_token: str
-    telegram_bot_username: Optional[str] = None
+    telegram_bot_username: str | None = None
 
     # Database
     database_url: str
@@ -27,24 +26,35 @@ class Settings(BaseSettings):
     admin_telegram_ids: str = ""  # Comma-separated list
 
     # Wallet
-    wallet_private_key: Optional[str] = None
+    wallet_private_key: str | None = None
     wallet_address: str
     usdt_contract_address: str
     rpc_url: str
     system_wallet_address: str  # System wallet for deposits
-    payout_wallet_address: Optional[str] = None  # Payout wallet (optional, defaults to wallet_address)
+    # Payout wallet (optional, defaults to wallet_address)
+    payout_wallet_address: str | None = None
 
     # Deposit levels (USDT amounts)
-    deposit_level_1: float = Field(default=50.0, gt=0, description="Deposit level 1 amount")
-    deposit_level_2: float = Field(default=100.0, gt=0, description="Deposit level 2 amount")
-    deposit_level_3: float = Field(default=250.0, gt=0, description="Deposit level 3 amount")
-    deposit_level_4: float = Field(default=500.0, gt=0, description="Deposit level 4 amount")
-    deposit_level_5: float = Field(default=1000.0, gt=0, description="Deposit level 5 amount")
+    deposit_level_1: float = Field(
+        default=50.0, gt=0, description="Deposit level 1 amount"
+    )
+    deposit_level_2: float = Field(
+        default=100.0, gt=0, description="Deposit level 2 amount"
+    )
+    deposit_level_3: float = Field(
+        default=250.0, gt=0, description="Deposit level 3 amount"
+    )
+    deposit_level_4: float = Field(
+        default=500.0, gt=0, description="Deposit level 4 amount"
+    )
+    deposit_level_5: float = Field(
+        default=1000.0, gt=0, description="Deposit level 5 amount"
+    )
 
     # Redis (for FSM storage and Dramatiq)
     redis_host: str = "localhost"
     redis_port: int = 6379
-    redis_password: Optional[str] = None
+    redis_password: str | None = None
     redis_db: int = 0
 
     # Security
@@ -61,8 +71,13 @@ class Settings(BaseSettings):
     broadcast_cooldown: int = 900  # 15 minutes in seconds
 
     # ROI settings
-    roi_daily_percent: float = Field(default=0.02, gt=0, le=1.0, description="Daily ROI percentage (0-100%)")
-    roi_cap_multiplier: float = Field(default=5.0, gt=0, le=10.0, description="ROI cap multiplier")
+    roi_daily_percent: float = Field(
+        default=0.02, gt=0, le=1.0,
+        description="Daily ROI percentage (0-100%)"
+    )
+    roi_cap_multiplier: float = Field(
+        default=5.0, gt=0, le=10.0, description="ROI cap multiplier"
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -85,26 +100,30 @@ class Settings(BaseSettings):
             # Ensure secure keys are set
             if not self.secret_key or len(self.secret_key) < 32:
                 raise ValueError(
-                    'SECRET_KEY must be at least 32 characters in production. '
-                    'Generate one with: openssl rand -hex 32'
+                    'SECRET_KEY must be at least 32 characters in '
+                    'production. Generate one with: openssl rand -hex 32'
                 )
 
             if not self.encryption_key or len(self.encryption_key) < 32:
                 raise ValueError(
-                    'ENCRYPTION_KEY must be at least 32 characters in production. '
-                    'Generate one with: openssl rand -hex 32'
+                    'ENCRYPTION_KEY must be at least 32 characters in '
+                    'production. Generate one with: openssl rand -hex 32'
                 )
 
             # Ensure wallet private key is not placeholder
-            if not self.wallet_private_key or 'your_' in self.wallet_private_key.lower():
+            if (not self.wallet_private_key or
+                    'your_' in self.wallet_private_key.lower()):
                 raise ValueError(
-                    'WALLET_PRIVATE_KEY must be set with a real value in production'
+                    'WALLET_PRIVATE_KEY must be set with a real value '
+                    'in production'
                 )
 
             # Ensure database URL is not using default passwords
-            if 'password' in self.database_url.lower() or 'changeme' in self.database_url.lower():
+            if ('password' in self.database_url.lower() or
+                    'changeme' in self.database_url.lower()):
                 raise ValueError(
-                    'DATABASE_URL must not use default passwords in production'
+                    'DATABASE_URL must not use default passwords '
+                    'in production'
                 )
 
         return self

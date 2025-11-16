@@ -4,11 +4,18 @@ Transaction model.
 Represents all financial transactions in the system.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
-from sqlalchemy import DECIMAL, CheckConstraint, DateTime, ForeignKey, String, Text
+from sqlalchemy import (
+    DECIMAL,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    String,
+    Text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -22,9 +29,17 @@ class Transaction(Base):
 
     __tablename__ = "transactions"
     __table_args__ = (
-        CheckConstraint('amount > 0', name='check_transaction_amount_positive'),
-        CheckConstraint('balance_before >= 0', name='check_transaction_balance_before_non_negative'),
-        CheckConstraint('balance_after >= 0', name='check_transaction_balance_after_non_negative'),
+        CheckConstraint(
+            'amount > 0', name='check_transaction_amount_positive'
+        ),
+        CheckConstraint(
+            'balance_before >= 0',
+            name='check_transaction_balance_before_non_negative'
+        ),
+        CheckConstraint(
+            'balance_after >= 0',
+            name='check_transaction_balance_after_non_negative'
+        ),
     )
 
     # Primary key
@@ -61,31 +76,31 @@ class Transaction(Base):
     )  # pending, confirmed, failed
 
     # Description
-    description: Mapped[Optional[str]] = mapped_column(
+    description: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )
 
     # Reference IDs (optional links to deposits/withdrawals)
-    reference_id: Mapped[Optional[int]] = mapped_column(
+    reference_id: Mapped[int | None] = mapped_column(
         nullable=True
     )
-    reference_type: Mapped[Optional[str]] = mapped_column(
+    reference_type: Mapped[str | None] = mapped_column(
         String(50), nullable=True
     )  # deposit, withdrawal, referral, etc.
 
     # Blockchain data (if applicable)
-    tx_hash: Mapped[Optional[str]] = mapped_column(
+    tx_hash: Mapped[str | None] = mapped_column(
         String(255), nullable=True
     )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True
+        DateTime, default=lambda: datetime.now(UTC), nullable=False, index=True
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False
     )
 

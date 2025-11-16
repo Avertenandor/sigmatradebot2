@@ -4,7 +4,7 @@ Transaction History Handler - ТОЛЬКО REPLY KEYBOARDS!
 Shows transaction history without inline keyboards.
 """
 
-from aiogram import Router, F
+from aiogram import F, Router
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,7 +12,7 @@ from app.models.enums import TransactionStatus, TransactionType
 from app.models.user import User
 from app.services.transaction_service import TransactionService
 from bot.keyboards.reply import main_menu_reply_keyboard
-from bot.utils.formatters import format_usdt, format_transaction_hash
+from bot.utils.formatters import format_transaction_hash, format_usdt
 
 router = Router(name="transaction")
 
@@ -88,7 +88,10 @@ async def handle_transaction_history(
         f"({stats['transaction_count']['referral_rewards']} шт.)\n\n"
     )
 
-    if stats.get("pending_withdrawals", 0) > 0 or stats.get("pending_earnings", 0) > 0:
+    if (
+        stats.get("pending_withdrawals", 0) > 0
+        or stats.get("pending_earnings", 0) > 0
+    ):
         text += "*В обработке:*\n"
         if stats.get("pending_withdrawals", 0) > 0:
             text += (
@@ -108,7 +111,10 @@ async def handle_transaction_history(
     if not transactions:
         text += "У вас пока нет транзакций."
     else:
-        text += f"*Последние транзакции* (показано {len(transactions)} из {total}):\n\n"
+        text += (
+            f"*Последние транзакции* (показано {len(transactions)} "
+            f"из {total}):\n\n"
+        )
 
         for idx, tx in enumerate(transactions, 1):
             type_emoji = get_transaction_type_emoji(tx["type"])
@@ -122,14 +128,15 @@ async def handle_transaction_history(
             )
             text += f"   📅 {date}\n"
 
-            if tx.get("tx_hash") and tx["status"] == TransactionStatus.CONFIRMED:
+            if (
+                tx.get("tx_hash")
+                and tx["status"] == TransactionStatus.CONFIRMED
+            ):
                 short_hash = format_transaction_hash(tx["tx_hash"])
                 text += f"   🔗 TX: `{short_hash}`\n"
 
             text += "\n"
 
     await message.answer(
-        text,
-        parse_mode="Markdown",
-        reply_markup=main_menu_reply_keyboard()
+        text, parse_mode="Markdown", reply_markup=main_menu_reply_keyboard()
     )

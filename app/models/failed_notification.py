@@ -4,9 +4,12 @@ FailedNotification model (КРИТИЧНО - PART5).
 Tracks failed notification attempts for retry and admin monitoring.
 """
 
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from datetime import UTC, datetime
+from typing import Any
 
+from sqlalchemy import (
+    JSON as JSONB,
+)
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -15,7 +18,6 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    JSON as JSONB,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -67,8 +69,9 @@ class FailedNotification(Base):
     )
     message: Mapped[str] = mapped_column(Text, nullable=False)
 
-    # Metadata (JSON) - using notification_metadata to avoid SQLAlchemy reserved word conflict
-    notification_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(
+    # Metadata (JSON) - using notification_metadata to avoid
+    # SQLAlchemy reserved word conflict
+    notification_metadata: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB, nullable=True
     )
 
@@ -76,7 +79,7 @@ class FailedNotification(Base):
     attempt_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1
     )
-    last_error: Mapped[Optional[str]] = mapped_column(
+    last_error: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )
 
@@ -90,18 +93,20 @@ class FailedNotification(Base):
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
-    last_attempt_at: Mapped[Optional[datetime]] = mapped_column(
+    last_attempt_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    resolved_at: Mapped[Optional[datetime]] = mapped_column(
+    resolved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 

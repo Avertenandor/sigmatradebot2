@@ -11,11 +11,10 @@ from typing import TYPE_CHECKING, Optional
 from sqlalchemy import (
     Boolean,
     DateTime,
-    Index,
+    ForeignKey,
     Integer,
     Numeric,
     String,
-    ForeignKey,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -91,7 +90,7 @@ class RewardSession(Base):
     )
 
     # Creator
-    created_by: Mapped[Optional[int]] = mapped_column(
+    created_by: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("admins.id"), nullable=True
     )
 

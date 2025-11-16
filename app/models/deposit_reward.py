@@ -6,16 +6,16 @@ Tracks daily ROI rewards for deposits.
 
 from datetime import datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
     DateTime,
+    ForeignKey,
     Index,
     Integer,
     Numeric,
     String,
-    ForeignKey,
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -23,9 +23,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
 if TYPE_CHECKING:
-    from app.models.user import User
     from app.models.deposit import Deposit
     from app.models.reward_session import RewardSession
+    from app.models.user import User
 
 
 class DepositReward(Base):
@@ -94,10 +94,10 @@ class DepositReward(Base):
     paid: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, index=True
     )
-    paid_at: Mapped[Optional[datetime]] = mapped_column(
+    paid_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    tx_hash: Mapped[Optional[str]] = mapped_column(
+    tx_hash: Mapped[str | None] = mapped_column(
         String(255), nullable=True
     )
 

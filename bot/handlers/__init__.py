@@ -9,13 +9,13 @@ from bot.handlers import (
     deposit,
     instructions,
     menu,
+    profile,
+    referral,
     start,
+    support,
+    transaction,
     verification,
     withdrawal,
-    referral,
-    profile,
-    transaction,
-    support,
 )
 
 __all__ = [

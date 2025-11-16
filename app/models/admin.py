@@ -4,9 +4,9 @@ Admin model.
 Represents bot administrators with role-based permissions.
 """
 
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import BigInteger, Index, Integer, String, ForeignKey
+from sqlalchemy import BigInteger, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -47,7 +47,7 @@ class Admin(Base):
     telegram_id: Mapped[int] = mapped_column(
         BigInteger, unique=True, nullable=False, index=True
     )
-    username: Mapped[Optional[str]] = mapped_column(
+    username: Mapped[str | None] = mapped_column(
         String(255), nullable=True
     )
 
@@ -57,12 +57,12 @@ class Admin(Base):
     )
 
     # Authentication
-    master_key: Mapped[Optional[str]] = mapped_column(
+    master_key: Mapped[str | None] = mapped_column(
         String(255), nullable=True
     )
 
     # Creator tracking (self-referencing)
-    created_by: Mapped[Optional[int]] = mapped_column(
+    created_by: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("admins.id"), nullable=True
     )
 
@@ -77,20 +77,20 @@ class Admin(Base):
     )
 
     # Self-referencing: admins created by this admin
-    created_admins: Mapped[List["Admin"]] = relationship(
+    created_admins: Mapped[list["Admin"]] = relationship(
         "Admin",
         back_populates="creator",
         foreign_keys=[created_by],
     )
 
     # OneToMany: Sessions
-    sessions: Mapped[List["AdminSession"]] = relationship(
+    sessions: Mapped[list["AdminSession"]] = relationship(
         "AdminSession", back_populates="admin", lazy="selectin"
     )
 
     # OneToMany: Initiated wallet changes
     initiated_wallet_changes: Mapped[
-        List["WalletChangeRequest"]
+        list["WalletChangeRequest"]
     ] = relationship(
         "WalletChangeRequest",
         foreign_keys="WalletChangeRequest.initiated_by_admin_id",
@@ -100,7 +100,7 @@ class Admin(Base):
 
     # OneToMany: Approved wallet changes
     approved_wallet_changes: Mapped[
-        List["WalletChangeRequest"]
+        list["WalletChangeRequest"]
     ] = relationship(
         "WalletChangeRequest",
         foreign_keys="WalletChangeRequest.approved_by_admin_id",

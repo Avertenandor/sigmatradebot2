@@ -4,7 +4,6 @@ PaymentRetry repository (КРИТИЧНО - PART5).
 Data access layer for PaymentRetry model.
 """
 
-from typing import List, Optional
 from datetime import datetime
 
 from sqlalchemy import select
@@ -27,7 +26,7 @@ class PaymentRetryRepository(BaseRepository[PaymentRetry]):
 
     async def get_pending_retries(
         self,
-    ) -> List[PaymentRetry]:
+    ) -> list[PaymentRetry]:
         """
         Get pending retries ready for processing.
 
@@ -38,8 +37,8 @@ class PaymentRetryRepository(BaseRepository[PaymentRetry]):
 
         stmt = (
             select(PaymentRetry)
-            .where(PaymentRetry.resolved == False)
-            .where(PaymentRetry.in_dlq == False)
+            .where(not PaymentRetry.resolved)
+            .where(not PaymentRetry.in_dlq)
             .where(
                 (PaymentRetry.next_retry_at.is_(None))
                 | (PaymentRetry.next_retry_at <= now)
@@ -50,7 +49,7 @@ class PaymentRetryRepository(BaseRepository[PaymentRetry]):
 
     async def get_dlq_entries(
         self,
-    ) -> List[PaymentRetry]:
+    ) -> list[PaymentRetry]:
         """
         Get Dead Letter Queue entries.
 
@@ -61,7 +60,7 @@ class PaymentRetryRepository(BaseRepository[PaymentRetry]):
 
     async def get_by_user(
         self, user_id: int
-    ) -> List[PaymentRetry]:
+    ) -> list[PaymentRetry]:
         """
         Get payment retries by user.
 
@@ -75,7 +74,7 @@ class PaymentRetryRepository(BaseRepository[PaymentRetry]):
 
     async def get_unresolved_by_type(
         self, payment_type: PaymentType
-    ) -> List[PaymentRetry]:
+    ) -> list[PaymentRetry]:
         """
         Get unresolved retries by payment type.
 
@@ -88,7 +87,7 @@ class PaymentRetryRepository(BaseRepository[PaymentRetry]):
         stmt = (
             select(PaymentRetry)
             .where(PaymentRetry.payment_type == payment_type)
-            .where(PaymentRetry.resolved == False)
+            .where(not PaymentRetry.resolved)
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())

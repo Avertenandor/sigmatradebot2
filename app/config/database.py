@@ -4,18 +4,17 @@ Database configuration.
 Provides async SQLAlchemy engine and session factory.
 """
 
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
+from loguru import logger
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
-from loguru import logger
 
 from app.config.settings import settings
-
 
 # Create async engine
 engine: AsyncEngine = create_async_engine(
@@ -58,9 +57,8 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
 
 async def init_db() -> None:
     """Initialize database (create tables if needed)."""
-    from app.models import Base
 
-    async with engine.begin() as conn:
+    async with engine.begin():
         # For production, use Alembic migrations instead
         # await conn.run_sync(Base.metadata.create_all)
         logger.info("Database initialized")

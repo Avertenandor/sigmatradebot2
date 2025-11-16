@@ -4,7 +4,6 @@ Appeal repository.
 Data access layer for Appeal model.
 """
 
-from typing import List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,8 +20,8 @@ class AppealRepository(BaseRepository[Appeal]):
         super().__init__(Appeal, session)
 
     async def get_by_user(
-        self, user_id: int, status: Optional[str] = None
-    ) -> List[Appeal]:
+        self, user_id: int, status: str | None = None
+    ) -> list[Appeal]:
         """
         Get appeals by user.
 
@@ -41,7 +40,7 @@ class AppealRepository(BaseRepository[Appeal]):
 
     async def get_by_blacklist(
         self, blacklist_id: int
-    ) -> List[Appeal]:
+    ) -> list[Appeal]:
         """
         Get appeals by blacklist entry.
 
@@ -55,7 +54,7 @@ class AppealRepository(BaseRepository[Appeal]):
 
     async def get_pending_appeals(
         self
-    ) -> List[Appeal]:
+    ) -> list[Appeal]:
         """
         Get all pending appeals.
 
@@ -66,9 +65,10 @@ class AppealRepository(BaseRepository[Appeal]):
 
     async def get_active_appeal_for_user(
         self, user_id: int, blacklist_id: int
-    ) -> Optional[Appeal]:
+    ) -> Appeal | None:
         """
-        Get active (pending or under_review) appeal for user and blacklist entry.
+        Get active (pending or under_review) appeal for user and
+        blacklist entry.
 
         Args:
             user_id: User ID
@@ -82,7 +82,10 @@ class AppealRepository(BaseRepository[Appeal]):
             .where(
                 Appeal.user_id == user_id,
                 Appeal.blacklist_id == blacklist_id,
-                Appeal.status.in_([AppealStatus.PENDING, AppealStatus.UNDER_REVIEW])
+                Appeal.status.in_([
+                    AppealStatus.PENDING,
+                    AppealStatus.UNDER_REVIEW
+                ])
             )
         )
         result = await self.session.execute(stmt)
@@ -90,7 +93,7 @@ class AppealRepository(BaseRepository[Appeal]):
 
     async def get_by_status(
         self, status: str
-    ) -> List[Appeal]:
+    ) -> list[Appeal]:
         """
         Get appeals by status.
 
@@ -101,4 +104,3 @@ class AppealRepository(BaseRepository[Appeal]):
             List of appeals
         """
         return await self.find_by(status=status)
-

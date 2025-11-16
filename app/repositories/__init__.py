@@ -4,65 +4,64 @@ Repositories.
 Data access layer for all models.
 """
 
-from app.repositories.base import BaseRepository
-
-# Core Repositories
-from app.repositories.user_repository import UserRepository
-from app.repositories.deposit_repository import DepositRepository
-from app.repositories.transaction_repository import (
-    TransactionRepository,
-)
-from app.repositories.referral_repository import ReferralRepository
-
 # Admin Repositories
 from app.repositories.admin_repository import AdminRepository
 from app.repositories.admin_session_repository import (
     AdminSessionRepository,
 )
+from app.repositories.appeal_repository import AppealRepository
+from app.repositories.base import BaseRepository
 
 # Security Repositories
 from app.repositories.blacklist_repository import (
     BlacklistRepository,
 )
-from app.repositories.financial_password_recovery_repository import (
-    FinancialPasswordRecoveryRepository,
-)
-from app.repositories.appeal_repository import AppealRepository
-
-# Reward Repositories
-from app.repositories.reward_session_repository import (
-    RewardSessionRepository,
-)
+from app.repositories.deposit_repository import DepositRepository
 from app.repositories.deposit_reward_repository import (
     DepositRewardRepository,
 )
-from app.repositories.referral_earning_repository import (
-    ReferralEarningRepository,
+from app.repositories.failed_notification_repository import (
+    FailedNotificationRepository,
+)
+from app.repositories.financial_password_recovery_repository import (
+    FinancialPasswordRecoveryRepository,
 )
 
 # PART5 Critical Repositories
 from app.repositories.payment_retry_repository import (
     PaymentRetryRepository,
 )
-from app.repositories.failed_notification_repository import (
-    FailedNotificationRepository,
+from app.repositories.referral_earning_repository import (
+    ReferralEarningRepository,
+)
+from app.repositories.referral_repository import ReferralRepository
+
+# Reward Repositories
+from app.repositories.reward_session_repository import (
+    RewardSessionRepository,
+)
+from app.repositories.support_message_repository import (
+    SupportMessageRepository,
 )
 
 # Support Repositories
 from app.repositories.support_ticket_repository import (
     SupportTicketRepository,
 )
-from app.repositories.support_message_repository import (
-    SupportMessageRepository,
-)
 
 # System Repositories
 from app.repositories.system_setting_repository import (
     SystemSettingRepository,
 )
+from app.repositories.transaction_repository import (
+    TransactionRepository,
+)
 from app.repositories.user_action_repository import (
     UserActionRepository,
 )
+
+# Core Repositories
+from app.repositories.user_repository import UserRepository
 from app.repositories.wallet_change_request_repository import (
     WalletChangeRequestRepository,
 )

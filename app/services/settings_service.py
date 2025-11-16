@@ -4,7 +4,7 @@ Settings Service.
 Manages system settings stored in database with Redis caching.
 """
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,7 +32,7 @@ class SettingsService:
     def __init__(
         self,
         session: AsyncSession,
-        redis_client: Optional[Any] = None,  # Redis client for caching
+        redis_client: Any | None = None,  # Redis client for caching
         cache_ttl: int = 300,  # 5 minutes
     ) -> None:
         """
@@ -56,7 +56,7 @@ class SettingsService:
         key: str,
         default: Any = None,
         use_cache: bool = True,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Get setting value.
 
@@ -184,7 +184,7 @@ class SettingsService:
         self,
         key: str,
         value: Any,
-        description: Optional[str] = None,
+        description: str | None = None,
     ) -> SystemSetting:
         """
         Set setting value.
@@ -267,7 +267,7 @@ class SettingsService:
         """
         return await self.repository.get_all()
 
-    async def clear_cache(self, key: Optional[str] = None) -> None:
+    async def clear_cache(self, key: str | None = None) -> None:
         """
         Clear settings cache.
 
@@ -304,12 +304,12 @@ class SettingsService:
 
 
 # Singleton management (optional, for global access)
-_settings_service: Optional[SettingsService] = None
+_settings_service: SettingsService | None = None
 
 
 def init_settings_service(
     session: AsyncSession,
-    redis_client: Optional[redis.Redis] = None,
+    redis_client: redis.Redis | None = None,
 ) -> SettingsService:
     """Initialize settings service singleton."""
     global _settings_service
@@ -322,6 +322,6 @@ def init_settings_service(
     return _settings_service
 
 
-def get_settings_service() -> Optional[SettingsService]:
+def get_settings_service() -> SettingsService | None:
     """Get settings service singleton."""
     return _settings_service
