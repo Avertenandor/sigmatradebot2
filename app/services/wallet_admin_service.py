@@ -4,7 +4,7 @@ Wallet admin service.
 Service for managing wallet change requests and approvals.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,7 +60,8 @@ class WalletAdminService:
 
         if request.status != WalletChangeStatus.PENDING.value:
             raise ValueError(
-                f"Request {request_id} is not pending (status: {request.status})"
+                f"Request {request_id} is not pending "
+                f"(status: {request.status})"
             )
 
         # Update request
@@ -68,7 +69,7 @@ class WalletAdminService:
             request.id,
             status=WalletChangeStatus.APPROVED.value,
             approved_by_admin_id=admin_id,
-            approved_at=datetime.utcnow(),
+            approved_at=datetime.now(timezone.utc),
         )
 
         return request
@@ -85,7 +86,8 @@ class WalletAdminService:
         Args:
             request_id: Request ID to reject
             admin_id: Admin ID who is rejecting
-            admin_notes: Optional admin notes (stored in reason field if provided)
+            admin_notes: Optional admin notes
+                (stored in reason field if provided)
 
         Returns:
             Rejected request
@@ -103,14 +105,15 @@ class WalletAdminService:
             WalletChangeStatus.APPROVED.value,
         ):
             raise ValueError(
-                f"Request {request_id} cannot be rejected (status: {request.status})"
+                f"Request {request_id} cannot be rejected "
+                f"(status: {request.status})"
             )
 
         # Update request
         update_data = {
             "status": WalletChangeStatus.REJECTED.value,
             "approved_by_admin_id": admin_id,
-            "approved_at": datetime.utcnow(),
+            "approved_at": datetime.now(timezone.utc),
         }
 
         # Update reason if admin notes provided
