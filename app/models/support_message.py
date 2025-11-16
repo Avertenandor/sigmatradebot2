@@ -4,7 +4,7 @@ SupportMessage model.
 Represents individual messages in support tickets.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from sqlalchemy import DateTime, Index, Integer, String, Text, ForeignKey, JSON
@@ -71,7 +71,7 @@ class SupportMessage(Base):
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
 
     # Relationships
