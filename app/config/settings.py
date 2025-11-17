@@ -126,17 +126,27 @@ class Settings(BaseSettings):
                 parsed = urlparse(self.database_url)
                 if parsed.password:
                     # Decode URL-encoded password
-                    password = unquote(parsed.password).lower()
-                    username = unquote(parsed.username or '').lower()
-                    # Check for exact insecure password patterns
+                    password = unquote(parsed.password)
+                    password_lower = password.lower()
+                    username = unquote(parsed.username or '')
+                    username_lower = username.lower() if username else ''
+                    # Check for exact insecure password patterns (exact match only)
                     insecure_passwords = ['password', 'changeme', 'admin', 'root', '']
                     # Check for username == password (common insecure pattern)
-                    if password in insecure_passwords or (username and password == username):
+                    if password_lower in insecure_passwords:
                         raise ValueError(
-                            'DATABASE_URL must not use default passwords '
+                            f'DATABASE_URL must not use default password "{password_lower}" '
                             'in production'
                         )
-            except (ValueError, AttributeError, ImportError) as e:
+                    if username_lower and password_lower == username_lower:
+                        raise ValueError(
+                            'DATABASE_URL password cannot be the same as username '
+                            'in production'
+                        )
+            except ValueError as e:
+                # Re-raise ValueError (actual validation failure)
+                raise
+            except (AttributeError, ImportError, Exception) as e:
                 # If parsing fails, skip validation (better than blocking startup)
                 logger.warning(
                     f'Could not parse DATABASE_URL for password validation: {e}. '
