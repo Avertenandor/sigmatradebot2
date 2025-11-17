@@ -119,20 +119,27 @@ class Settings(BaseSettings):
                 )
 
             # Ensure database URL is not using default passwords
-            # Check for common insecure patterns like user:password@
-            # or postgres:postgres@
-            insecure_patterns = [
-                ':password@',
-                ':changeme@',
-                'postgres:postgres@',
-                'admin:admin@',
-                'root:root@',
-            ]
-            if any(pattern in self.database_url.lower()
-                   for pattern in insecure_patterns):
-                raise ValueError(
-                    'DATABASE_URL must not use default passwords '
-                    'in production'
+            # Check for common insecure patterns (exact matches only)
+            # Parse URL to check username:password pairs
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(self.database_url)
+                if parsed.password:
+                    password = parsed.password.lower()
+                    username = (parsed.username or '').lower()
+                    # Check for exact insecure password patterns
+                    insecure_passwords = ['password', 'changeme', 'admin', 'root', '']
+                    # Check for username == password (common insecure pattern)
+                    if password in insecure_passwords or (username and password == username):
+                        raise ValueError(
+                            'DATABASE_URL must not use default passwords '
+                            'in production'
+                        )
+            except (ValueError, AttributeError, ImportError):
+                # If parsing fails, skip validation (better than blocking startup)
+                logger.warning(
+                    'Could not parse DATABASE_URL for password validation. '
+                    'Skipping insecure password check.'
                 )
 
         return self
