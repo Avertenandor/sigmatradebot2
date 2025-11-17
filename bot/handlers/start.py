@@ -159,16 +159,18 @@ async def cmd_start(
 @router.message(RegistrationStates.waiting_for_wallet)
 async def process_wallet(
     message: Message,
-    session: AsyncSession,
     state: FSMContext,
+    **data: Any,
 ) -> None:
     """
     Process wallet address.
 
+    Uses session_factory to ensure transaction is closed before FSM state change.
+
     Args:
         message: Telegram message
-        session: Database session
         state: FSM state
+        data: Additional data including session_factory
     """
     # КРИТИЧНО: обрабатываем /start прямо здесь, не полагаясь на dispatcher
     if message.text and message.text.startswith("/start"):
@@ -211,9 +213,23 @@ async def process_wallet(
         )
         return
 
-    # Check if wallet already registered
-    user_service = UserService(session)
-    existing = await user_service.get_by_wallet(wallet_address)
+    # SHORT transaction scope - check wallet and close BEFORE FSM state change
+    session_factory = data.get("session_factory")
+    if not session_factory:
+        # Fallback to old session for backward compatibility
+        session = data.get("session")
+        if not session:
+            await message.answer("❌ Системная ошибка. Попробуйте позже.")
+            return
+        user_service = UserService(session)
+        existing = await user_service.get_by_wallet(wallet_address)
+    else:
+        # NEW pattern: short transaction
+        async with session_factory() as session:
+            async with session.begin():
+                user_service = UserService(session)
+                existing = await user_service.get_by_wallet(wallet_address)
+        # Transaction closed here, before FSM state change
 
     if existing:
         await message.answer(
@@ -294,15 +310,19 @@ async def process_financial_password(
 
 @router.message(RegistrationStates.waiting_for_password_confirmation)
 async def process_password_confirmation(
-    message: Message, session: AsyncSession, state: FSMContext
+    message: Message,
+    state: FSMContext,
+    **data: Any,
 ) -> None:
     """
     Process password confirmation and complete registration.
 
+    Uses session_factory for short transaction during user registration.
+
     Args:
         message: Telegram message
-        session: Database session
         state: FSM state
+        data: Additional data including session_factory
     """
     # КРИТИЧНО: пропускаем /start к основному обработчику
     if message.text and message.text.startswith("/start"):
@@ -326,8 +346,8 @@ async def process_password_confirmation(
     await message.delete()
 
     # Get data from state
-    data = await state.get_data()
-    password = data.get("financial_password")
+    state_data = await state.get_data()
+    password = state_data.get("financial_password")
 
     # Check if passwords match
     if confirmation != password:
@@ -339,45 +359,89 @@ async def process_password_confirmation(
         )
         return
 
-    # Register user
-    wallet_address = data.get("wallet_address")
-    referrer_telegram_id = data.get("referrer_telegram_id")
-    user_service = UserService(session)
-
-    try:
-        user = await user_service.register_user(
-            telegram_id=message.from_user.id,
-            username=message.from_user.username,
-            wallet_address=wallet_address,
-            financial_password=password,
-            referrer_telegram_id=referrer_telegram_id,
-        )
-    except ValueError as e:
-        error_msg = str(e)
-
-        # Check if it's a blacklist error
-        if error_msg.startswith("BLACKLISTED:"):
-            action_type = error_msg.split(":")[1]
-            from app.models.blacklist import BlacklistActionType
-
-            if action_type == BlacklistActionType.REGISTRATION_DENIED:
-                await message.answer(
-                    "Здравствуйте, по решению участников нашего "
-                    "сообщества вам отказано в регистрации в нашем "
-                    "боте и других инструментах нашего сообщества."
-                )
-            else:
-                # Should not happen during registration, but handle gracefully
-                await message.answer(
-                    "❌ Ошибка регистрации. Обратитесь в поддержку."
-                )
-        else:
-            await message.answer(
-                f"❌ Ошибка регистрации:\n{error_msg}\n\n"
-                "Попробуйте начать заново: /start"
+    # SHORT transaction for user registration
+    wallet_address = state_data.get("wallet_address")
+    referrer_telegram_id = state_data.get("referrer_telegram_id")
+    
+    session_factory = data.get("session_factory")
+    if not session_factory:
+        # Fallback to old session for backward compatibility
+        session = data.get("session")
+        if not session:
+            await message.answer("❌ Системная ошибка. Попробуйте позже.")
+            await state.clear()
+            return
+        user_service = UserService(session)
+        try:
+            user = await user_service.register_user(
+                telegram_id=message.from_user.id,
+                username=message.from_user.username,
+                wallet_address=wallet_address,
+                financial_password=password,
+                referrer_telegram_id=referrer_telegram_id,
             )
-        await state.clear()
-        return
+        except ValueError as e:
+            error_msg = str(e)
+            # Check if it's a blacklist error
+            if error_msg.startswith("BLACKLISTED:"):
+                action_type = error_msg.split(":")[1]
+                from app.models.blacklist import BlacklistActionType
+
+                if action_type == BlacklistActionType.REGISTRATION_DENIED:
+                    await message.answer(
+                        "Здравствуйте, по решению участников нашего "
+                        "сообщества вам отказано в регистрации в нашем "
+                        "боте и других инструментах нашего сообщества."
+                    )
+                else:
+                    await message.answer(
+                        "❌ Ошибка регистрации. Обратитесь в поддержку."
+                    )
+            else:
+                await message.answer(
+                    f"❌ Ошибка регистрации:\n{error_msg}\n\n"
+                    "Попробуйте начать заново: /start"
+                )
+            await state.clear()
+            return
+    else:
+        # NEW pattern: short transaction for registration
+        try:
+            async with session_factory() as session:
+                async with session.begin():
+                    user_service = UserService(session)
+                    user = await user_service.register_user(
+                        telegram_id=message.from_user.id,
+                        username=message.from_user.username,
+                        wallet_address=wallet_address,
+                        financial_password=password,
+                        referrer_telegram_id=referrer_telegram_id,
+                    )
+            # Transaction closed here
+        except ValueError as e:
+            error_msg = str(e)
+            # Check if it's a blacklist error
+            if error_msg.startswith("BLACKLISTED:"):
+                action_type = error_msg.split(":")[1]
+                from app.models.blacklist import BlacklistActionType
+
+                if action_type == BlacklistActionType.REGISTRATION_DENIED:
+                    await message.answer(
+                        "Здравствуйте, по решению участников нашего "
+                        "сообщества вам отказано в регистрации в нашем "
+                        "боте и других инструментах нашего сообщества."
+                    )
+                else:
+                    await message.answer(
+                        "❌ Ошибка регистрации. Обратитесь в поддержку."
+                    )
+            else:
+                await message.answer(
+                    f"❌ Ошибка регистрации:\n{error_msg}\n\n"
+                    "Попробуйте начать заново: /start"
+                )
+            await state.clear()
+            return
 
     # Registration successful
     logger.info(
