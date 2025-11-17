@@ -236,19 +236,20 @@ def admin_keyboard() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
 
     builder.row(
+        KeyboardButton(text="📊 Статистика"),
+    )
+    builder.row(
         KeyboardButton(text="👥 Управление пользователями"),
-        KeyboardButton(text="💸 Управление выводами"),
     )
     builder.row(
-        KeyboardButton(text="📊 Статистика бота"),
+        KeyboardButton(text="💸 Заявки на вывод"),
+    )
+    builder.row(
         KeyboardButton(text="📢 Рассылка"),
+        KeyboardButton(text="🆘 Техподдержка"),
     )
     builder.row(
-        KeyboardButton(text="⚙️ Настройки депозитов"),
-        KeyboardButton(text="🔑 Настройки кошелька"),
-    )
-    builder.row(
-        KeyboardButton(text="🚫 Управление blacklist"),
+        KeyboardButton(text="🔐 Управление кошельком"),
     )
     builder.row(
         KeyboardButton(text="📊 Главное меню"),

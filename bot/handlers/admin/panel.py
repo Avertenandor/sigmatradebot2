@@ -7,90 +7,43 @@ from typing import Any
 
 from aiogram import F, Router
 from aiogram.filters import Command
-from aiogram.types import (
-    CallbackQuery,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    Message,
-)
+from aiogram.types import Message
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.user import User
 from app.services.deposit_service import DepositService
 from app.services.referral_service import ReferralService
 from app.services.user_service import UserService
+from bot.keyboards.reply import admin_keyboard, main_menu_reply_keyboard
 from bot.utils.formatters import format_usdt
 
 router = Router(name="admin_panel")
 
 
-def get_admin_panel_keyboard() -> InlineKeyboardMarkup:
-    """Get admin panel main menu keyboard"""
-    buttons = [
-        [
-            InlineKeyboardButton(
-                text="📊 Статистика", callback_data="admin_stats"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                text="👥 Управление пользователями",
-                callback_data="admin_users",
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                text="💸 Заявки на вывод",
-                callback_data="admin_pending_withdrawals",
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                text="📢 Рассылка", callback_data="admin_broadcast"
-            ),
-            InlineKeyboardButton(
-                text="🆘 Техподдержка", callback_data="admin_support"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                text="🔐 Управление кошельком", callback_data="admin_wallet_menu"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                text="◀️ Главное меню", callback_data="main_menu"
-            ),
-        ],
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
-def get_admin_stats_keyboard(range_type: str = "all") -> InlineKeyboardMarkup:
-    """Get admin statistics keyboard"""
-    buttons = [
-        [
-            InlineKeyboardButton(
-                text="◀️ Админ-панель", callback_data="admin_panel"
-            ),
-        ],
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 @router.message(Command("admin"))
 async def cmd_admin_panel(
     message: Message,
     session: AsyncSession,
-    is_admin: bool = False,
+    **data: Any,
 ) -> None:
     """
     Вход в админ-панель по команде /admin.
     Работает только для админов (is_admin=True из middleware).
     """
+    is_admin = data.get("is_admin", False)
     if not is_admin:
         await message.answer("❌ Эта команда доступна только администраторам")
         return
+
+    user: User | None = data.get("user")
+    from app.repositories.blacklist_repository import BlacklistRepository
+    blacklist_repo = BlacklistRepository(session)
+    blacklist_entry = None
+    if user:
+        blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
 
     text = """
 👑 **Панель администратора**
@@ -103,7 +56,7 @@ async def cmd_admin_panel(
     await message.answer(
         text,
         parse_mode="Markdown",
-        reply_markup=get_admin_panel_keyboard(),
+        reply_markup=admin_keyboard(),
     )
 
 
@@ -135,59 +88,56 @@ async def handle_admin_panel_button(
 Выберите действие:
     """.strip()
 
+    user: User | None = data.get("user")
+    from app.repositories.blacklist_repository import BlacklistRepository
+    blacklist_repo = BlacklistRepository(session)
+    blacklist_entry = None
+    if user:
+        blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
+
     await message.answer(
         text,
         parse_mode="Markdown",
-        reply_markup=get_admin_panel_keyboard(),
+        reply_markup=admin_keyboard(),
     )
 
 
-@router.callback_query(F.data == "admin_panel")
-async def handle_admin_panel(
-    callback: CallbackQuery,
+@router.message(F.text == "📊 Главное меню")
+async def handle_back_to_main_menu(
+    message: Message,
     session: AsyncSession,
-    is_admin: bool = False,
+    **data: Any,
 ) -> None:
-    """Handle admin panel main menu"""
-    if not is_admin:
-        await callback.answer("❌ Эта функция доступна только администраторам")
-        return
-
-    message = """
-👑 **Панель администратора**
-
-Добро пожаловать в панель управления SigmaTrade Bot.
-
-Выберите действие:
-    """.strip()
-
-    await callback.message.edit_text(
-        message,
-        parse_mode="Markdown",
-        reply_markup=get_admin_panel_keyboard(),
-    )
-    await callback.answer()
+    """Return to main menu from admin panel"""
+    from bot.handlers.menu import show_main_menu
+    from aiogram.fsm.context import FSMContext
+    
+    state: FSMContext = data.get("state")
+    user: User | None = data.get("user")
+    
+    if state:
+        await state.clear()
+    
+    # Remove 'user' from data to avoid duplicate argument
+    data_without_user = {k: v for k, v in data.items() if k != 'user'}
+    await show_main_menu(message, session, user, state, **data_without_user)
 
 
-@router.callback_query(F.data.startswith("admin_stats"))
+@router.message(F.text == "📊 Статистика")
 async def handle_admin_stats(
-    callback: CallbackQuery,
+    message: Message,
     session: AsyncSession,
-    is_admin: bool = False,
+    **data: Any,
 ) -> None:
     """Handle platform statistics"""
+    is_admin = data.get("is_admin", False)
     if not is_admin:
-        await callback.answer("❌ Эта функция доступна только администраторам")
+        await message.answer("❌ Эта функция доступна только администраторам")
         return
 
     user_service = UserService(session)
     deposit_service = DepositService(session)
     referral_service = ReferralService(session)
-
-    # Get range from callback data
-    range_type = "all"
-    if "_" in callback.data:
-        range_type = callback.data.split("_")[-1]
 
     # Get statistics
     total_users = await user_service.get_total_users()
@@ -195,7 +145,7 @@ async def handle_admin_stats(
     deposit_stats = await deposit_service.get_platform_stats()
     referral_stats = await referral_service.get_platform_referral_stats()
 
-    message = f"""
+    text = f"""
 📊 **Статистика платформы**
 
 **Пользователи:**
@@ -233,45 +183,48 @@ async def handle_admin_stats(
         "earnings", 0))} USDT)
     """.strip()
 
-    await callback.message.edit_text(
-        message,
+    await message.answer(
+        text,
         parse_mode="Markdown",
-        reply_markup=get_admin_stats_keyboard(range_type),
+        reply_markup=admin_keyboard(),
     )
-    await callback.answer()
 
 
-@router.callback_query(F.data == "admin_wallet_menu")
-async def handle_admin_wallet_menu(callback: CallbackQuery) -> None:
+@router.message(F.text == "🔐 Управление кошельком")
+async def handle_admin_wallet_menu(
+    message: Message,
+    **data: Any,
+) -> None:
     """Handle wallet management menu from admin panel."""
     from app.config.settings import settings
     
-    # Проверка что пользователь - super admin
-    admin_ids = settings.get_admin_ids()
-    if not admin_ids or callback.from_user.id != admin_ids[0]:
-        await callback.answer("❌ Доступ запрещён", show_alert=True)
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        await message.answer("❌ Эта функция доступна только администраторам")
         return
     
-    # Импортируем клавиатуру из wallet_key_setup
-    from bot.handlers.admin.wallet_key_setup import get_wallet_management_keyboard
+    # Проверка что пользователь - super admin
+    admin_ids = settings.get_admin_ids()
+    if not admin_ids or message.from_user.id != admin_ids[0]:
+        await message.answer("❌ Доступ запрещён")
+        return
     
-    await callback.message.edit_text(
-        "🔐 <b>УПРАВЛЕНИЕ КОШЕЛЬКОМ</b>\n\nВыберите действие:",
-        parse_mode="HTML",
-        reply_markup=get_wallet_management_keyboard(),
-    )
-    await callback.answer()
+    # Redirect to wallet menu handler
+    from bot.handlers.admin.wallet_key_setup import handle_wallet_menu
+    
+    await handle_wallet_menu(message, **data)
 
 
-@router.callback_query(F.data == "admin_support")
+@router.message(F.text == "🆘 Техподдержка")
 async def handle_admin_support(
-    callback: CallbackQuery,
+    message: Message,
     session: AsyncSession,
-    is_admin: bool = False,
+    **data: Any,
 ) -> None:
     """Handle admin support tickets view."""
+    is_admin = data.get("is_admin", False)
     if not is_admin:
-        await callback.answer("❌ Эта функция доступна только администраторам")
+        await message.answer("❌ Эта функция доступна только администраторам")
         return
 
     from app.services.support_service import SupportService
@@ -282,24 +235,133 @@ async def handle_admin_support(
     pending_tickets = await support_service.list_open_tickets()
     
     if not pending_tickets:
-        message = "🆘 **Техподдержка**\n\nНет ожидающих обращений."
+        text = "🆘 **Техподдержка**\n\nНет ожидающих обращений."
     else:
-        message = f"🆘 **Техподдержка**\n\nОжидающих обращений: {len(pending_tickets)}\n\n"
+        text = f"🆘 **Техподдержка**\n\nОжидающих обращений: {len(pending_tickets)}\n\n"
         for ticket in pending_tickets[:5]:
-            message += f"• #{ticket.id} от пользователя {ticket.user_id}\n"
+            text += f"• #{ticket.id} от пользователя {ticket.user_id}\n"
         
         if len(pending_tickets) > 5:
-            message += f"\n... и еще {len(pending_tickets) - 5} обращений"
+            text += f"\n... и еще {len(pending_tickets) - 5} обращений"
     
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text="◀️ Админ-панель", callback_data="admin_panel"
-        )]
-    ])
-    
-    await callback.message.edit_text(
-        message,
+    await message.answer(
+        text,
         parse_mode="Markdown",
-        reply_markup=keyboard,
+        reply_markup=admin_keyboard(),
     )
-    await callback.answer()
+
+
+@router.message(F.text == "👥 Управление пользователями")
+async def handle_admin_users_menu(
+    message: Message,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """Show admin users management menu"""
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        await message.answer("❌ Эта функция доступна только администраторам")
+        return
+    
+    # Redirect to users handler - convert to callback pattern or create message handler
+    from bot.handlers.admin.users import handle_admin_users_menu as users_handler
+    
+    # Create a mock callback-like object or call the handler directly
+    # Since we're using reply keyboard, we'll create a message-based handler
+    from bot.keyboards.reply import admin_users_keyboard
+    
+    text = """👥 **Управление пользователями**
+
+Выберите действие:"""
+    
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=admin_users_keyboard(),
+    )
+
+
+@router.message(F.text == "💸 Заявки на вывод")
+async def handle_admin_withdrawals(
+    message: Message,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """Handle pending withdrawals list (admin only)"""
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        await message.answer("❌ Эта функция доступна только администраторам")
+        return
+    
+    from app.services.withdrawal_service import WithdrawalService
+    
+    withdrawal_service = WithdrawalService(session)
+    
+    try:
+        pending_withdrawals = await withdrawal_service.get_pending_withdrawals()
+        
+        if not pending_withdrawals:
+            text = "💸 **Заявки на вывод**\n\nНет ожидающих заявок на вывод."
+        else:
+            text = f"💸 **Заявки на вывод**\n\nОжидающих заявок: {len(pending_withdrawals)}\n\n"
+            for withdrawal in pending_withdrawals[:10]:
+                text += (
+                    f"• ID: {withdrawal.id}\n"
+                    f"  Пользователь: {withdrawal.user_id}\n"
+                    f"  Сумма: {format_usdt(withdrawal.amount)} USDT\n"
+                    f"  Адрес: `{withdrawal.wallet_address}`\n\n"
+                )
+            
+            if len(pending_withdrawals) > 10:
+                text += f"... и еще {len(pending_withdrawals) - 10} заявок"
+    except Exception as e:
+        logger.error(f"Error getting pending withdrawals: {e}")
+        text = "❌ Ошибка при получении списка заявок на вывод."
+    
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=admin_keyboard(),
+    )
+
+
+@router.message(F.text == "📢 Рассылка")
+async def handle_admin_broadcast(
+    message: Message,
+    **data: Any,
+) -> None:
+    """Start broadcast message"""
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        await message.answer("❌ Эта функция доступна только администраторам")
+        return
+    
+    from aiogram.fsm.context import FSMContext
+    from bot.handlers.admin.broadcast import handle_start_broadcast
+    
+    state: FSMContext = data.get("state")
+    
+    # Create a mock callback to reuse existing handler
+    # Or create a new message-based handler
+    text = """📢 **Рассылка**
+
+Введите сообщение для рассылки всем пользователям бота.
+
+Вы можете отправить:
+• Текст
+• Фото с подписью
+• Видео с подписью
+• Документ
+
+Для отмены используйте /cancel"""
+    
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=admin_keyboard(),
+    )
+    
+    # Set state for broadcast
+    if state:
+        from bot.states.admin_states import AdminStates
+        await state.set_state(AdminStates.awaiting_broadcast_message)
