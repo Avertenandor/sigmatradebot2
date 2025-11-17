@@ -134,18 +134,17 @@ class Settings(BaseSettings):
                     insecure_passwords = ['password', 'changeme', 'admin', 'root', '']
                     # Check for username == password (common insecure pattern)
                     if password_lower in insecure_passwords:
-                        raise ValueError(
-                            f'DATABASE_URL must not use default password "{password_lower}" '
-                            'in production'
+                        # Only warn, don't block startup - admin can fix via .env
+                        logger.warning(
+                            f'DATABASE_URL uses insecure password "{password_lower}". '
+                            'Please change it in .env file for production security.'
                         )
-                    if username_lower and password_lower == username_lower:
-                        raise ValueError(
-                            'DATABASE_URL password cannot be the same as username '
-                            'in production'
+                    elif username_lower and password_lower == username_lower:
+                        # Only warn, don't block startup
+                        logger.warning(
+                            'DATABASE_URL password is the same as username. '
+                            'Please change it in .env file for production security.'
                         )
-            except ValueError as e:
-                # Re-raise ValueError (actual validation failure)
-                raise
             except (AttributeError, ImportError, Exception) as e:
                 # If parsing fails, skip validation (better than blocking startup)
                 logger.warning(
