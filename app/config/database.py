@@ -20,10 +20,11 @@ from app.config.settings import settings
 engine: AsyncEngine = create_async_engine(
     settings.database_url,
     echo=settings.database_echo,
-    pool_size=20,
-    max_overflow=40,
+    pool_size=5,  # Reduced from 20 to prevent connection exhaustion
+    max_overflow=10,  # Reduced from 40
     pool_pre_ping=True,
-    pool_recycle=3600,
+    pool_recycle=300,  # Recycle connections every 5 minutes (was 3600)
+    pool_timeout=30,  # Wait max 30 seconds for connection
 )
 
 # Create async session factory
