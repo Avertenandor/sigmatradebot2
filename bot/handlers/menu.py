@@ -95,10 +95,14 @@ async def handle_main_menu(
 async def show_balance(
     message: Message,
     session: AsyncSession,
-    user: User,
     state: FSMContext,
+    **data: Any,
 ) -> None:
     """Show user balance."""
+    user: User | None = data.get("user")
+    if not user:
+        await message.answer("Ошибка: пользователь не найден")
+        return
     await state.clear()
 
     user_service = UserService(session)
@@ -126,10 +130,15 @@ async def show_balance(
 async def show_deposit_menu(
     message: Message,
     session: AsyncSession,
-    user: User,
     state: FSMContext,
+    **data: Any,
 ) -> None:
     """Show deposit menu."""
+    user: User | None = data.get("user")
+    if not user:
+        await message.answer("Ошибка: пользователь не найден")
+        return
+    
     await state.clear()
 
     from app.config.settings import settings
@@ -152,10 +161,15 @@ async def show_deposit_menu(
 async def show_withdrawal_menu(
     message: Message,
     session: AsyncSession,
-    user: User,
     state: FSMContext,
+    **data: Any,
 ) -> None:
     """Show withdrawal menu."""
+    user: User | None = data.get("user")
+    if not user:
+        await message.answer("Ошибка: пользователь не найден")
+        return
+    
     await state.clear()
 
     user_service = UserService(session)
@@ -176,10 +190,15 @@ async def show_withdrawal_menu(
 async def show_referral_menu(
     message: Message,
     session: AsyncSession,
-    user: User,
     state: FSMContext,
+    **data: Any,
 ) -> None:
     """Show referral menu."""
+    user: User | None = data.get("user")
+    if not user:
+        await message.answer("Ошибка: пользователь не найден")
+        return
+    
     await state.clear()
 
     from app.config.settings import settings
