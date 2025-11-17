@@ -65,7 +65,12 @@ class AuthMiddleware(BaseMiddleware):
 
         if not telegram_user:
             # No user in event, skip
+            logger.debug("AuthMiddleware: No telegram_user in event, skipping")
             return await handler(event, data)
+
+        logger.info(
+            f"AuthMiddleware: Processing event for user {telegram_user.id} (@{telegram_user.username})"
+        )
 
         # Load user from database
         user_repo = UserRepository(session)
