@@ -119,7 +119,9 @@ async def handle_main_menu(
         )
         return
     logger.info(f"[MENU] Calling show_main_menu for user {user.telegram_id}")
-    await show_main_menu(message, session, user, state, **data)
+    # Remove 'user' from data to avoid duplicate argument
+    data_without_user = {k: v for k, v in data.items() if k != 'user'}
+    await show_main_menu(message, session, user, state, **data_without_user)
 
 
 @router.callback_query(F.data == "main_menu")
