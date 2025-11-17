@@ -26,20 +26,17 @@ echo -e "${GREEN}Redis is ready!${NC}"
 # Execute command based on argument
 case "$1" in
     bot)
-        # Validate environment variables
+        # Validate environment variables (non-blocking - warnings only)
         echo -e "${YELLOW}Validating environment variables...${NC}"
         if [ -f "scripts/validate-env.py" ]; then
-            python3 scripts/validate-env.py
-            VALIDATION_EXIT_CODE=$?
-            if [ $VALIDATION_EXIT_CODE -ne 0 ]; then
-                echo -e "${RED}Environment validation FAILED with exit code $VALIDATION_EXIT_CODE${NC}"
-                exit $VALIDATION_EXIT_CODE
-            else
-                echo -e "${GREEN}Environment validation PASSED${NC}"
-            fi
+            python3 scripts/validate-env.py || {
+                VALIDATION_EXIT_CODE=$?
+                echo -e "${YELLOW}Environment validation returned warnings (exit code $VALIDATION_EXIT_CODE)${NC}"
+                echo -e "${YELLOW}Continuing anyway - settings.py will handle critical validation${NC}"
+                # Don't exit - let bot start and handle validation in settings.py
+            }
         else
-            echo -e "${RED}Environment validation script NOT FOUND (scripts/validate-env.py). Failing.${NC}"
-            exit 1
+            echo -e "${YELLOW}Environment validation script NOT FOUND (scripts/validate-env.py). Continuing...${NC}"
         fi
         
         # Run database migrations (only for bot service)

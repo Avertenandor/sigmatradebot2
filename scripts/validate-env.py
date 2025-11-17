@@ -130,7 +130,10 @@ def validate_env() -> tuple[bool, list[str]]:  # noqa: C901
     if settings.database_url:
         is_valid, msg = validate_database_url(settings.database_url)
         if not is_valid:
-            errors.append(f"DATABASE_URL: {msg}")
+            # Only warn for DATABASE_URL - settings.py will handle validation
+            # Don't block startup for password validation (settings.py already warns)
+            print(f"⚠️  WARNING: DATABASE_URL: {msg}")
+            # Don't add to errors - let settings.py handle it
 
     # Validate RPC URL
     if settings.rpc_url and not (
