@@ -51,6 +51,11 @@ def get_admin_panel_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
+                text="🔐 Управление кошельком", callback_data="admin_wallet_menu"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
                 text="◀️ Главное меню", callback_data="main_menu"
             ),
         ],
@@ -223,6 +228,28 @@ async def handle_admin_stats(
         message,
         parse_mode="Markdown",
         reply_markup=get_admin_stats_keyboard(range_type),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_wallet_menu")
+async def handle_admin_wallet_menu(callback: CallbackQuery) -> None:
+    """Handle wallet management menu from admin panel."""
+    from app.config.settings import settings
+    
+    # Проверка что пользователь - super admin
+    admin_ids = settings.get_admin_ids()
+    if not admin_ids or callback.from_user.id != admin_ids[0]:
+        await callback.answer("❌ Доступ запрещён", show_alert=True)
+        return
+    
+    # Импортируем клавиатуру из wallet_key_setup
+    from bot.handlers.admin.wallet_key_setup import get_wallet_management_keyboard
+    
+    await callback.message.edit_text(
+        "🔐 <b>УПРАВЛЕНИЕ КОШЕЛЬКОМ</b>\n\nВыберите действие:",
+        parse_mode="HTML",
+        reply_markup=get_wallet_management_keyboard(),
     )
     await callback.answer()
 

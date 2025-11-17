@@ -21,6 +21,7 @@ from aiogram.types import (
     Message,
 )
 from eth_account import Account
+from mnemonic import Mnemonic
 
 from app.config.settings import settings
 
@@ -31,6 +32,7 @@ class WalletKeySetup(StatesGroup):
     """States for wallet key setup."""
 
     waiting_for_key = State()
+    waiting_for_seed = State()
     confirming = State()
     confirming_removal = State()
 
@@ -159,7 +161,7 @@ async def confirm_wallet_key(message: Message, state: FSMContext):
 
     try:
         # Путь к .env файлу
-        env_file = "/opt/sigmatrade/.env"
+        env_file = "/opt/sigmatradebot/.env"
 
         # Читаем текущий .env
         with open(env_file) as f:
@@ -207,7 +209,7 @@ async def confirm_wallet_key(message: Message, state: FSMContext):
                 "docker",
                 "compose",
                 "-f",
-                "/opt/sigmatrade/docker-compose.python.yml",
+                "/opt/sigmatradebot/docker-compose.python.yml",
                 "restart",
                 "bot",
                 "worker",
@@ -252,6 +254,12 @@ def get_wallet_management_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text="➕ Добавить/обновить ключ",
                     callback_data="wallet_add",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🌱 Добавить seed фразу",
+                    callback_data="wallet_add_seed",
                 ),
             ],
             [
@@ -378,6 +386,106 @@ async def callback_wallet_add(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+@router.callback_query(F.data == "wallet_add_seed")
+async def callback_wallet_add_seed(callback: CallbackQuery, state: FSMContext):
+    """Начать процесс добавления seed фразы."""
+    # Проверка прав
+    admin_ids = settings.get_admin_ids()
+    if not admin_ids or callback.from_user.id != admin_ids[0]:
+        await callback.answer("❌ Доступ запрещён", show_alert=True)
+        return
+
+    await callback.message.edit_text(
+        "🌱 <b>ДОБАВЛЕНИЕ SEED ФРАЗЫ</b>\n\n"
+        "⚠️ <b>ВНИМАНИЕ!</b> Это критически важная операция!\n\n"
+        "📝 <b>Инструкция:</b>\n"
+        "1. Отправьте seed фразу (mnemonic) в следующем сообщении\n"
+        "2. Формат: 12 или 24 слова через пробел\n"
+        "3. Ваше сообщение будет немедленно удалено\n"
+        "4. Из seed фразы будет извлечён приватный ключ\n"
+        "5. Ключ будет сохранён в .env\n\n"
+        "🔒 После сохранения бот автоматически перезапустится\n\n"
+        "❌ Для отмены используйте /cancel",
+        parse_mode="HTML",
+    )
+
+    await state.set_state(WalletKeySetup.waiting_for_seed)
+    await callback.answer()
+
+
+@router.message(WalletKeySetup.waiting_for_seed)
+async def process_wallet_seed(message: Message, state: FSMContext):
+    """
+    Обработка seed фразы от админа.
+    """
+    try:
+        # Немедленно удаляем сообщение с seed фразой
+        await message.delete()
+
+        # Получаем seed фразу из сообщения
+        seed_phrase = message.text.strip()
+
+        # Валидация seed фразы
+        try:
+            mnemo = Mnemonic("english")
+            if not mnemo.check(seed_phrase):
+                await message.answer(
+                    "❌ Неверная seed фраза!\n"
+                    "Проверьте правильность написания слов.\n\n"
+                    "Попробуйте ещё раз или /cancel для отмены"
+                )
+                return
+        except Exception as e:
+            await message.answer(
+                f"❌ Ошибка валидации seed фразы!\n"
+                f"Ошибка: {str(e)}\n\n"
+                "Попробуйте ещё раз или /cancel для отмены"
+            )
+            return
+
+        # Извлекаем приватный ключ из seed фразы
+        try:
+            Account.enable_unaudited_hdwallet_features()
+            account = Account.from_mnemonic(seed_phrase)
+            private_key = account.key.hex()
+            wallet_address = account.address
+        except Exception as e:
+            await message.answer(
+                f"❌ Ошибка при извлечении ключа из seed фразы!\n"
+                f"Ошибка: {str(e)}\n\n"
+                "Попробуйте ещё раз или /cancel для отмены"
+            )
+            return
+
+        # Сохраняем ключ и адрес в state для подтверждения
+        await state.update_data(
+            private_key=private_key, wallet_address=wallet_address
+        )
+
+        await message.answer(
+            f"✅ <b>Seed фраза валидна!</b>\n\n"
+            f"🔑 <b>Адрес кошелька:</b>\n"
+            f"<code>{wallet_address}</code>\n\n"
+            f"⚠️ <b>Текущий адрес в конфиге:</b>\n"
+            f"<code>{settings.wallet_address}</code>\n\n"
+            "❓ Подтвердите сохранение:\n"
+            "• Приватный ключ будет извлечён и сохранён в .env\n"
+            "• Бот будет перезапущен\n"
+            "• Blockchain операции будут использовать этот кошелёк\n\n"
+            "Используйте /confirm для подтверждения или /cancel для отмены",
+            parse_mode="HTML",
+        )
+
+        await state.set_state(WalletKeySetup.confirming)
+
+    except Exception as e:
+        await message.answer(
+            f"❌ Ошибка при обработке seed фразы:\n{str(e)}\n\n"
+            "Попробуйте ещё раз или /cancel для отмены"
+        )
+        await state.clear()
+
+
 @router.callback_query(F.data == "wallet_remove")
 async def callback_wallet_remove(callback: CallbackQuery, state: FSMContext):
     """Начать процесс удаления ключа."""
@@ -440,7 +548,7 @@ async def callback_wallet_remove_confirm(callback: CallbackQuery):
 
     try:
         # Путь к .env файлу
-        env_file = "/opt/sigmatrade/.env"
+        env_file = "/opt/sigmatradebot/.env"
 
         # Читаем текущий .env
         with open(env_file) as f:
@@ -473,7 +581,7 @@ async def callback_wallet_remove_confirm(callback: CallbackQuery):
                 "docker",
                 "compose",
                 "-f",
-                "/opt/sigmatrade/docker-compose.python.yml",
+                "/opt/sigmatradebot/docker-compose.python.yml",
                 "restart",
                 "bot",
                 "worker",

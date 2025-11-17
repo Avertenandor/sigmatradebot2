@@ -74,7 +74,11 @@ async def main() -> None:  # noqa: C901
             not settings.wallet_private_key
             or "your_" in settings.wallet_private_key.lower()
         ):
-            logger.error("WALLET_PRIVATE_KEY is not properly configured")
+            logger.warning(
+                "WALLET_PRIVATE_KEY is not configured. "
+                "Bot will start, but blockchain operations will be unavailable. "
+                "Set key via /wallet_menu in bot interface."
+            )
     except Exception as e:
         logger.warning(f"Could not validate environment: {e}")
 

@@ -110,12 +110,12 @@ class Settings(BaseSettings):
                     'production. Generate one with: openssl rand -hex 32'
                 )
 
-            # Ensure wallet private key is not placeholder
-            if (not self.wallet_private_key or
-                    'your_' in self.wallet_private_key.lower()):
-                raise ValueError(
-                    'WALLET_PRIVATE_KEY must be set with a real value '
-                    'in production'
+            # Wallet private key is optional - can be set via bot interface
+            # Only warn if it's a placeholder, but don't block startup
+            if self.wallet_private_key and 'your_' in self.wallet_private_key.lower():
+                logger.warning(
+                    'WALLET_PRIVATE_KEY appears to be a placeholder. '
+                    'Set a real key via /wallet_menu in the bot interface.'
                 )
 
             # Ensure database URL is not using default passwords
