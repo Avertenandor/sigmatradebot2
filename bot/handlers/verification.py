@@ -6,6 +6,7 @@ Handles user verification with financial password generation.
 
 import secrets
 import string
+from typing import Any
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
@@ -47,8 +48,8 @@ def generate_financial_password(length: int = 8) -> str:
 async def start_verification(
     message: Message,
     session: AsyncSession,
-    user: User,
     state: FSMContext,
+    **data: Any,
 ) -> None:
     """
     Start verification process - generate financial password.
@@ -56,9 +57,16 @@ async def start_verification(
     Args:
         message: Telegram message
         session: Database session
-        user: Current user
         state: FSM state
+        **data: Handler data (includes user from AuthMiddleware)
     """
+    # Get user from middleware data
+    user: User | None = data.get("user")
+    if not user:
+        logger.error("start_verification: No user in data")
+        await message.answer("❌ Ошибка: пользователь не найден. Попробуйте /start")
+        return
+
     # Clear any active FSM state
     await state.clear()
 
