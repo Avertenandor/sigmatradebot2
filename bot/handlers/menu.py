@@ -49,10 +49,8 @@ async def show_main_menu(
         user.telegram_id
     )
 
-    # Check if user is admin
-    from app.config.settings import settings
-
-    is_admin = user.telegram_id in settings.get_admin_ids()
+    # Get is_admin from middleware data (set by AuthMiddleware)
+    is_admin = data.get("is_admin", False)
 
     text = (
         f"📊 *Главное меню*\n\n"
@@ -101,8 +99,15 @@ async def handle_main_menu_callback(
     """Handle main menu callback from inline keyboard."""
     user: User | None = data.get("user")
     if not user:
-        await callback.answer("Ошибка: пользователь не найден")
-        return
+        # Try to get user from database
+        from app.repositories.user_repository import UserRepository
+        user_repo = UserRepository(session)
+        if callback.from_user:
+            users = await user_repo.find_by(telegram_id=callback.from_user.id)
+            user = users[0] if users else None
+        if not user:
+            await callback.answer("⚠️ Ошибка: не удалось загрузить данные пользователя", show_alert=True)
+            return
     
     await state.clear()
     
@@ -112,10 +117,8 @@ async def handle_main_menu_callback(
         user.telegram_id
     )
     
-    # Check if user is admin
-    from app.config.settings import settings
-    
-    is_admin = user.telegram_id in settings.get_admin_ids()
+    # Get is_admin from middleware data (set by AuthMiddleware)
+    is_admin = data.get("is_admin", False)
     
     text = (
         f"📊 *Главное меню*\n\n"
@@ -145,8 +148,18 @@ async def show_balance(
     """Show user balance."""
     user: User | None = data.get("user")
     if not user:
-        await message.answer("Ошибка: пользователь не найден")
-        return
+        # Try to get user from database
+        from app.repositories.user_repository import UserRepository
+        user_repo = UserRepository(session)
+        if message.from_user:
+            users = await user_repo.find_by(telegram_id=message.from_user.id)
+            user = users[0] if users else None
+        if not user:
+            await message.answer(
+                "⚠️ Ошибка: не удалось загрузить данные пользователя. "
+                "Попробуйте отправить /start"
+            )
+            return
     await state.clear()
 
     user_service = UserService(session)
@@ -180,8 +193,18 @@ async def show_deposit_menu(
     """Show deposit menu."""
     user: User | None = data.get("user")
     if not user:
-        await message.answer("Ошибка: пользователь не найден")
-        return
+        # Try to get user from database
+        from app.repositories.user_repository import UserRepository
+        user_repo = UserRepository(session)
+        if message.from_user:
+            users = await user_repo.find_by(telegram_id=message.from_user.id)
+            user = users[0] if users else None
+        if not user:
+            await message.answer(
+                "⚠️ Ошибка: не удалось загрузить данные пользователя. "
+                "Попробуйте отправить /start"
+            )
+            return
     
     await state.clear()
 
@@ -211,8 +234,18 @@ async def show_withdrawal_menu(
     """Show withdrawal menu."""
     user: User | None = data.get("user")
     if not user:
-        await message.answer("Ошибка: пользователь не найден")
-        return
+        # Try to get user from database
+        from app.repositories.user_repository import UserRepository
+        user_repo = UserRepository(session)
+        if message.from_user:
+            users = await user_repo.find_by(telegram_id=message.from_user.id)
+            user = users[0] if users else None
+        if not user:
+            await message.answer(
+                "⚠️ Ошибка: не удалось загрузить данные пользователя. "
+                "Попробуйте отправить /start"
+            )
+            return
     
     await state.clear()
 
@@ -240,8 +273,18 @@ async def show_referral_menu(
     """Show referral menu."""
     user: User | None = data.get("user")
     if not user:
-        await message.answer("Ошибка: пользователь не найден")
-        return
+        # Try to get user from database
+        from app.repositories.user_repository import UserRepository
+        user_repo = UserRepository(session)
+        if message.from_user:
+            users = await user_repo.find_by(telegram_id=message.from_user.id)
+            user = users[0] if users else None
+        if not user:
+            await message.answer(
+                "⚠️ Ошибка: не удалось загрузить данные пользователя. "
+                "Попробуйте отправить /start"
+            )
+            return
     
     await state.clear()
 
@@ -276,8 +319,18 @@ async def show_settings_menu(
     """Show settings menu."""
     user: User | None = data.get("user")
     if not user:
-        await message.answer("Ошибка: пользователь не найден")
-        return
+        # Try to get user from database
+        from app.repositories.user_repository import UserRepository
+        user_repo = UserRepository(session)
+        if message.from_user:
+            users = await user_repo.find_by(telegram_id=message.from_user.id)
+            user = users[0] if users else None
+        if not user:
+            await message.answer(
+                "⚠️ Ошибка: не удалось загрузить данные пользователя. "
+                "Попробуйте отправить /start"
+            )
+            return
     
     await state.clear()
 
@@ -304,8 +357,18 @@ async def show_my_profile(
     """Show detailed user profile."""
     user: User | None = data.get("user")
     if not user:
-        await message.answer("Ошибка: пользователь не найден")
-        return
+        # Try to get user from database
+        from app.repositories.user_repository import UserRepository
+        user_repo = UserRepository(session)
+        if message.from_user:
+            users = await user_repo.find_by(telegram_id=message.from_user.id)
+            user = users[0] if users else None
+        if not user:
+            await message.answer(
+                "⚠️ Ошибка: не удалось загрузить данные пользователя. "
+                "Попробуйте отправить /start"
+            )
+            return
     
     from app.services.deposit_service import DepositService
     from bot.utils.formatters import format_usdt
@@ -440,8 +503,18 @@ async def show_my_wallet(
     """Show user wallet."""
     user: User | None = data.get("user")
     if not user:
-        await message.answer("Ошибка: пользователь не найден")
-        return
+        # Try to get user from database
+        from app.repositories.user_repository import UserRepository
+        user_repo = UserRepository(session)
+        if message.from_user:
+            users = await user_repo.find_by(telegram_id=message.from_user.id)
+            user = users[0] if users else None
+        if not user:
+            await message.answer(
+                "⚠️ Ошибка: не удалось загрузить данные пользователя. "
+                "Попробуйте отправить /start"
+            )
+            return
     
     text = (
         f"💳 *Мой кошелек*\n\n"

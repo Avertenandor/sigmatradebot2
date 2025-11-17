@@ -109,9 +109,17 @@ async def cmd_start(
         )
         logger.debug("cmd_start: sending main menu keyboard")
         # 2) И отправим главное меню отдельным сообщением
+        # Get is_admin from middleware data
+        is_admin = data.get("is_admin", False)
+        # Get blacklist status if needed
+        from app.repositories.blacklist_repository import BlacklistRepository
+        blacklist_repo = BlacklistRepository(session)
+        blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
         await message.answer(
             "Выберите действие ниже:",
-            reply_markup=main_menu_reply_keyboard(),
+            reply_markup=main_menu_reply_keyboard(
+                user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+            ),
         )
         logger.info("cmd_start: main menu keyboard sent successfully")
         return
@@ -148,9 +156,13 @@ async def cmd_start(
         reply_markup=ReplyKeyboardRemove(),
     )
     # 2) Добавим большое главное меню отдельно
+    # For unregistered users, is_admin will be False
+    is_admin = data.get("is_admin", False)
     await message.answer(
         "Выберите действие ниже:",
-        reply_markup=main_menu_reply_keyboard(),
+        reply_markup=main_menu_reply_keyboard(
+            user=user, blacklist_entry=None, is_admin=is_admin
+        ),
     )
 
     await state.set_state(RegistrationStates.waiting_for_wallet)
@@ -179,13 +191,22 @@ async def process_wallet(
         )
         await state.clear()
         # Сразу показываем главное меню
+        user: User | None = data.get("user")
+        is_admin = data.get("is_admin", False)
+        from app.repositories.blacklist_repository import BlacklistRepository
+        blacklist_repo = BlacklistRepository(session)
+        blacklist_entry = None
+        if user:
+            blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
         await message.answer(
             "👋 Добро пожаловать обратно!",
             reply_markup=ReplyKeyboardRemove(),
         )
         await message.answer(
             "Выберите действие ниже:",
-            reply_markup=main_menu_reply_keyboard(),
+            reply_markup=main_menu_reply_keyboard(
+                user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+            ),
         )
         return
 
@@ -196,9 +217,18 @@ async def process_wallet(
         logger.debug(f"process_wallet: menu button {message.text}, showing main menu")
         await state.clear()
         # Покажем главное меню сразу, не полагаясь на повторную диспетчеризацию
+        user: User | None = data.get("user")
+        is_admin = data.get("is_admin", False)
+        from app.repositories.blacklist_repository import BlacklistRepository
+        blacklist_repo = BlacklistRepository(session)
+        blacklist_entry = None
+        if user:
+            blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
         await message.answer(
             "📊 Главное меню",
-            reply_markup=main_menu_reply_keyboard(),
+            reply_markup=main_menu_reply_keyboard(
+                user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+            ),
         )
         return
 
@@ -275,9 +305,18 @@ async def process_financial_password(
 
     if is_menu_button(message.text):
         await state.clear()
+        user: User | None = data.get("user")
+        is_admin = data.get("is_admin", False)
+        from app.repositories.blacklist_repository import BlacklistRepository
+        blacklist_repo = BlacklistRepository(session)
+        blacklist_entry = None
+        if user:
+            blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
         await message.answer(
             "📊 Главное меню",
-            reply_markup=main_menu_reply_keyboard(),
+            reply_markup=main_menu_reply_keyboard(
+                user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+            ),
         )
         return
 
@@ -334,9 +373,18 @@ async def process_password_confirmation(
 
     if is_menu_button(message.text):
         await state.clear()
+        user: User | None = data.get("user")
+        is_admin = data.get("is_admin", False)
+        from app.repositories.blacklist_repository import BlacklistRepository
+        blacklist_repo = BlacklistRepository(session)
+        blacklist_entry = None
+        if user:
+            blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
         await message.answer(
             "📊 Главное меню",
-            reply_markup=main_menu_reply_keyboard(),
+            reply_markup=main_menu_reply_keyboard(
+                user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+            ),
         )
         return
 
@@ -452,12 +500,19 @@ async def process_password_confirmation(
         },
     )
 
+    # Get is_admin from middleware data
+    is_admin = data.get("is_admin", False)
+    from app.repositories.blacklist_repository import BlacklistRepository
+    blacklist_repo = BlacklistRepository(session)
+    blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
     await message.answer(
         "🎉 Регистрация завершена!\n\n"
         f"Ваш ID: {user.id}\n"
         f"Кошелек: {user.masked_wallet}\n\n"
         "Добро пожаловать в SigmaTrade! 🚀",
-        reply_markup=main_menu_reply_keyboard(),
+        reply_markup=main_menu_reply_keyboard(
+            user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+        ),
     )
 
     # Ask if user wants to provide contacts (optional)
@@ -529,9 +584,18 @@ async def process_phone(
 
     if is_menu_button(message.text):
         await state.clear()
+        user: User | None = data.get("user")
+        is_admin = data.get("is_admin", False)
+        from app.repositories.blacklist_repository import BlacklistRepository
+        blacklist_repo = BlacklistRepository(session)
+        blacklist_entry = None
+        if user:
+            blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
         await message.answer(
             "📊 Главное меню",
-            reply_markup=main_menu_reply_keyboard(),
+            reply_markup=main_menu_reply_keyboard(
+                user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+            ),
         )
         return
 
@@ -581,9 +645,18 @@ async def process_email(
 
     if is_menu_button(message.text):
         await state.clear()
+        user: User | None = data.get("user")
+        is_admin = data.get("is_admin", False)
+        from app.repositories.blacklist_repository import BlacklistRepository
+        blacklist_repo = BlacklistRepository(session)
+        blacklist_entry = None
+        if user:
+            blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
         await message.answer(
             "📊 Главное меню",
-            reply_markup=main_menu_reply_keyboard(),
+            reply_markup=main_menu_reply_keyboard(
+                user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+            ),
         )
         return
 
@@ -632,8 +705,17 @@ async def process_email(
     else:
         contacts_text += "\nВы можете изменить их позже в настройках профиля."
 
+    # Get is_admin from middleware data
+    is_admin = data.get("is_admin", False)
+    from app.repositories.blacklist_repository import BlacklistRepository
+    blacklist_repo = BlacklistRepository(session)
+    blacklist_entry = None
+    if current_user:
+        blacklist_entry = await blacklist_repo.find_by_telegram_id(current_user.telegram_id)
     await message.answer(
         contacts_text,
-        reply_markup=main_menu_reply_keyboard(),
+        reply_markup=main_menu_reply_keyboard(
+            user=current_user, blacklist_entry=blacklist_entry, is_admin=is_admin
+        ),
     )
     await state.clear()
