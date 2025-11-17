@@ -5,12 +5,12 @@ Handles withdrawal request flow.
 """
 
 from decimal import Decimal
+from typing import Any
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from loguru import logger
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from app.services.user_service import UserService
@@ -25,19 +25,24 @@ router = Router()
 @router.message(F.text == "💸 Вывести всю сумму")
 async def withdraw_all(
     message: Message,
-    session: AsyncSession,
-    user: User,
     state: FSMContext,
+    **data: Any,
 ) -> None:
     """
     Withdraw all available balance.
+    
+    Uses session_factory for short transaction to get balance.
 
     Args:
         message: Telegram message
-        session: Database session
-        user: Current user
         state: FSM state
+        data: Additional data including session_factory and user
     """
+    user: User | None = data.get("user")
+    if not user:
+        await message.answer("❌ Ошибка: пользователь не найден")
+        return
+    
     # Check verification status (from TZ: withdrawals require verification)
     if not user.is_verified:
         await message.answer(
@@ -47,9 +52,24 @@ async def withdraw_all(
         )
         return
 
-    # Get balance
-    user_service = UserService(session)
-    balance = await user_service.get_user_balance(user.id)
+    session_factory = data.get("session_factory")
+    
+    # Get balance with SHORT transaction
+    if not session_factory:
+        # Fallback
+        session = data.get("session")
+        if not session:
+            await message.answer("❌ Системная ошибка")
+            return
+        user_service = UserService(session)
+        balance = await user_service.get_user_balance(user.id)
+    else:
+        # NEW pattern: short read transaction
+        async with session_factory() as session:
+            async with session.begin():
+                user_service = UserService(session)
+                balance = await user_service.get_user_balance(user.id)
+        # Transaction closed here
 
     if not balance or balance["available_balance"] == 0:
         await message.answer(
@@ -108,19 +128,25 @@ async def withdraw_amount(
 @router.message(WithdrawalStates.waiting_for_amount)
 async def process_withdrawal_amount(
     message: Message,
-    session: AsyncSession,
-    user: User,
     state: FSMContext,
+    **data: Any,
 ) -> None:
     """
     Process withdrawal amount.
+    
+    Uses session_factory for short transaction to validate balance.
 
     Args:
         message: Telegram message
-        session: Database session
-        user: Current user
         state: FSM state
+        data: Additional data including session_factory and user
     """
+    user: User | None = data.get("user")
+    if not user:
+        await message.answer("❌ Ошибка: пользователь не найден")
+        await state.clear()
+        return
+    
     # Check verification status (from TZ: withdrawals require verification)
     if not user.is_verified:
         await message.answer(
@@ -131,12 +157,12 @@ async def process_withdrawal_amount(
         return
 
     # Check if message is a menu button - if so, clear state and ignore
-    if is_menu_button(message.text):
+    if is_menu_button(message.text or ""):
         await state.clear()
         return  # Let menu handlers process this
 
     try:
-        amount = Decimal(message.text.strip())
+        amount = Decimal((message.text or "").strip())
     except (ValueError, ArithmeticError):
         await message.answer(
             "❌ Неверный формат суммы!\n\n"
@@ -154,9 +180,25 @@ async def process_withdrawal_amount(
         )
         return
 
-    # Check balance
-    user_service = UserService(session)
-    balance = await user_service.get_user_balance(user.id)
+    session_factory = data.get("session_factory")
+    
+    # Check balance with SHORT transaction
+    if not session_factory:
+        # Fallback
+        session = data.get("session")
+        if not session:
+            await message.answer("❌ Системная ошибка")
+            await state.clear()
+            return
+        user_service = UserService(session)
+        balance = await user_service.get_user_balance(user.id)
+    else:
+        # NEW pattern: short read transaction
+        async with session_factory() as session:
+            async with session.begin():
+                user_service = UserService(session)
+                balance = await user_service.get_user_balance(user.id)
+        # Transaction closed here
 
     if not balance or Decimal(str(balance["available_balance"])) < amount:
         await message.answer(
@@ -182,50 +224,93 @@ async def process_withdrawal_amount(
 @router.message(WithdrawalStates.waiting_for_financial_password)
 async def process_financial_password(
     message: Message,
-    session: AsyncSession,
-    user: User,
     state: FSMContext,
+    **data: Any,
 ) -> None:
     """
     Process financial password and create withdrawal.
+    
+    CRITICAL: Uses session_factory for short transaction during withdrawal creation.
 
     Args:
         message: Telegram message
-        session: Database session
-        user: Current user
         state: FSM state
+        data: Additional data including session_factory and user
     """
+    user: User | None = data.get("user")
+    if not user:
+        await message.answer("❌ Ошибка: пользователь не найден")
+        await state.clear()
+        return
+    
     # Check if message is a menu button - if so, clear state and ignore
-    if is_menu_button(message.text):
+    if is_menu_button(message.text or ""):
         await state.clear()
         return  # Let menu handlers process this
-    password = message.text.strip()
+    
+    password = (message.text or "").strip()
 
     # Delete message with password
     await message.delete()
 
-    # Verify password
-    user_service = UserService(session)
-    if not user_service.verify_financial_password(user, password):
-        await message.answer(
-            "❌ Неверный финансовый пароль!\n\nПопробуйте еще раз:"
+    session_factory = data.get("session_factory")
+    
+    # Verify password and create withdrawal with SHORT transaction
+    if not session_factory:
+        # Fallback
+        session = data.get("session")
+        if not session:
+            await message.answer("❌ Системная ошибка")
+            await state.clear()
+            return
+        
+        user_service = UserService(session)
+        if not user_service.verify_financial_password(user, password):
+            await message.answer(
+                "❌ Неверный финансовый пароль!\n\nПопробуйте еще раз:"
+            )
+            return
+        
+        # Get amount from state
+        state_data = await state.get_data()
+        amount = state_data.get("amount")
+        
+        # Get balance
+        balance = await user_service.get_user_balance(user.id)
+        
+        # Create withdrawal
+        withdrawal_service = WithdrawalService(session)
+        transaction, error = await withdrawal_service.request_withdrawal(
+            user_id=user.id,
+            amount=amount,
+            available_balance=Decimal(str(balance["available_balance"])),
         )
-        return
-
-    # Get amount from state
-    data = await state.get_data()
-    amount = data.get("amount")
-
-    # Get balance
-    balance = await user_service.get_user_balance(user.id)
-
-    # Create withdrawal
-    withdrawal_service = WithdrawalService(session)
-    transaction, error = await withdrawal_service.request_withdrawal(
-        user_id=user.id,
-        amount=amount,
-        available_balance=Decimal(str(balance["available_balance"])),
-    )
+    else:
+        # NEW pattern: short transaction for CRITICAL withdrawal creation
+        async with session_factory() as session:
+            async with session.begin():
+                user_service = UserService(session)
+                if not user_service.verify_financial_password(user, password):
+                    await message.answer(
+                        "❌ Неверный финансовый пароль!\n\nПопробуйте еще раз:"
+                    )
+                    return
+                
+                # Get amount from state
+                state_data = await state.get_data()
+                amount = state_data.get("amount")
+                
+                # Get balance
+                balance = await user_service.get_user_balance(user.id)
+                
+                # Create withdrawal
+                withdrawal_service = WithdrawalService(session)
+                transaction, error = await withdrawal_service.request_withdrawal(
+                    user_id=user.id,
+                    amount=amount,
+                    available_balance=Decimal(str(balance["available_balance"])),
+                )
+        # Transaction closed here - BEFORE notifications
 
     if error:
         await message.answer(
@@ -268,21 +353,44 @@ async def process_financial_password(
 @router.message(F.text == "📜 История выводов")
 async def show_withdrawal_history(
     message: Message,
-    session: AsyncSession,
-    user: User,
+    **data: Any,
 ) -> None:
     """
     Show withdrawal history.
+    
+    Uses session_factory for short read transaction.
 
     Args:
         message: Telegram message
-        session: Database session
-        user: Current user
+        data: Additional data including session_factory and user
     """
-    withdrawal_service = WithdrawalService(session)
-    result = await withdrawal_service.get_user_withdrawals(
-        user.id, page=1, limit=10
-    )
+    user: User | None = data.get("user")
+    if not user:
+        await message.answer("❌ Ошибка: пользователь не найден")
+        return
+    
+    session_factory = data.get("session_factory")
+    
+    # Get withdrawal history with SHORT transaction
+    if not session_factory:
+        # Fallback
+        session = data.get("session")
+        if not session:
+            await message.answer("❌ Системная ошибка")
+            return
+        withdrawal_service = WithdrawalService(session)
+        result = await withdrawal_service.get_user_withdrawals(
+            user.id, page=1, limit=10
+        )
+    else:
+        # NEW pattern: short read transaction
+        async with session_factory() as session:
+            async with session.begin():
+                withdrawal_service = WithdrawalService(session)
+                result = await withdrawal_service.get_user_withdrawals(
+                    user.id, page=1, limit=10
+                )
+        # Transaction closed here
 
     withdrawals = result["withdrawals"]
 
