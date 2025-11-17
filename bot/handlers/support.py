@@ -7,7 +7,6 @@ from typing import Any
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from bot.keyboards.reply import support_keyboard
@@ -54,10 +53,13 @@ async def handle_create_ticket(
 async def process_ticket_message(
     message: Message,
     state: FSMContext,
-    session: AsyncSession,
     **data: Any,
 ) -> None:
-    """Process ticket message."""
+    """
+    Process ticket message.
+    
+    Uses session_factory for short transaction during ticket creation.
+    """
     user: User | None = data.get("user")
     from bot.utils.menu_buttons import is_menu_button
 
@@ -66,25 +68,45 @@ async def process_ticket_message(
         await state.clear()
         return
 
-    # Save ticket to database
+    # Save ticket to database with SHORT transaction
     from app.models.enums import SupportCategory
     from app.services.support_service import SupportService
 
-    support_service = SupportService(session)
-
-    try:
-        if not user:
-            await state.clear()
-            await message.answer(
-                "❌ Ошибка контекста пользователя. Повторите /start"
-            )
-            return
-
-        ticket, error = await support_service.create_ticket(
-            user_id=user.id,
-            category=SupportCategory.OTHER,
-            initial_message=message.text,
+    if not user:
+        await state.clear()
+        await message.answer(
+            "❌ Ошибка контекста пользователя. Повторите /start"
         )
+        return
+
+    session_factory = data.get("session_factory")
+    
+    try:
+        if not session_factory:
+            # Fallback to old session for backward compatibility
+            session = data.get("session")
+            if not session:
+                await state.clear()
+                await message.answer("❌ Системная ошибка. Попробуйте позже.")
+                return
+            
+            support_service = SupportService(session)
+            ticket, error = await support_service.create_ticket(
+                user_id=user.id,
+                category=SupportCategory.OTHER,
+                initial_message=message.text,
+            )
+        else:
+            # NEW pattern: short transaction
+            async with session_factory() as session:
+                async with session.begin():
+                    support_service = SupportService(session)
+                    ticket, error = await support_service.create_ticket(
+                        user_id=user.id,
+                        category=SupportCategory.OTHER,
+                        initial_message=message.text,
+                    )
+            # Transaction closed here
 
         if error or not ticket:
             await message.answer(
@@ -135,14 +157,16 @@ async def process_ticket_message(
 @router.message(F.text == "📋 Мои обращения")
 async def handle_my_tickets(
     message: Message,
-    session: AsyncSession,
     **data: Any,
 ) -> None:
-    """Show user's tickets."""
+    """
+    Show user's tickets.
+    
+    Uses session_factory for short read transaction.
+    """
     user: User | None = data.get("user")
     from app.services.support_service import SupportService
 
-    support_service = SupportService(session)
     if not user:
         await message.answer(
             "❌ Ошибка контекста пользователя. Повторите /start",
@@ -150,7 +174,23 @@ async def handle_my_tickets(
         )
         return
 
-    tickets = await support_service.get_user_tickets(user.id)
+    session_factory = data.get("session_factory")
+    
+    if not session_factory:
+        # Fallback to old session
+        session = data.get("session")
+        if not session:
+            await message.answer("❌ Системная ошибка.", reply_markup=support_keyboard())
+            return
+        support_service = SupportService(session)
+        tickets = await support_service.get_user_tickets(user.id)
+    else:
+        # NEW pattern: short read transaction
+        async with session_factory() as session:
+            async with session.begin():
+                support_service = SupportService(session)
+                tickets = await support_service.get_user_tickets(user.id)
+        # Transaction closed here
 
     if not tickets:
         text = "📋 У вас пока нет обращений"
@@ -166,8 +206,9 @@ async def handle_my_tickets(
             }.get(ticket.status, "⚪")
 
             created_date = ticket.created_at.strftime('%d.%m.%Y %H:%M')
+            subject = getattr(ticket, 'subject', 'Обращение')
             text += (
-                f"{status_emoji} #{ticket.id} - {ticket.subject}\n"
+                f"{status_emoji} #{ticket.id} - {subject}\n"
                 f"   Создано: {created_date}\n\n"
             )
 
