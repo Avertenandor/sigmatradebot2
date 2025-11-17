@@ -97,22 +97,32 @@ class BlockchainService:
             if not self.web3.is_connected():
                 raise ConnectionError("Failed to connect to BSC RPC endpoint")
 
-            # Get wallet address from private key
-            self.wallet_account = Account.from_key(wallet_private_key)
-            self.wallet_address = to_checksum_address(
-                self.wallet_account.address
-            )
+            # Get wallet address from private key (if provided)
+            if wallet_private_key:
+                self.wallet_account = Account.from_key(wallet_private_key)
+                self.wallet_address = to_checksum_address(
+                    self.wallet_account.address
+                )
+            else:
+                self.wallet_account = None
+                self.wallet_address = None
+                logger.warning(
+                    "BlockchainService initialized without wallet private key. "
+                    "Sending payments will not be available. "
+                    "Set key via /wallet_menu in bot interface."
+                )
 
             # Initialize USDT contract
             self.usdt_contract = self.web3.eth.contract(
                 address=self.usdt_contract_address, abi=USDT_ABI
             )
 
+            wallet_info = f"  Wallet: {self.wallet_address}" if self.wallet_address else "  Wallet: Not configured"
             logger.success(
                 f"BlockchainService initialized successfully\n"
                 f"  RPC: {rpc_url}\n"
                 f"  USDT Contract: {self.usdt_contract_address}\n"
-                f"  Wallet: {self.wallet_address}\n"
+                f"{wallet_info}\n"
                 f"  Chain ID: {self.web3.eth.chain_id}"
             )
         except Exception as e:
@@ -164,6 +174,14 @@ class BlockchainService:
                 - error: str | None
         """
         try:
+            # Check if wallet is configured
+            if not self.wallet_account or not self.wallet_address:
+                return {
+                    "success": False,
+                    "tx_hash": None,
+                    "error": "Wallet private key is not configured. Set key via /wallet_menu in bot interface.",
+                }
+            
             # Validate recipient address
             if not await self.validate_wallet_address(to_address):
                 return {
