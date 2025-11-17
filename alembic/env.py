@@ -20,7 +20,9 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Set the SQLAlchemy URL from settings
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# Use attributes to avoid configparser interpolation issues with URL-encoded passwords
+# that contain % characters (like %3C, %3E, etc.)
+config.attributes["sqlalchemy.url"] = settings.database_url
 
 # add your model's MetaData object here for 'autogenerate' support
 target_metadata = Base.metadata
@@ -38,7 +40,7 @@ def run_migrations_offline() -> None:
     Calls to context.execute() here emit the given string to the
     script output.
     """
-    url = config.get_main_option("sqlalchemy.url")
+    url = config.attributes.get("sqlalchemy.url") or config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -60,8 +62,12 @@ def do_run_migrations(connection: Connection) -> None:
 
 async def run_async_migrations() -> None:
     """Run migrations in async mode."""
+    # Get URL from attributes (set above) to avoid configparser interpolation issues
+    url = config.attributes.get("sqlalchemy.url") or settings.database_url
+    configuration = config.get_section(config.config_ini_section, {})
+    configuration["sqlalchemy.url"] = url
     connectable = async_engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
