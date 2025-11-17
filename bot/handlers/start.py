@@ -158,11 +158,22 @@ async def process_wallet(
         session: Database session
         state: FSM state
     """
-    # КРИТИЧНО: пропускаем /start к основному обработчику
+    # КРИТИЧНО: обрабатываем /start прямо здесь, не полагаясь на dispatcher
     if message.text and message.text.startswith("/start"):
-        logger.info("process_wallet: caught /start, clearing state and returning")
+        logger.info(
+            "process_wallet: /start caught, clearing state, showing main menu"
+        )
         await state.clear()
-        return  # Позволяем CommandStart() обработать это
+        # Сразу показываем главное меню
+        await message.answer(
+            "👋 Добро пожаловать обратно!",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        await message.answer(
+            "Выберите действие ниже:",
+            reply_markup=main_menu_reply_keyboard(),
+        )
+        return
 
     # Check if message is a menu button - if so, clear state and ignore
     from bot.utils.menu_buttons import is_menu_button
