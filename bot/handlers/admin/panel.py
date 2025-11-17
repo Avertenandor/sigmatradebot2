@@ -102,7 +102,7 @@ async def handle_admin_panel_button(
     )
 
 
-@router.message(F.text == "📊 Главное меню")
+@router.message(F.text == "◀️ Главное меню")
 async def handle_back_to_main_menu(
     message: Message,
     session: AsyncSession,

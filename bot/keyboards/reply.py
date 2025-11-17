@@ -252,7 +252,7 @@ def admin_keyboard() -> ReplyKeyboardMarkup:
         KeyboardButton(text="🔐 Управление кошельком"),
     )
     builder.row(
-        KeyboardButton(text="📊 Главное меню"),
+        KeyboardButton(text="◀️ Главное меню"),
     )
 
     return builder.as_markup(resize_keyboard=True)
