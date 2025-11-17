@@ -158,6 +158,11 @@ async def process_wallet(
         session: Database session
         state: FSM state
     """
+    # КРИТИЧНО: пропускаем /start к основному обработчику
+    if message.text and message.text.startswith("/start"):
+        await state.clear()
+        return  # Позволяем CommandStart() обработать это
+
     # Check if message is a menu button - if so, clear state and ignore
     from bot.utils.menu_buttons import is_menu_button
 
@@ -219,6 +224,11 @@ async def process_financial_password(
         message: Telegram message
         state: FSM state
     """
+    # КРИТИЧНО: пропускаем /start к основному обработчику
+    if message.text and message.text.startswith("/start"):
+        await state.clear()
+        return  # Позволяем CommandStart() обработать это
+
     # Check if message is a menu button - if so, clear state and ignore
     from bot.utils.menu_buttons import is_menu_button
 
@@ -269,6 +279,11 @@ async def process_password_confirmation(
         session: Database session
         state: FSM state
     """
+    # КРИТИЧНО: пропускаем /start к основному обработчику
+    if message.text and message.text.startswith("/start"):
+        await state.clear()
+        return  # Позволяем CommandStart() обработать это
+
     # Check if message is a menu button - if so, clear state and ignore
     from bot.utils.menu_buttons import is_menu_button
 
