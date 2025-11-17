@@ -122,11 +122,12 @@ class Settings(BaseSettings):
             # Check for common insecure patterns (exact matches only)
             # Parse URL to check username:password pairs
             try:
-                from urllib.parse import urlparse
+                from urllib.parse import urlparse, unquote
                 parsed = urlparse(self.database_url)
                 if parsed.password:
-                    password = parsed.password.lower()
-                    username = (parsed.username or '').lower()
+                    # Decode URL-encoded password
+                    password = unquote(parsed.password).lower()
+                    username = unquote(parsed.username or '').lower()
                     # Check for exact insecure password patterns
                     insecure_passwords = ['password', 'changeme', 'admin', 'root', '']
                     # Check for username == password (common insecure pattern)
@@ -135,10 +136,10 @@ class Settings(BaseSettings):
                             'DATABASE_URL must not use default passwords '
                             'in production'
                         )
-            except (ValueError, AttributeError, ImportError):
+            except (ValueError, AttributeError, ImportError) as e:
                 # If parsing fails, skip validation (better than blocking startup)
                 logger.warning(
-                    'Could not parse DATABASE_URL for password validation. '
+                    f'Could not parse DATABASE_URL for password validation: {e}. '
                     'Skipping insecure password check.'
                 )
 

@@ -41,12 +41,21 @@ def validate_wallet_address(address: str) -> tuple[bool, str]:
 
 def validate_database_url(url: str) -> tuple[bool, str]:
     """Validate database URL."""
-    if not url.startswith("postgresql+asyncpg://"):
-        return False, "Must use postgresql+asyncpg:// driver"
-    if "changeme" in url.lower():
-        return False, "Password cannot be 'changeme'"
-    if "your_" in url.lower() or "placeholder" in url.lower():
-        return False, "Contains placeholder values"
+    if not url.startswith(("postgresql+asyncpg://", "postgresql://")):
+        return False, "Must use postgresql:// or postgresql+asyncpg:// driver"
+    # Parse URL to check password more precisely
+    try:
+        from urllib.parse import urlparse, unquote
+        parsed = urlparse(url)
+        if parsed.password:
+            password = unquote(parsed.password).lower()
+            # Only check for exact insecure passwords, not substrings
+            if password in ['changeme', 'password', 'admin', 'root', '']:
+                return False, f"Password cannot be '{password}'"
+    except Exception:
+        # If parsing fails, just check for obvious placeholders
+        if "your_" in url.lower() or "placeholder" in url.lower():
+            return False, "Contains placeholder values"
     return True, "OK"
 
 
@@ -64,11 +73,10 @@ def validate_env() -> tuple[bool, list[str]]:  # noqa: C901
     except Exception as e:
         return False, [f"Failed to load settings: {str(e)}"]
 
-    # Required string variables
+    # Required string variables (wallet_private_key is optional - can be set via bot)
     required_strings = [
         ("telegram_bot_token", "TELEGRAM_BOT_TOKEN"),
         ("database_url", "DATABASE_URL"),
-        ("wallet_private_key", "WALLET_PRIVATE_KEY"),
         ("wallet_address", "WALLET_ADDRESS"),
         ("usdt_contract_address", "USDT_CONTRACT_ADDRESS"),
         ("rpc_url", "RPC_URL"),
@@ -83,6 +91,20 @@ def validate_env() -> tuple[bool, list[str]]:  # noqa: C901
             errors.append(f"{env_name} is not set or empty")
         elif "your_" in value.lower() or "placeholder" in value.lower():
             errors.append(f"{env_name} contains placeholder value")
+    
+    # WALLET_PRIVATE_KEY is optional - warn but don't error
+    wallet_key = getattr(settings, "wallet_private_key", None)
+    if not wallet_key or wallet_key.strip() == "":
+        print(
+            "⚠️  WARNING: WALLET_PRIVATE_KEY is not set. "
+            "Bot will start but blockchain operations will be unavailable. "
+            "Set key via /wallet_menu in bot interface."
+        )
+    elif "your_" in wallet_key.lower() or "placeholder" in wallet_key.lower():
+        print(
+            "⚠️  WARNING: WALLET_PRIVATE_KEY contains placeholder value. "
+            "Set real key via /wallet_menu in bot interface."
+        )
 
     # Use detailed validation functions
     if settings.telegram_bot_token:
