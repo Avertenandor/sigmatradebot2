@@ -43,6 +43,10 @@ async def cmd_start(
         state: FSM state
         data: Additional data from middlewares
     """
+    logger.info(f"=== CMD_START CALLED === from user {message.from_user.id if message.from_user else 'Unknown'}")
+    logger.info(f"Message text: {message.text}")
+    logger.info(f"Data keys: {list(data.keys())}")
+    
     user: User | None = data.get("user")
     # Extract referral code from command args
     # Format: /start ref123456 or /start ref_123456
