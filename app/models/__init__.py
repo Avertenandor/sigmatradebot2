@@ -6,6 +6,7 @@ Exports all SQLAlchemy models for easy imports.
 
 # Admin Models
 from app.models.admin import Admin
+from app.models.admin_action import AdminAction
 from app.models.admin_session import AdminSession
 from app.models.appeal import Appeal, AppealStatus
 from app.models.base import Base
@@ -70,6 +71,7 @@ __all__ = [
     "Referral",
     # Admin Models
     "Admin",
+    "AdminAction",
     "AdminSession",
     # Security Models
     "Blacklist",

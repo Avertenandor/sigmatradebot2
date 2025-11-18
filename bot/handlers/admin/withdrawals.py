@@ -12,8 +12,10 @@ from aiogram.types import Message
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.admin import Admin
 from app.models.transaction import Transaction
 from app.models.enums import TransactionStatus, TransactionType
+from app.services.admin_log_service import AdminLogService
 from app.services.blockchain_service import get_blockchain_service
 from app.services.notification_service import NotificationService
 from app.services.user_service import UserService
@@ -182,6 +184,17 @@ async def handle_approve_withdrawal(
             reply_markup=admin_withdrawals_keyboard(),
         )
 
+        # Log admin action
+        admin: Admin | None = data.get("admin")
+        if admin:
+            log_service = AdminLogService(session)
+            await log_service.log_withdrawal_approved(
+                admin=admin,
+                withdrawal_id=withdrawal_id,
+                user_id=withdrawal.user_id,
+                amount=str(withdrawal.amount),
+            )
+
     except Exception as e:
         await message.answer(
             f"❌ Ошибка при обработке: {str(e)}",
@@ -260,6 +273,17 @@ async def handle_reject_withdrawal(
             parse_mode="Markdown",
             reply_markup=admin_withdrawals_keyboard(),
         )
+
+        # Log admin action
+        admin: Admin | None = data.get("admin")
+        if admin:
+            log_service = AdminLogService(session)
+            await log_service.log_withdrawal_rejected(
+                admin=admin,
+                withdrawal_id=withdrawal_id,
+                user_id=withdrawal.user_id,
+                reason=None,
+            )
 
     except Exception as e:
         await message.answer(

@@ -226,9 +226,26 @@ def settings_keyboard() -> ReplyKeyboardMarkup:
     return builder.as_markup(resize_keyboard=True)
 
 
-def admin_keyboard() -> ReplyKeyboardMarkup:
+def get_admin_keyboard_from_data(data: dict) -> ReplyKeyboardMarkup:
+    """
+    Get admin keyboard with correct is_super_admin flag from handler data.
+
+    Args:
+        data: Handler data dict
+
+    Returns:
+        ReplyKeyboardMarkup with admin options
+    """
+    is_super_admin = data.get("is_super_admin", False)
+    return admin_keyboard(is_super_admin=is_super_admin)
+
+
+def admin_keyboard(is_super_admin: bool = False) -> ReplyKeyboardMarkup:
     """
     Admin panel reply keyboard.
+
+    Args:
+        is_super_admin: Whether current admin is super admin
 
     Returns:
         ReplyKeyboardMarkup with admin options
@@ -254,6 +271,13 @@ def admin_keyboard() -> ReplyKeyboardMarkup:
     builder.row(
         KeyboardButton(text="🚫 Управление blacklist"),
     )
+    
+    # Add admin management button only for super_admin
+    if is_super_admin:
+        builder.row(
+            KeyboardButton(text="👥 Управление админами"),
+        )
+    
     builder.row(
         KeyboardButton(text="◀️ Главное меню"),
     )
@@ -449,6 +473,9 @@ def admin_management_keyboard() -> ReplyKeyboardMarkup:
     )
     builder.row(
         KeyboardButton(text="📋 Список админов"),
+    )
+    builder.row(
+        KeyboardButton(text="🗑️ Удалить админа"),
     )
     builder.row(
         KeyboardButton(text="👑 Админ-панель"),

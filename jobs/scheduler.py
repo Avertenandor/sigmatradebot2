@@ -32,6 +32,9 @@ except Exception as e:
         "Scheduler will continue, but blockchain operations may fail"
     )
 
+from jobs.tasks.admin_session_cleanup import (
+    cleanup_expired_admin_sessions,
+)
 from jobs.tasks.daily_rewards import process_daily_rewards
 from jobs.tasks.deposit_monitoring import monitor_deposits
 from jobs.tasks.notification_retry import process_notification_retries
@@ -83,7 +86,16 @@ def create_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
-    logger.info("Task scheduler configured with 4 jobs")
+    # Admin session cleanup - every 5 minutes
+    scheduler.add_job(
+        cleanup_expired_admin_sessions.send,
+        trigger=IntervalTrigger(minutes=5),
+        id="admin_session_cleanup",
+        name="Admin Session Cleanup",
+        replace_existing=True,
+    )
+
+    logger.info("Task scheduler configured with 5 jobs")
 
     return scheduler
 

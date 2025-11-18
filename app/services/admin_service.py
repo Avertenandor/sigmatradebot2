@@ -287,9 +287,27 @@ class AdminService:
             )
             return None, None, "Сессия истекла. Войдите заново"
 
+        # Check if inactive (no activity for 15 minutes)
+        if session.is_inactive:
+            await self.session_repo.update(
+                session.id, is_active=False
+            )
+            await self.session.commit()
+
+            logger.info(
+                "Session inactive (15 minutes)",
+                extra={"session_id": session.id},
+            )
+            return (
+                None,
+                None,
+                "Сессия неактивна (бездействие более 15 минут). "
+                "Войдите заново",
+            )
+
         # Update activity
         await self.session_repo.update(
-            session.id, last_activity_at=datetime.now(UTC)
+            session.id, last_activity=datetime.now(UTC)
         )
 
         # Load admin

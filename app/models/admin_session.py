@@ -128,6 +128,26 @@ class AdminSession(Base):
         )
         return max(remaining.total_seconds() / 60, 0.0)
 
+    @property
+    def is_inactive(self) -> bool:
+        """
+        Check if session is inactive (no activity for 15 minutes).
+
+        Returns:
+            True if session is inactive (no activity > 15 minutes)
+        """
+        if not self.is_active:
+            return True
+
+        if self.last_activity is None:
+            return True
+
+        now = datetime.now(self.last_activity.tzinfo)
+        inactivity_threshold = timedelta(minutes=15)
+        time_since_activity = now - self.last_activity
+
+        return time_since_activity > inactivity_threshold
+
     # Methods
 
     async def update_activity(self) -> None:

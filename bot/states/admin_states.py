@@ -9,6 +9,9 @@ from aiogram.fsm.state import State, StatesGroup
 class AdminStates(StatesGroup):
     """States for admin operations"""
 
+    # Authentication
+    awaiting_master_key_input = State()  # Waiting for master key input
+
     # User management
     awaiting_user_to_ban = State()  # Legacy, kept for compatibility
     awaiting_user_to_block = State()  # Block user (with appeal)

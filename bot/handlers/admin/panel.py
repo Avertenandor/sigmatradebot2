@@ -12,16 +12,95 @@ from aiogram.types import Message
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.admin import Admin
 from app.models.user import User
+from app.services.admin_service import AdminService
 from app.services.deposit_service import DepositService
 from app.services.referral_service import ReferralService
 from app.services.user_service import UserService
 from bot.keyboards.reply import admin_keyboard, main_menu_reply_keyboard
+from bot.states.admin_states import AdminStates
 from bot.utils.formatters import format_usdt
 
 router = Router(name="admin_panel")
 
 
+@router.message(AdminStates.awaiting_master_key_input)
+async def handle_master_key_input(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """
+    Handle master key input for admin authentication.
+
+    Args:
+        message: Telegram message with master key
+        session: Database session
+        state: FSM context
+        **data: Handler data
+    """
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        await message.answer("❌ Эта функция доступна только администраторам")
+        return
+
+    telegram_id = message.from_user.id if message.from_user else None
+    if not telegram_id:
+        await message.answer("❌ Не удалось определить пользователя")
+        return
+
+    master_key = message.text.strip() if message.text else ""
+
+    if not master_key:
+        await message.answer("❌ Мастер-ключ не может быть пустым")
+        return
+
+    # Authenticate admin
+    admin_service = AdminService(session)
+    session_obj, admin_obj, error = await admin_service.login(
+        telegram_id=telegram_id,
+        master_key=master_key,
+        ip_address=None,  # Telegram doesn't provide IP
+        user_agent=None,  # Telegram doesn't provide user agent
+    )
+
+    if error or not session_obj or not admin_obj:
+        await message.answer(
+            f"❌ {error or 'Ошибка аутентификации'}\n\n"
+            "Попробуйте ввести мастер-ключ еще раз:",
+            parse_mode="Markdown",
+        )
+        return
+
+    # Save session token in FSM state
+    await state.update_data(admin_session_token=session_obj.session_token)
+    await state.set_state(None)  # Clear state
+
+    logger.info(
+        f"Admin {telegram_id} authenticated successfully, "
+        f"session_id={session_obj.id}"
+    )
+
+    # Show admin panel
+    text = """
+👑 **Панель администратора**
+
+Добро пожаловать в панель управления SigmaTrade Bot.
+
+Выберите действие:
+    """.strip()
+
+    # Get admin from data to check if super_admin
+    admin: Admin | None = data.get("admin")
+    is_super_admin = admin.is_super_admin if admin else False
+
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=admin_keyboard(is_super_admin=is_super_admin),
+    )
 
 
 @router.message(Command("admin"))
@@ -54,10 +133,14 @@ async def cmd_admin_panel(
 Выберите действие:
     """.strip()
 
+    # Get admin from data to check if super_admin
+    admin: Admin | None = data.get("admin")
+    is_super_admin = admin.is_super_admin if admin else False
+
     await message.answer(
         text,
         parse_mode="Markdown",
-        reply_markup=admin_keyboard(),
+        reply_markup=admin_keyboard(is_super_admin=is_super_admin),
     )
 
 
@@ -96,10 +179,14 @@ async def handle_admin_panel_button(
     if user:
         blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
 
+    # Get admin from data to check if super_admin
+    admin: Admin | None = data.get("admin")
+    is_super_admin = admin.is_super_admin if admin else False
+
     await message.answer(
         text,
         parse_mode="Markdown",
-        reply_markup=admin_keyboard(),
+        reply_markup=admin_keyboard(is_super_admin=is_super_admin),
     )
 
 
@@ -183,10 +270,14 @@ async def handle_admin_stats(
         "earnings", 0))} USDT)
     """.strip()
 
+    # Get admin from data to check if super_admin
+    admin: Admin | None = data.get("admin")
+    is_super_admin = admin.is_super_admin if admin else False
+
     await message.answer(
         text,
         parse_mode="Markdown",
-        reply_markup=admin_keyboard(),
+        reply_markup=admin_keyboard(is_super_admin=is_super_admin),
     )
 
 
@@ -688,10 +779,14 @@ async def handle_admin_withdrawals(
         logger.error(f"Error getting pending withdrawals: {e}")
         text = "❌ Ошибка при получении списка заявок на вывод."
     
+    # Get admin from data to check if super_admin
+    admin: Admin | None = data.get("admin")
+    is_super_admin = admin.is_super_admin if admin else False
+
     await message.answer(
         text,
         parse_mode="Markdown",
-        reply_markup=admin_keyboard(),
+        reply_markup=admin_keyboard(is_super_admin=is_super_admin),
     )
 
 

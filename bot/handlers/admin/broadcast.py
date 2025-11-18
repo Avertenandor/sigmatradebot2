@@ -14,6 +14,8 @@ from typing import Any
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.admin import Admin
+from app.services.admin_log_service import AdminLogService
 from app.services.user_service import UserService
 from bot.states.admin_states import AdminStates
 
@@ -232,6 +234,17 @@ async def handle_broadcast_message(  # noqa: C901
         parse_mode="Markdown",
         reply_markup=admin_keyboard(),
     )
+
+    # Log admin action
+    admin: Admin | None = data.get("admin")
+    if admin:
+        log_service = AdminLogService(session)
+        message_preview = text or caption or f"{broadcast_type} message"
+        await log_service.log_broadcast_sent(
+            admin=admin,
+            total_users=success_count,
+            message_preview=message_preview,
+        )
 
     # Reset state
     await state.clear()

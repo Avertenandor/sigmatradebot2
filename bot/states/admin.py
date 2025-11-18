@@ -10,8 +10,8 @@ from aiogram.fsm.state import State, StatesGroup
 class AdminManagementStates(StatesGroup):
     """States for admin management."""
 
-    waiting_for_telegram_id = State()
-    waiting_for_role = State()
+    awaiting_admin_telegram_id = State()  # Waiting for Telegram ID of new admin
+    awaiting_admin_role = State()  # Waiting for role selection
 
 
 class DepositSettingsStates(StatesGroup):

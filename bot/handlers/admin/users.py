@@ -10,6 +10,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.admin import Admin
+from app.services.admin_log_service import AdminLogService
 from app.services.user_service import UserService
 from bot.keyboards.reply import admin_users_keyboard, cancel_keyboard
 from bot.states.admin_states import AdminStates
@@ -194,6 +196,17 @@ async def handle_block_user_input(  # noqa: C901
             f"Уведомление отправлено пользователю.",
             reply_markup=admin_users_keyboard(),
         )
+
+        # Log admin action
+        admin: Admin | None = data.get("admin")
+        if admin:
+            log_service = AdminLogService(session)
+            await log_service.log_user_blocked(
+                admin=admin,
+                user_id=user.id,
+                user_telegram_id=user.telegram_id,
+                reason="Блокировка администратором",
+            )
     except Exception as e:
         logger.error(f"Error blocking user: {e}")
         await message.reply(
@@ -324,6 +337,17 @@ async def handle_terminate_user_input(  # noqa: C901
             f"Уведомление отправлено пользователю.",
             reply_markup=admin_users_keyboard(),
         )
+
+        # Log admin action
+        admin: Admin | None = data.get("admin")
+        if admin:
+            log_service = AdminLogService(session)
+            await log_service.log_user_terminated(
+                admin=admin,
+                user_id=user.id,
+                user_telegram_id=user.telegram_id,
+                reason="Терминация администратором",
+            )
     except Exception as e:
         logger.error(f"Error terminating user: {e}")
         await message.reply(

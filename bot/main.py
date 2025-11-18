@@ -32,6 +32,9 @@ from app.services.blockchain_service import (
     init_blockchain_service,  # noqa: E402
 )
 from app.utils.admin_init import ensure_default_super_admin  # noqa: E402
+from bot.middlewares.admin_auth_middleware import (
+    AdminAuthMiddleware,  # noqa: E402
+)
 from bot.middlewares.auth import AuthMiddleware  # noqa: E402
 from bot.middlewares.ban_middleware import BanMiddleware  # noqa: E402
 from bot.middlewares.database import DatabaseMiddleware  # noqa: E402
@@ -191,6 +194,7 @@ async def main() -> None:  # noqa: C901
         withdrawal,
     )
     from bot.handlers.admin import (
+        admins,
         blacklist,
         broadcast,
         deposit_settings,
@@ -222,6 +226,33 @@ async def main() -> None:  # noqa: C901
     dp.include_router(appeal.router)
 
     # Admin handlers (wallet_key_setup must be first for security)
+    # Apply AdminAuthMiddleware to all admin routers
+    admin_auth_middleware = AdminAuthMiddleware()
+    
+    # Apply middleware to admin routers
+    wallet_key_setup.router.message.middleware(admin_auth_middleware)
+    wallet_key_setup.router.callback_query.middleware(admin_auth_middleware)
+    panel.router.message.middleware(admin_auth_middleware)
+    panel.router.callback_query.middleware(admin_auth_middleware)
+    users.router.message.middleware(admin_auth_middleware)
+    users.router.callback_query.middleware(admin_auth_middleware)
+    withdrawals.router.message.middleware(admin_auth_middleware)
+    withdrawals.router.callback_query.middleware(admin_auth_middleware)
+    broadcast.router.message.middleware(admin_auth_middleware)
+    broadcast.router.callback_query.middleware(admin_auth_middleware)
+    blacklist.router.message.middleware(admin_auth_middleware)
+    blacklist.router.callback_query.middleware(admin_auth_middleware)
+    deposit_settings.router.message.middleware(admin_auth_middleware)
+    deposit_settings.router.callback_query.middleware(admin_auth_middleware)
+    admin_finpass.router.message.middleware(admin_auth_middleware)
+    admin_finpass.router.callback_query.middleware(admin_auth_middleware)
+    management.router.message.middleware(admin_auth_middleware)
+    management.router.callback_query.middleware(admin_auth_middleware)
+    wallets.router.message.middleware(admin_auth_middleware)
+    wallets.router.callback_query.middleware(admin_auth_middleware)
+    admins.router.message.middleware(admin_auth_middleware)
+    admins.router.callback_query.middleware(admin_auth_middleware)
+    
     dp.include_router(wallet_key_setup.router)
     dp.include_router(panel.router)
     dp.include_router(users.router)
@@ -232,6 +263,7 @@ async def main() -> None:  # noqa: C901
     dp.include_router(admin_finpass.router)
     dp.include_router(management.router)
     dp.include_router(wallets.router)
+    dp.include_router(admins.router)
 
     # Test bot connection
     try:
