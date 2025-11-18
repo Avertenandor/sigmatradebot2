@@ -19,6 +19,7 @@ from typing import Any
 from aiogram.types import Message
 from eth_account import Account
 from mnemonic import Mnemonic
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import settings
 
