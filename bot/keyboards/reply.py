@@ -252,6 +252,9 @@ def admin_keyboard() -> ReplyKeyboardMarkup:
         KeyboardButton(text="🔐 Управление кошельком"),
     )
     builder.row(
+        KeyboardButton(text="🚫 Управление blacklist"),
+    )
+    builder.row(
         KeyboardButton(text="◀️ Главное меню"),
     )
 
@@ -421,6 +424,9 @@ def admin_blacklist_keyboard() -> ReplyKeyboardMarkup:
     )
     builder.row(
         KeyboardButton(text="🗑️ Удалить из blacklist"),
+    )
+    builder.row(
+        KeyboardButton(text="📝 Редактировать тексты"),
     )
     builder.row(
         KeyboardButton(text="👑 Админ-панель"),

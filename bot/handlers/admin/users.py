@@ -163,24 +163,24 @@ async def handle_block_user_input(  # noqa: C901
         user.is_banned = True
         await session.commit()
 
-        # Send notification to user
+        # Send notification to user with customizable text
         try:
             from aiogram import Bot
-
             from app.config.settings import settings
+            from app.repositories.system_setting_repository import SystemSettingRepository
 
             bot = Bot(token=settings.telegram_bot_token)
+            
+            # Get customizable notification text
+            setting_repo = SystemSettingRepository(session)
+            notification_text = await setting_repo.get_value(
+                "blacklist_block_notification_text",
+                default="⚠️ Ваш аккаунт временно заблокирован в нашем сообществе. Вы можете подать апелляцию в течение 3 рабочих дней."
+            )
+            
             await bot.send_message(
                 chat_id=user.telegram_id,
-                text=(
-                    "Здравствуйте, по решению участников нашего сообщества "
-                    "за недопустимые высказывания и нарушение правил"
-                        "поведения "
-                    "в нашем сообществе ваш аккаунт заблокирован. "
-                    "Вы можете подать апелляцию в течение 3 рабочих дней. "
-                    "Ваша апелляция будет рассмотрена в течение 5"
-                        "рабочих дней."
-                ),
+                text=notification_text,
             )
             await bot.session.close()
         except Exception as e:
@@ -293,21 +293,24 @@ async def handle_terminate_user_input(  # noqa: C901
         user.is_banned = True
         await session.commit()
 
-        # Send notification to user
+        # Send notification to user with customizable text
         try:
             from aiogram import Bot
-
             from app.config.settings import settings
+            from app.repositories.system_setting_repository import SystemSettingRepository
 
             bot = Bot(token=settings.telegram_bot_token)
+            
+            # Get customizable notification text
+            setting_repo = SystemSettingRepository(session)
+            notification_text = await setting_repo.get_value(
+                "blacklist_terminate_notification_text",
+                default="❌ Ваш аккаунт терминирован в нашем сообществе без возможности восстановления."
+            )
+            
             await bot.send_message(
                 chat_id=user.telegram_id,
-                text=(
-                    "Здравствуйте, по решению участников нашего сообщества "
-                    "за недопустимые высказывания и нарушение правил"
-                        "поведения "
-                    "в нашем сообществе ваш аккаунт терминирован."
-                ),
+                text=notification_text,
             )
             await bot.session.close()
         except Exception as e:

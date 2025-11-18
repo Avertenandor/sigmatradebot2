@@ -237,6 +237,14 @@ async def main() -> None:  # noqa: C901
     try:
         bot_info = await bot.get_me()
         logger.info(f"Bot connected: @{bot_info.username} (ID: {bot_info.id})")
+        
+        # Set bot username in settings if not already set
+        import os
+        if not settings.telegram_bot_username:
+            os.environ["TELEGRAM_BOT_USERNAME"] = bot_info.username
+            # Update settings object (runtime override)
+            settings.telegram_bot_username = bot_info.username
+            logger.info(f"Set bot username to: {bot_info.username}")
     except Exception as e:
         logger.error(f"Failed to connect to Telegram API: {e}")
         raise

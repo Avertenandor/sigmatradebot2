@@ -59,38 +59,45 @@ class BanMiddleware(BaseMiddleware):
         blacklist_entry = await blacklist_repo.get_by_telegram_id(user.id)
 
         if blacklist_entry and blacklist_entry.is_active:
-            # Allow appeal for blocked users
-            if blacklist_entry.action_type == BlacklistActionType.BLOCKED:
-                # Check if this is an appeal-related message
-                from aiogram.types import Message
-
-                if isinstance(event, Message):
-                    # Allow appeal button and appeal text
-                    if event.text in ["📝 Подать апелляцию"]:
-                        return await handler(event, data)
-                    # Allow appeal text input (checked in appeal handler)
-                    # For now, allow all messages to appeal handler
-                    pass
-            # For terminated users, block completely
-            elif blacklist_entry.action_type == BlacklistActionType.TERMINATED:
+            # For terminated users, block completely (all update types)
+            if blacklist_entry.action_type == BlacklistActionType.TERMINATED:
                 logger.info(f"Terminated user attempted to use bot: {user.id}")
                 return None
+            
+            # For blocked users, only allow appeal-related actions
+            if blacklist_entry.action_type == BlacklistActionType.BLOCKED:
+                from aiogram.types import Message, CallbackQuery
+                
+                # Allow appeal button click
+                if isinstance(event, Message) and event.text == "📝 Подать апелляцию":
+                    return await handler(event, data)
+                
+                # Allow appeal callback queries
+                if isinstance(event, CallbackQuery) and event.data and "appeal" in event.data.lower():
+                    return await handler(event, data)
+                
+                # Block all other interactions for blocked users
+                logger.info(f"Blocked user attempted to use bot (non-appeal): {user.id}")
+                return None
 
+        # Check if user is banned (legacy is_banned flag)
         if db_user and db_user.is_banned:
             logger.info(f"Banned user attempted to use bot: {user.id}")
             # Check if user is blocked (can appeal) or terminated (cannot)
             if (
                 blacklist_entry
+                and blacklist_entry.is_active
                 and blacklist_entry.action_type == BlacklistActionType.BLOCKED
             ):
                 # Allow appeal
-                from aiogram.types import Message
-
-                if (
-                    isinstance(event, Message)
-                    and event.text == "📝 Подать апелляцию"
-                ):
+                from aiogram.types import Message, CallbackQuery
+                
+                if isinstance(event, Message) and event.text == "📝 Подать апелляцию":
                     return await handler(event, data)
+                
+                if isinstance(event, CallbackQuery) and event.data and "appeal" in event.data.lower():
+                    return await handler(event, data)
+            
             # Silently ignore (don't respond to banned/terminated users)
             return None
 

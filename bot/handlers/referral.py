@@ -4,6 +4,8 @@ Referral Handler - ТОЛЬКО REPLY KEYBOARDS!
 Handles referral program actions including stats, leaderboard, and earnings.
 """
 
+from typing import Any
+
 from aiogram import F, Router
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -106,6 +108,7 @@ async def handle_referral_stats(
     message: Message,
     session: AsyncSession,
     user: User,
+    **data: Any,
 ) -> None:
     """Show comprehensive referral statistics."""
     referral_service = ReferralService(session)
@@ -116,8 +119,15 @@ async def handle_referral_stats(
 
     # Get bot info for referral link
     from app.config.settings import settings
+    from aiogram import Bot
 
     bot_username = settings.telegram_bot_username
+    # Fallback: get from bot if not in settings
+    if not bot_username:
+        bot: Bot = data.get("bot")
+        if bot:
+            bot_info = await bot.get_me()
+            bot_username = bot_info.username
     referral_link = user_service.generate_referral_link(user.id, bot_username)
 
     # Get user position in leaderboard

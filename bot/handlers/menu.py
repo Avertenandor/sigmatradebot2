@@ -119,9 +119,9 @@ async def handle_main_menu(
         )
         return
     logger.info(f"[MENU] Calling show_main_menu for user {user.telegram_id}")
-    # Remove 'user' from data to avoid duplicate argument
-    data_without_user = {k: v for k, v in data.items() if k != 'user'}
-    await show_main_menu(message, session, user, state, **data_without_user)
+    # Remove 'user' and 'state' from data to avoid duplicate arguments
+    safe_data = {k: v for k, v in data.items() if k not in ('user', 'state')}
+    await show_main_menu(message, session, user, state, **safe_data)
 
 
 @router.callback_query(F.data == "main_menu")
@@ -333,9 +333,11 @@ async def show_referral_menu(
     await state.clear()
 
     from app.config.settings import settings
+    from app.services.user_service import UserService
 
+    user_service = UserService(session)
     bot_username = settings.telegram_bot_username
-    referral_link = f"https://t.me/{bot_username}?start={user.telegram_id}"
+    referral_link = user_service.generate_referral_link(user.id, bot_username)
 
     text = (
         f"👥 *Реферальная программа*\n\n"

@@ -29,7 +29,7 @@ services:
     image: redis:7-alpine
     container_name: sigmatrade-redis
     restart: unless-stopped
-    command: redis-server --appendonly yes --appendfsync everysec
+    command: redis-server --appendonly yes --appendfsync everysec --auto-aof-rewrite-percentage 50 --auto-aof-rewrite-min-size 64mb --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
     ports:
@@ -63,6 +63,7 @@ services:
         condition: service_healthy
     volumes:
       - ./logs:/app/logs
+      - ./.env:/app/.env
     networks:
       - sigmatrade
     logging:
@@ -92,6 +93,7 @@ services:
         condition: service_healthy
     volumes:
       - ./logs:/app/logs
+      - ./.env:/app/.env
     networks:
       - sigmatrade
     logging:
@@ -121,6 +123,7 @@ services:
         condition: service_healthy
     volumes:
       - ./logs:/app/logs
+      - ./.env:/app/.env
     networks:
       - sigmatrade
     logging:

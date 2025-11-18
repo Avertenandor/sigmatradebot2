@@ -57,15 +57,30 @@ def process_notification_retries() -> dict:
 
 async def _process_notification_retries_async() -> dict:
     """Async implementation of notification retry processing."""
-    async with async_session_maker() as session:
-        # Initialize bot
-        bot = Bot(token=settings.telegram_bot_token)
+    # Create a dedicated engine and sessionmaker for this run to avoid cross-loop reuse
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+    
+    engine = create_async_engine(
+        settings.database_url,
+        pool_pre_ping=True,
+    )
+    SessionLocal = async_sessionmaker(
+        engine,
+        expire_on_commit=False,
+    )
+    
+    try:
+        async with SessionLocal() as session:
+            # Initialize bot
+            bot = Bot(token=settings.telegram_bot_token)
 
-        try:
-            # Process retries
-            retry_service = NotificationRetryService(session, bot)
-            result = await retry_service.process_pending_retries()
+            try:
+                # Process retries
+                retry_service = NotificationRetryService(session, bot)
+                result = await retry_service.process_pending_retries()
 
-            return result
-        finally:
-            await bot.session.close()
+                return result
+            finally:
+                await bot.session.close()
+    finally:
+        await engine.dispose()

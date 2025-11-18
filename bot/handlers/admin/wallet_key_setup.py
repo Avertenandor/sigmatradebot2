@@ -8,6 +8,7 @@ Admin handler for secure wallet private key management.
 - Безопасное хранение
 """
 
+import os
 import subprocess
 
 from aiogram import F, Router
@@ -180,8 +181,9 @@ async def confirm_wallet_key(message: Message, state: FSMContext, **data: Any):
         return
 
     try:
-        # Путь к .env файлу
-        env_file = "/opt/sigmatradebot/.env"
+        # Путь к .env файлу (внутри контейнера)
+        env_file = "/app/.env"
+        env_file_tmp = "/app/.env.tmp"
 
         # Читаем текущий .env
         with open(env_file) as f:
@@ -209,9 +211,10 @@ async def confirm_wallet_key(message: Message, state: FSMContext, **data: Any):
         if not updated_address:
             new_lines.append(f"wallet_address={wallet_address}\n")
 
-        # Записываем обновлённый .env
-        with open(env_file, "w") as f:
+        # Атомарная запись: пишем во временный файл, затем заменяем
+        with open(env_file_tmp, "w") as f:
             f.writelines(new_lines)
+        os.replace(env_file_tmp, env_file)
 
         from bot.keyboards.reply import admin_wallet_keyboard
 
@@ -226,21 +229,8 @@ async def confirm_wallet_key(message: Message, state: FSMContext, **data: Any):
         # Очищаем state
         await state.clear()
 
-        # Перезапускаем Docker контейнеры
-        subprocess.run(
-            [
-                "docker",
-                "compose",
-                "-f",
-                "/opt/sigmatradebot/docker-compose.python.yml",
-                "restart",
-                "bot",
-                "worker",
-                "scheduler",
-            ],
-            check=True,
-            capture_output=True,
-        )
+        # Перезапускаем бота через os._exit (Docker Compose автоматически перезапустит контейнер)
+        os._exit(0)
 
     except Exception as e:
         from bot.keyboards.reply import admin_wallet_keyboard
@@ -563,8 +553,9 @@ async def handle_wallet_remove_confirm(message: Message, state: FSMContext, **da
         return
 
     try:
-        # Путь к .env файлу
-        env_file = "/opt/sigmatradebot/.env"
+        # Путь к .env файлу (внутри контейнера)
+        env_file = "/app/.env"
+        env_file_tmp = "/app/.env.tmp"
 
         # Читаем текущий .env
         with open(env_file) as f:
@@ -580,9 +571,10 @@ async def handle_wallet_remove_confirm(message: Message, state: FSMContext, **da
             else:
                 new_lines.append(line)
 
-        # Записываем обновлённый .env
-        with open(env_file, "w") as f:
+        # Атомарная запись: пишем во временный файл, затем заменяем
+        with open(env_file_tmp, "w") as f:
             f.writelines(new_lines)
+        os.replace(env_file_tmp, env_file)
 
         from bot.keyboards.reply import admin_wallet_keyboard
 
@@ -594,23 +586,8 @@ async def handle_wallet_remove_confirm(message: Message, state: FSMContext, **da
             reply_markup=admin_wallet_keyboard(),
         )
 
-        # Перезапускаем Docker контейнеры
-        subprocess.run(
-            [
-                "docker",
-                "compose",
-                "-f",
-                "/opt/sigmatradebot/docker-compose.python.yml",
-                "restart",
-                "bot",
-                "worker",
-                "scheduler",
-            ],
-            check=True,
-            capture_output=True,
-        )
-
-        await state.clear()
+        # Перезапускаем бота через os._exit (Docker Compose автоматически перезапустит контейнер)
+        os._exit(0)
 
     except Exception as e:
         from bot.keyboards.reply import admin_wallet_keyboard
