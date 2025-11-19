@@ -68,6 +68,10 @@ class BanMiddleware(BaseMiddleware):
             if blacklist_entry.action_type == BlacklistActionType.BLOCKED:
                 from aiogram.types import Message, CallbackQuery
                 
+                # Allow /start for BLOCKED users to show menu with appeal button
+                if isinstance(event, Message) and event.text and event.text.startswith("/start"):
+                    return await handler(event, data)
+                
                 # Allow appeal button click
                 if isinstance(event, Message) and event.text == "📝 Подать апелляцию":
                     return await handler(event, data)

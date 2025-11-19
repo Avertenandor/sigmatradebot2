@@ -165,11 +165,13 @@ async def handle_block_user_input(  # noqa: C901
         user.is_banned = True
         await session.commit()
 
-        # Send notification to user with customizable text
+        # Send notification to user with customizable text and keyboard
         try:
             from aiogram import Bot
             from app.config.settings import settings
             from app.repositories.system_setting_repository import SystemSettingRepository
+            from bot.keyboards.reply import main_menu_reply_keyboard
+            from app.repositories.blacklist_repository import BlacklistRepository
 
             bot = Bot(token=settings.telegram_bot_token)
             
@@ -180,9 +182,21 @@ async def handle_block_user_input(  # noqa: C901
                 default="⚠️ Ваш аккаунт временно заблокирован в нашем сообществе. Вы можете подать апелляцию в течение 3 рабочих дней."
             )
             
+            # Send notification text
             await bot.send_message(
                 chat_id=user.telegram_id,
                 text=notification_text,
+            )
+            
+            # Send keyboard with appeal button
+            blacklist_repo = BlacklistRepository(session)
+            blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
+            await bot.send_message(
+                chat_id=user.telegram_id,
+                text="Выберите действие:",
+                reply_markup=main_menu_reply_keyboard(
+                    user=user, blacklist_entry=blacklist_entry, is_admin=False
+                ),
             )
             await bot.session.close()
         except Exception as e:

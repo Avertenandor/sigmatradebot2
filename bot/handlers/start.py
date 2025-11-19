@@ -203,10 +203,12 @@ async def process_wallet(
         # Сразу показываем главное меню
         user: User | None = data.get("user")
         is_admin = data.get("is_admin", False)
-        from app.repositories.blacklist_repository import BlacklistRepository
-        blacklist_repo = BlacklistRepository(session)
+        # Получаем session из data
+        session = data.get("session")
         blacklist_entry = None
-        if user:
+        if user and session:
+            from app.repositories.blacklist_repository import BlacklistRepository
+            blacklist_repo = BlacklistRepository(session)
             blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
         await message.answer(
             "👋 Добро пожаловать обратно!",
@@ -229,10 +231,12 @@ async def process_wallet(
         # Покажем главное меню сразу, не полагаясь на повторную диспетчеризацию
         user: User | None = data.get("user")
         is_admin = data.get("is_admin", False)
-        from app.repositories.blacklist_repository import BlacklistRepository
-        blacklist_repo = BlacklistRepository(session)
+        # Получаем session из data
+        session = data.get("session")
         blacklist_entry = None
-        if user:
+        if user and session:
+            from app.repositories.blacklist_repository import BlacklistRepository
+            blacklist_repo = BlacklistRepository(session)
             blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
         await message.answer(
             "📊 Главное меню",
@@ -405,10 +409,12 @@ async def process_password_confirmation(
         await state.clear()
         user: User | None = data.get("user")
         is_admin = data.get("is_admin", False)
-        from app.repositories.blacklist_repository import BlacklistRepository
-        blacklist_repo = BlacklistRepository(session)
+        # Получаем session из data
+        session = data.get("session")
         blacklist_entry = None
-        if user:
+        if user and session:
+            from app.repositories.blacklist_repository import BlacklistRepository
+            blacklist_repo = BlacklistRepository(session)
             blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
         await message.answer(
             "📊 Главное меню",
@@ -550,9 +556,13 @@ async def process_password_confirmation(
 
     # Get is_admin from middleware data
     is_admin = data.get("is_admin", False)
-    from app.repositories.blacklist_repository import BlacklistRepository
-    blacklist_repo = BlacklistRepository(session)
-    blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
+    # Получаем session из data для получения blacklist_entry
+    session = data.get("session")
+    blacklist_entry = None
+    if session:
+        from app.repositories.blacklist_repository import BlacklistRepository
+        blacklist_repo = BlacklistRepository(session)
+        blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
     await message.answer(
         "🎉 Регистрация завершена!\n\n"
         f"Ваш ID: {user.id}\n"
