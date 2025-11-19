@@ -64,10 +64,16 @@ async def show_admin_management(
             "admin": "👤",
         }.get(adm.role, "👤")
 
+        # Check if admin has active session
+        has_active_session = any(
+            session_obj.is_active and not session_obj.is_expired and not session_obj.is_inactive
+            for session_obj in adm.sessions
+        )
+
         text += (
             f"{role_emoji} `{adm.telegram_id}` - {adm.username or 'N/A'}\n"
             f"   Роль: {adm.role}\n"
-            f"   Активен: {'✅' if adm.is_active else '❌'}\n\n"
+            f"   Активен: {'✅' if has_active_session else '❌'}\n\n"
         )
 
     await message.answer(
@@ -293,10 +299,16 @@ async def show_admin_list(
             "admin": "👤",
         }.get(adm.role, "👤")
 
+        # Check if admin has active session
+        has_active_session = any(
+            session_obj.is_active and not session_obj.is_expired and not session_obj.is_inactive
+            for session_obj in adm.sessions
+        )
+
         text += (
             f"{role_emoji} `{adm.telegram_id}` - {adm.username or 'N/A'}\n"
             f"   Роль: {adm.role}\n"
-            f"   Активен: {'✅' if adm.is_active else '❌'}\n\n"
+            f"   Активен: {'✅' if has_active_session else '❌'}\n\n"
         )
 
     await message.answer(
