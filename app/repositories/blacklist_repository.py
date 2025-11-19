@@ -79,7 +79,7 @@ class BlacklistRepository(BaseRepository[Blacklist]):
             select(Blacklist)
             .where(
                 Blacklist.wallet_address == normalized,
-                Blacklist.is_active == 1
+                Blacklist.is_active.is_(True)
             )
         )
         result = await self.session.execute(stmt)
@@ -99,10 +99,10 @@ class BlacklistRepository(BaseRepository[Blacklist]):
             List of active Blacklist entries
         """
         from sqlalchemy import select
-        # Note: is_active is stored as Integer (1/0) in DB, not boolean
+        # Note: is_active is stored as Boolean in DB after migration
         stmt = (
             select(Blacklist)
-            .where(Blacklist.is_active == 1)
+            .where(Blacklist.is_active.is_(True))
             .limit(limit)
             .offset(offset)
             .order_by(Blacklist.created_at.desc())
@@ -118,7 +118,12 @@ class BlacklistRepository(BaseRepository[Blacklist]):
             Number of active entries
         """
         from sqlalchemy import func, select
-        # Note: is_active is stored as Integer (1/0) in DB, not boolean
-        stmt = select(func.count(Blacklist.id)).where(Blacklist.is_active == 1)
+        # Note: is_active is stored as Boolean in DB after migration
+        stmt = (
+            select(func.count())
+            .select_from(Blacklist)
+            .where(Blacklist.is_active.is_(True))
+        )
         result = await self.session.execute(stmt)
-        return result.scalar() or 0
+        count = result.scalar()
+        return int(count) if count is not None else 0

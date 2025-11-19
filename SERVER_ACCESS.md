@@ -8,15 +8,15 @@
 
 | Параметр | Значение |
 |----------|----------|
-| **Имя сервера** | sigmatrade-20251108-210354 |
-| **Внешний IP** | 34.88.234.78 |
-| **Внутренний IP** | 10.166.0.3 |
-| **Зона GCP** | europe-north1-a |
-| **Проект GCP** | telegram-bot-444304 |
+| **Имя сервера** | [скрыто - см. локальную документацию] |
+| **Внешний IP** | [скрыто - см. локальную документацию] |
+| **Внутренний IP** | [скрыто - см. локальную документацию] |
+| **Зона GCP** | [скрыто - см. локальную документацию] |
+| **Проект GCP** | [скрыто - см. локальную документацию] |
 | **ОС** | Debian 12 (bookworm) |
 | **Тип машины** | e2-medium |
-| **Пользователь (основной)** | konfu |
-| **Пользователь (альтернативный)** | mflorinp1978 |
+| **Пользователь (основной)** | [скрыто] |
+| **Пользователь (альтернативный)** | [скрыто] |
 | **Путь проекта** | /opt/sigmatradebot |
 
 ---
@@ -26,18 +26,17 @@
 ### Публичный ключ (google_compute_engine)
 
 ```text
-ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDXJITOQ0FfX2mZnBxKjC0niB/ZZwco2EyMnig6J+pXUiiSw/TDg++9z8bGC7ee67yxWA809+gl29LfrRsZBcmi+h4NRr2hfVTUMl5MeGIJW1qu4yBmeWY6JMpx+IR23shFGWmvB10HrE+tiJNikqk4DTo/prhkPZQySt3NFF6JrNS41V5u8/kWlp0j7Swnalnhi5MyiQdcxRgbwyg2H5oEBJc6RZsDWXAMwSkA78evXsZ8js3w/018h14KZR01OxuEtiidGn1V0sS1sSZXNRhBYwSAvSm4orXCBgyyhfhEA4OUCnYwS4n4qivrcyUH0gANAc2XCw4H9j6p81FyMXsN PEICHAYCHMO\konfu@PeiChayChmo
+[Публичный SSH ключ скрыт - см. локальную документацию]
 ```
 
 **Расположение на локальной машине:**
 
-- Windows: `C:\Users\konfu\.ssh\google_compute_engine` (приватный)
-- Windows: `C:\Users\konfu\.ssh\google_compute_engine.pub` (публичный)
+- Windows: `C:\Users\[USERNAME]\.ssh\google_compute_engine` (приватный)
+- Windows: `C:\Users\[USERNAME]\.ssh\google_compute_engine.pub` (публичный)
 
 **Расположение на сервере:**
 
-- Добавлен в: `/home/mflorinp1978/.ssh/authorized_keys`
-- Добавлен в: `/home/konfu/.ssh/authorized_keys` (если существует)
+- Добавлен в: `/home/[USERNAME]/.ssh/authorized_keys`
 
 ---
 
@@ -47,10 +46,10 @@ ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDXJITOQ0FfX2mZnBxKjC0niB/ZZwco2EyMnig6J+pX
 
 ```powershell
 # Подключение к серверу
-gcloud compute ssh sigmatrade-20251108-210354 --zone=europe-north1-a --project=telegram-bot-444304
+gcloud compute ssh [INSTANCE_NAME] --zone=[ZONE] --project=[PROJECT_ID]
 
 # Выполнение команды без интерактивной сессии
-gcloud compute ssh sigmatrade-20251108-210354 --zone=europe-north1-a --project=telegram-bot-444304 --command="команда"
+gcloud compute ssh [INSTANCE_NAME] --zone=[ZONE] --project=[PROJECT_ID] --command="команда"
 ```
 
 ### Способ 2: Через SSH с настроенным config
@@ -64,18 +63,18 @@ gcloud compute ssh sigmatrade-20251108-210354 --zone=europe-north1-a --project=t
 
 # Вариант 1: Через IAP туннель (безопаснее)
 Host sigmatrade
-    HostName sigmatrade-20251108-210354
-    ProxyCommand C:\Users\konfu\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd compute start-iap-tunnel sigmatrade-20251108-210354 22 --listen-on-stdin --zone=europe-north1-a --project=telegram-bot-444304
-    User konfu
+    HostName [INSTANCE_NAME]
+    ProxyCommand [GCLOUD_PATH]\gcloud.cmd compute start-iap-tunnel [INSTANCE_NAME] 22 --listen-on-stdin --zone=[ZONE] --project=[PROJECT_ID]
+    User [USERNAME]
     StrictHostKeyChecking no
-    IdentityFile C:\Users\konfu\.ssh\google_compute_engine
+    IdentityFile C:\Users\[USERNAME]\.ssh\google_compute_engine
 
 # Вариант 2: Прямое подключение (быстрее)
 Host sigmatrade-direct
-    HostName 34.88.234.78
-    User konfu
+    HostName [EXTERNAL_IP]
+    User [USERNAME]
     StrictHostKeyChecking no
-    IdentityFile C:\Users\konfu\.ssh\google_compute_engine
+    IdentityFile C:\Users\[USERNAME]\.ssh\google_compute_engine
 ```
 
 **Использование:**
@@ -91,7 +90,7 @@ ssh sigmatrade-direct
 ### Способ 3: Прямое подключение по IP
 
 ```powershell
-ssh -i C:\Users\konfu\.ssh\google_compute_engine konfu@34.88.234.78
+ssh -i C:\Users\[USERNAME]\.ssh\google_compute_engine [USERNAME]@[EXTERNAL_IP]
 ```
 
 ---
@@ -102,13 +101,13 @@ ssh -i C:\Users\konfu\.ssh\google_compute_engine konfu@34.88.234.78
 
 ```powershell
 # Копирование файла на сервер
-gcloud compute scp local-file.txt sigmatrade-20251108-210354:/tmp/ --zone=europe-north1-a --project=telegram-bot-444304
+gcloud compute scp local-file.txt [INSTANCE_NAME]:/tmp/ --zone=[ZONE] --project=[PROJECT_ID]
 
 # Копирование файла с сервера
-gcloud compute scp sigmatrade-20251108-210354:/path/to/file.txt . --zone=europe-north1-a --project=telegram-bot-444304
+gcloud compute scp [INSTANCE_NAME]:/path/to/file.txt . --zone=[ZONE] --project=[PROJECT_ID]
 
 # Копирование директории
-gcloud compute scp --recurse ./local-dir sigmatrade-20251108-210354:/tmp/ --zone=europe-north1-a --project=telegram-bot-444304
+gcloud compute scp --recurse ./local-dir [INSTANCE_NAME]:/tmp/ --zone=[ZONE] --project=[PROJECT_ID]
 ```
 
 ### Через обычный scp
@@ -118,7 +117,7 @@ gcloud compute scp --recurse ./local-dir sigmatrade-20251108-210354:/tmp/ --zone
 scp file.txt sigmatrade:/tmp/
 
 # Прямое подключение
-scp -i C:\Users\konfu\.ssh\google_compute_engine file.txt konfu@34.88.234.78:/tmp/
+scp -i C:\Users\[USERNAME]\.ssh\google_compute_engine file.txt [USERNAME]@[EXTERNAL_IP]:/tmp/
 ```
 
 ---
@@ -129,7 +128,7 @@ scp -i C:\Users\konfu\.ssh\google_compute_engine file.txt konfu@34.88.234.78:/tm
 
 ```bash
 # Подключиться к серверу
-gcloud compute ssh sigmatrade-20251108-210354 --zone=europe-north1-a --project=telegram-bot-444304
+gcloud compute ssh [INSTANCE_NAME] --zone=[ZONE] --project=[PROJECT_ID]
 
 # На сервере: перейти в проект
 cd /opt/sigmatradebot
@@ -175,16 +174,16 @@ docker-compose -f docker-compose.python.yml up -d --build
 
 ```powershell
 # Проверить статус
-gcloud compute instances describe sigmatrade-20251108-210354 --zone=europe-north1-a --project=telegram-bot-444304 --format="get(status)"
+gcloud compute instances describe [INSTANCE_NAME] --zone=[ZONE] --project=[PROJECT_ID] --format="get(status)"
 
 # Остановить сервер
-gcloud compute instances stop sigmatrade-20251108-210354 --zone=europe-north1-a --project=telegram-bot-444304
+gcloud compute instances stop [INSTANCE_NAME] --zone=[ZONE] --project=[PROJECT_ID]
 
 # Запустить сервер
-gcloud compute instances start sigmatrade-20251108-210354 --zone=europe-north1-a --project=telegram-bot-444304
+gcloud compute instances start [INSTANCE_NAME] --zone=[ZONE] --project=[PROJECT_ID]
 
 # Список всех инстансов
-gcloud compute instances list --project=telegram-bot-444304
+gcloud compute instances list --project=[PROJECT_ID]
 ```
 
 ### Проверка проекта
@@ -194,7 +193,7 @@ gcloud compute instances list --project=telegram-bot-444304
 gcloud config get-value project
 
 # Установить проект
-gcloud config set project telegram-bot-444304
+gcloud config set project [PROJECT_ID]
 ```
 
 ---
@@ -217,7 +216,7 @@ nano .env
 - `USDT_CONTRACT_ADDRESS` - адрес USDT на BSC (`0x55d398326f99059fF775485246999027B3197955`)
 - `RPC_URL` - BSC RPC endpoint (`https://bsc-dataseed.binance.org/`)
 - `SYSTEM_WALLET_ADDRESS` - системный кошелек
-- `ADMIN_TELEGRAM_IDS` - ID админов через запятую (`1040687384`)
+- `ADMIN_TELEGRAM_IDS` - ID админов через запятую
 - `DATABASE_URL` - строка подключения к PostgreSQL
 
 ---
@@ -316,7 +315,7 @@ ssh sigmatrade
 
 ## 📚 Дополнительная информация
 
-- **GCP Console:** <https://console.cloud.google.com/compute/instancesDetail/zones/europe-north1-a/instances/sigmatrade-20251108-210354?project=telegram-bot-444304>
+- **GCP Console:** <https://console.cloud.google.com/compute/instances?project=[PROJECT_ID]>
 - **Документация деплоя:** `docs/deployment/DEPLOYMENT.md`
 - **Настройка сервера:** `docs/deployment/SIGMATRADE_SERVER_SETUP.md`
 

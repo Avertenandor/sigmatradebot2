@@ -15,6 +15,7 @@ build/
 .env.local
 .env.*.local
 .env.production
+.env.server
 
 # Secrets (CRITICAL - never commit!)
 *.key
@@ -109,3 +110,7 @@ backups/*.sql
 backups/*.dump
 test_*.py
 *_test.py
+
+# Corrupted paths / encoding issues
+**/PEICHAYCHMO/**
+**/инструкции.instructions.md
