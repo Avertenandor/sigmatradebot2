@@ -89,13 +89,21 @@ fi
 log "✅ .env file exists"
 
 # Step 5: Build Docker images with cache optimization
-log "Step 5/7: Building Docker images (with cache)..."
+log "Step 5/7: Building Docker images (with cache optimization)..."
 info "Building images with cache optimization..."
 
-# Build with --cache-from and --build-arg for better caching
+# Enable BuildKit for better caching
+export DOCKER_BUILDKIT=1
+export COMPOSE_DOCKER_CLI_BUILD=1
+
+# Build with cache optimization
+# --no-cache=false: use cache
+# --pull=false: don't pull base images if they exist
+# --build-arg BUILDKIT_INLINE_CACHE=1: enable inline cache
 docker-compose -f docker-compose.python.yml build \
     --build-arg BUILDKIT_INLINE_CACHE=1 \
-    --parallel || {
+    --parallel \
+    --no-cache=false || {
     error "Docker build failed"
     exit 1
 }
@@ -125,9 +133,16 @@ log "✅ Migrations completed"
 # Step 7: Restart services with zero-downtime strategy
 log "Step 7/7: Restarting services..."
 
-# Strategy: Start new containers, then stop old ones
-info "Starting new containers..."
-docker-compose -f docker-compose.python.yml up -d --no-deps --build bot worker scheduler || {
+# Strategy: Recreate containers with new images
+# --force-recreate: recreate containers even if config hasn't changed
+# --no-deps: don't start linked services
+# --build: build images before starting
+info "Recreating containers with new images..."
+docker-compose -f docker-compose.python.yml up -d \
+    --force-recreate \
+    --no-deps \
+    --build \
+    bot worker scheduler || {
     error "Failed to start services"
     exit 1
 }
