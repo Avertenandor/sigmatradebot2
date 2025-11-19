@@ -6,7 +6,7 @@ Handles /start command and user registration.
 
 from typing import Any
 
-from aiogram import F, Router
+from aiogram import Router
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
@@ -45,13 +45,13 @@ async def cmd_start(
         f"{message.from_user.id if message.from_user else 'Unknown'}"
     )
     logger.info(f"Message text: {message.text}")
-    
+
     # КРИТИЧНО: Всегда очищаем состояние при /start
     current_state = await state.get_state()
     if current_state:
         logger.info(f"Clearing FSM state: {current_state}")
     await state.clear()
-    
+
     user: User | None = data.get("user")
     # Extract referral code from command args
     # Format: /start ref123456 or /start ref_123456
@@ -86,16 +86,17 @@ async def cmd_start(
     # Check if already registered
     if user:
         logger.info(
-            f"cmd_start: registered user {user.telegram_id}, clearing FSM state"
+            f"cmd_start: registered user {user.telegram_id}, "
+            f"clearing FSM state"
         )
         # КРИТИЧНО: очистим любое FSM состояние, чтобы /start всегда работал
         await state.clear()
-        
+
         # Format balance properly (avoid scientific notation)
         balance_str = f"{user.balance:.8f}".rstrip('0').rstrip('.')
         if balance_str == '':
             balance_str = '0'
-        
+
         welcome_text = (
             f"Добро пожаловать обратно, {user.username or 'пользователь'}!\n\n"
             f"Ваш баланс: {balance_str} USDT\n"
@@ -120,18 +121,26 @@ async def cmd_start(
         # Get blacklist status if needed
         from app.repositories.blacklist_repository import BlacklistRepository
         blacklist_repo = BlacklistRepository(session)
-        blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
+        blacklist_entry = await blacklist_repo.find_by_telegram_id(
+            user.telegram_id
+        )
         logger.info(
             f"[START] Creating keyboard for user {user.telegram_id} with "
-            f"is_admin={is_admin}, blacklist_entry={blacklist_entry is not None}"
+            f"is_admin={is_admin}, "
+            f"blacklist_entry={blacklist_entry is not None}"
         )
         await message.answer(
             "Выберите действие ниже:",
             reply_markup=main_menu_reply_keyboard(
-                user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+                user=user,
+                blacklist_entry=blacklist_entry,
+                is_admin=is_admin,
             ),
         )
-        logger.info(f"[START] Main menu keyboard sent successfully to user {user.telegram_id}")
+        logger.info(
+            f"[START] Main menu keyboard sent successfully to user "
+            f"{user.telegram_id}"
+        )
         return
 
     # Not registered: покажем приветствие и сразу главное меню
@@ -187,7 +196,8 @@ async def process_wallet(
     """
     Process wallet address.
 
-    Uses session_factory to ensure transaction is closed before FSM state change.
+    Uses session_factory to ensure transaction is closed before FSM "
+        "state change.
 
     Args:
         message: Telegram message
@@ -207,9 +217,13 @@ async def process_wallet(
         session = data.get("session")
         blacklist_entry = None
         if user and session:
-            from app.repositories.blacklist_repository import BlacklistRepository
+            from app.repositories.blacklist_repository import (
+                BlacklistRepository,
+            )
             blacklist_repo = BlacklistRepository(session)
-            blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
+            blacklist_entry = await blacklist_repo.find_by_telegram_id(
+            user.telegram_id
+        )
         await message.answer(
             "👋 Добро пожаловать обратно!",
             reply_markup=ReplyKeyboardRemove(),
@@ -217,7 +231,9 @@ async def process_wallet(
         await message.answer(
             "Выберите действие ниже:",
             reply_markup=main_menu_reply_keyboard(
-                user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+                user=user,
+                blacklist_entry=blacklist_entry,
+                is_admin=is_admin,
             ),
         )
         return
@@ -226,7 +242,9 @@ async def process_wallet(
     from bot.utils.menu_buttons import is_menu_button
 
     if is_menu_button(message.text):
-        logger.debug(f"process_wallet: menu button {message.text}, showing main menu")
+        logger.debug(
+            f"process_wallet: menu button {message.text}, showing main menu"
+        )
         await state.clear()
         # Покажем главное меню сразу, не полагаясь на повторную диспетчеризацию
         user: User | None = data.get("user")
@@ -235,13 +253,19 @@ async def process_wallet(
         session = data.get("session")
         blacklist_entry = None
         if user and session:
-            from app.repositories.blacklist_repository import BlacklistRepository
+            from app.repositories.blacklist_repository import (
+                BlacklistRepository,
+            )
             blacklist_repo = BlacklistRepository(session)
-            blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
+            blacklist_entry = await blacklist_repo.find_by_telegram_id(
+            user.telegram_id
+        )
         await message.answer(
             "📊 Главное меню",
             reply_markup=main_menu_reply_keyboard(
-                user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+                user=user,
+                blacklist_entry=blacklist_entry,
+                is_admin=is_admin,
             ),
         )
         return
@@ -250,7 +274,7 @@ async def process_wallet(
 
     # Validate wallet format using proper validation
     from app.utils.validation import validate_bsc_address
-    
+
     if not validate_bsc_address(wallet_address, checksum=False):
         await message.answer(
             "❌ Неверный формат адреса!\n\n"
@@ -266,7 +290,10 @@ async def process_wallet(
         # Fallback to old session for backward compatibility
         session = data.get("session")
         if not session:
-            await message.answer("❌ Системная ошибка. Отправьте /start или обратитесь в поддержку.")
+            await message.answer(
+                "❌ Системная ошибка. Отправьте /start или "
+                "обратитесь в поддержку."
+            )
             return
         user_service = UserService(session)
         existing = await user_service.get_by_wallet(wallet_address)
@@ -337,11 +364,15 @@ async def process_financial_password(
             blacklist_repo = BlacklistRepository(session)
             blacklist_entry = None
             if user:
-                blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
+                blacklist_entry = await blacklist_repo.find_by_telegram_id(
+            user.telegram_id
+        )
             await message.answer(
                 "📊 Главное меню",
                 reply_markup=main_menu_reply_keyboard(
-                    user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+                    user=user,
+                    blacklist_entry=blacklist_entry,
+                    is_admin=is_admin
                 ),
             )
         else:
@@ -413,13 +444,19 @@ async def process_password_confirmation(
         session = data.get("session")
         blacklist_entry = None
         if user and session:
-            from app.repositories.blacklist_repository import BlacklistRepository
+            from app.repositories.blacklist_repository import (
+                BlacklistRepository,
+            )
             blacklist_repo = BlacklistRepository(session)
-            blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
+            blacklist_entry = await blacklist_repo.find_by_telegram_id(
+            user.telegram_id
+        )
         await message.answer(
             "📊 Главное меню",
             reply_markup=main_menu_reply_keyboard(
-                user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+                user=user,
+                blacklist_entry=blacklist_entry,
+                is_admin=is_admin,
             ),
         )
         return
@@ -446,13 +483,13 @@ async def process_password_confirmation(
     # SHORT transaction for user registration
     wallet_address = state_data.get("wallet_address")
     referrer_telegram_id = state_data.get("referrer_telegram_id")
-    
+
     # Hash financial password with bcrypt
     import bcrypt
     hashed_password = bcrypt.hashpw(
         password.encode("utf-8"), bcrypt.gensalt(rounds=12)
     ).decode("utf-8")
-    
+
     # Normalize wallet address to checksum format
     from app.utils.validation import normalize_bsc_address
     try:
@@ -464,13 +501,16 @@ async def process_password_confirmation(
         )
         await state.clear()
         return
-    
+
     session_factory = data.get("session_factory")
     if not session_factory:
         # Fallback to old session for backward compatibility
         session = data.get("session")
         if not session:
-            await message.answer("❌ Системная ошибка. Отправьте /start или обратитесь в поддержку.")
+            await message.answer(
+                "❌ Системная ошибка. Отправьте /start или "
+                "обратитесь в поддержку."
+            )
             await state.clear()
             return
         user_service = UserService(session)
@@ -562,7 +602,9 @@ async def process_password_confirmation(
     if session:
         from app.repositories.blacklist_repository import BlacklistRepository
         blacklist_repo = BlacklistRepository(session)
-        blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
+        blacklist_entry = await blacklist_repo.find_by_telegram_id(
+            user.telegram_id
+        )
     await message.answer(
         "🎉 Регистрация завершена!\n\n"
         f"Ваш ID: {user.id}\n"
@@ -596,7 +638,8 @@ async def handle_contacts_choice(
     """Handle contacts choice during registration."""
     if message.text == "✅ Да, оставить контакты":
         await message.answer(
-            "📞 Введите номер телефона (или отправьте /skip чтобы пропустить):",
+            "📞 Введите номер телефона "
+            "(или отправьте /skip чтобы пропустить):",
         )
         await state.set_state(RegistrationStates.waiting_for_phone)
     elif message.text == "⏭ Пропустить":
@@ -636,11 +679,15 @@ async def process_phone(
         blacklist_repo = BlacklistRepository(session)
         blacklist_entry = None
         if user:
-            blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
+            blacklist_entry = await blacklist_repo.find_by_telegram_id(
+            user.telegram_id
+        )
         await message.answer(
             "📊 Главное меню",
             reply_markup=main_menu_reply_keyboard(
-                user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+                user=user,
+                blacklist_entry=blacklist_entry,
+                is_admin=is_admin,
             ),
         )
         return
@@ -697,11 +744,15 @@ async def process_email(
         blacklist_repo = BlacklistRepository(session)
         blacklist_entry = None
         if user:
-            blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
+            blacklist_entry = await blacklist_repo.find_by_telegram_id(
+            user.telegram_id
+        )
         await message.answer(
             "📊 Главное меню",
             reply_markup=main_menu_reply_keyboard(
-                user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+                user=user,
+                blacklist_entry=blacklist_entry,
+                is_admin=is_admin,
             ),
         )
         return
@@ -758,11 +809,15 @@ async def process_email(
     blacklist_repo = BlacklistRepository(session)
     blacklist_entry = None
     if current_user:
-        blacklist_entry = await blacklist_repo.find_by_telegram_id(current_user.telegram_id)
+        blacklist_entry = await blacklist_repo.find_by_telegram_id(
+            current_user.telegram_id
+        )
     await message.answer(
         contacts_text,
         reply_markup=main_menu_reply_keyboard(
-            user=current_user, blacklist_entry=blacklist_entry, is_admin=is_admin
+            user=current_user,
+            blacklist_entry=blacklist_entry,
+            is_admin=is_admin,
         ),
     )
     await state.clear()

@@ -38,7 +38,8 @@ async def handle_start_block_user(
 
 Отправьте username (с @) или Telegram ID пользователя для блокировки.
 
-Пользователь получит уведомление и сможет подать апелляцию в течение 3 рабочих дней.
+Пользователь получит уведомление и сможет подать апелляцию "
+        "в течение 3 рабочих дней."
 
 Пример: `@username` или `123456789`
     """.strip()
@@ -168,29 +169,39 @@ async def handle_block_user_input(  # noqa: C901
         # Send notification to user with customizable text and keyboard
         try:
             from aiogram import Bot
+
             from app.config.settings import settings
-            from app.repositories.system_setting_repository import SystemSettingRepository
+            from app.repositories.blacklist_repository import (
+                BlacklistRepository,
+            )
+            from app.repositories.system_setting_repository import (
+                SystemSettingRepository,
+            )
             from bot.keyboards.reply import main_menu_reply_keyboard
-            from app.repositories.blacklist_repository import BlacklistRepository
 
             bot = Bot(token=settings.telegram_bot_token)
-            
+
             # Get customizable notification text
             setting_repo = SystemSettingRepository(session)
             notification_text = await setting_repo.get_value(
                 "blacklist_block_notification_text",
-                default="⚠️ Ваш аккаунт временно заблокирован в нашем сообществе. Вы можете подать апелляцию в течение 3 рабочих дней."
+                default=(
+                    "⚠️ Ваш аккаунт временно заблокирован в нашем сообществе. "
+                    "Вы можете подать апелляцию в течение 3 рабочих дней."
+                )
             )
-            
+
             # Send notification text
             await bot.send_message(
                 chat_id=user.telegram_id,
                 text=notification_text,
             )
-            
+
             # Send keyboard with appeal button
             blacklist_repo = BlacklistRepository(session)
-            blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
+            blacklist_entry = await blacklist_repo.find_by_telegram_id(
+                user.telegram_id
+            )
             await bot.send_message(
                 chat_id=user.telegram_id,
                 text="Выберите действие:",
@@ -323,18 +334,24 @@ async def handle_terminate_user_input(  # noqa: C901
         # Send notification to user with customizable text
         try:
             from aiogram import Bot
+
             from app.config.settings import settings
-            from app.repositories.system_setting_repository import SystemSettingRepository
+            from app.repositories.system_setting_repository import (
+                SystemSettingRepository,
+            )
 
             bot = Bot(token=settings.telegram_bot_token)
-            
+
             # Get customizable notification text
             setting_repo = SystemSettingRepository(session)
             notification_text = await setting_repo.get_value(
                 "blacklist_terminate_notification_text",
-                default="❌ Ваш аккаунт терминирован в нашем сообществе без возможности восстановления."
+                default=(
+                    "❌ Ваш аккаунт терминирован в нашем сообществе "
+                    "без возможности восстановления."
+                )
             )
-            
+
             await bot.send_message(
                 chat_id=user.telegram_id,
                 text=notification_text,
@@ -564,17 +581,15 @@ async def handle_list_users(
         await message.answer("❌ Эта функция доступна только администраторам")
         return
 
-    from app.repositories.user_repository import UserRepository
-    
-    user_repo = UserRepository(session)
     # Get recent users (last 10) ordered by created_at desc
-    from sqlalchemy import select, desc
+    from sqlalchemy import desc, select
+
     from app.models.user import User
-    
+
     stmt = select(User).order_by(desc(User.created_at)).limit(10)
     result = await session.execute(stmt)
     users = result.scalars().all()
-    
+
     if not users:
         await message.answer(
             "👥 **Список пользователей**\n\nПользователи не найдены.",
@@ -603,5 +618,5 @@ async def handle_back_to_admin_panel(
 ) -> None:
     """Return to admin panel from users menu"""
     from bot.handlers.admin.panel import handle_admin_panel_button
-    
+
     await handle_admin_panel_button(message, session, **data)

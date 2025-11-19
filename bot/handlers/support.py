@@ -39,7 +39,7 @@ async def handle_create_ticket(
 ) -> None:
     """Start ticket creation."""
     user: User | None = data.get("user")
-    
+
     # Проверка: гости не могут создавать тикеты
     if user is None:
         await message.answer(
@@ -49,7 +49,7 @@ async def handle_create_ticket(
             reply_markup=support_keyboard(),
         )
         return
-    
+
     text = (
         "✉️ *Создать обращение*\n\n"
         "Опишите вашу проблему или вопрос.\n"
@@ -69,7 +69,6 @@ async def process_ticket_message(
 ) -> None:
     """
     Process ticket message.
-    
     Uses session_factory for short transaction during ticket creation.
     """
     user: User | None = data.get("user")
@@ -86,23 +85,27 @@ async def process_ticket_message(
 
     session_factory = data.get("session_factory")
     telegram_id = message.from_user.id if message.from_user else None
-    
+
     if not telegram_id:
         await state.clear()
         await message.answer("❌ Ошибка: не удалось определить пользователя")
         return
-    
+
     try:
         if not session_factory:
             # Fallback to old session for backward compatibility
             session = data.get("session")
             if not session:
                 await state.clear()
-                await message.answer("❌ Системная ошибка. Отправьте /start или обратитесь в поддержку.")
+                await message.answer(
+                    "❌ Системная ошибка. Отправьте /start или "
+                    "обратитесь в поддержку."
+                )
                 return
-            
+
             support_service = SupportService(session)
-            # Create ticket: use user.id if user exists, otherwise None for guest ticket
+            # Create ticket: use user.id if user exists,
+            # otherwise None for guest ticket
             user_id = user.id if user else None
             ticket, error = await support_service.create_ticket(
                 user_id=user_id,
@@ -115,7 +118,8 @@ async def process_ticket_message(
             async with session_factory() as session:
                 async with session.begin():
                     support_service = SupportService(session)
-                    # Create ticket: use user.id if user exists, otherwise None for guest ticket
+                    # Create ticket: use user.id if user exists,
+            # otherwise None for guest ticket
                     user_id = user.id if user else None
                     ticket, error = await support_service.create_ticket(
                         user_id=user_id,
@@ -161,7 +165,11 @@ async def process_ticket_message(
                 )
             else:
                 # Guest ticket
-                username = message.from_user.username if message.from_user else "гость"
+                username = (
+                    message.from_user.username
+                    if message.from_user
+                    else "гость"
+                )
                 admin_text = (
                     f"🆕 *Новое обращение #{ticket.id}* (Гость)\n\n"
                     f"От: @{username} (`{telegram_id}`)\n"
@@ -188,7 +196,6 @@ async def handle_my_tickets(
 ) -> None:
     """
     Show user's tickets.
-    
     Uses session_factory for short read transaction.
     """
     user: User | None = data.get("user")
@@ -202,12 +209,15 @@ async def handle_my_tickets(
         return
 
     session_factory = data.get("session_factory")
-    
+
     if not session_factory:
         # Fallback to old session
         session = data.get("session")
         if not session:
-            await message.answer("❌ Системная ошибка. Отправьте /start или попробуйте позже.", reply_markup=support_keyboard())
+            await message.answer(
+                "❌ Системная ошибка. Отправьте /start или попробуйте позже.",
+                reply_markup=support_keyboard(),
+            )
             return
         support_service = SupportService(session)
         tickets = await support_service.get_user_tickets(user.id)
