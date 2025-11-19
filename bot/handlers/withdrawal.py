@@ -53,6 +53,23 @@ async def withdraw_all(
         )
         return
 
+    # Check withdrawal rate limit
+    telegram_id = message.from_user.id if message.from_user else None
+    if telegram_id:
+        from bot.utils.operation_rate_limit import OperationRateLimiter
+
+        redis_client = data.get("redis_client")
+        rate_limiter = OperationRateLimiter(redis_client=redis_client)
+        allowed, error_msg = await rate_limiter.check_withdrawal_limit(
+            telegram_id
+        )
+        if not allowed:
+            await message.answer(
+                error_msg or "Слишком много заявок на вывод",
+                reply_markup=withdrawal_keyboard(),
+            )
+            return
+
     session_factory = data.get("session_factory")
     
     # Get balance with SHORT transaction
@@ -250,6 +267,24 @@ async def process_financial_password(
     if is_menu_button(message.text or ""):
         await state.clear()
         return  # Let menu handlers process this
+    
+    # Check withdrawal rate limit before creating withdrawal
+    telegram_id = message.from_user.id if message.from_user else None
+    if telegram_id:
+        from bot.utils.operation_rate_limit import OperationRateLimiter
+
+        redis_client = data.get("redis_client")
+        rate_limiter = OperationRateLimiter(redis_client=redis_client)
+        allowed, error_msg = await rate_limiter.check_withdrawal_limit(
+            telegram_id
+        )
+        if not allowed:
+            await message.answer(
+                error_msg or "Слишком много заявок на вывод",
+                reply_markup=withdrawal_keyboard(),
+            )
+            await state.clear()
+            return
     
     password = (message.text or "").strip()
 

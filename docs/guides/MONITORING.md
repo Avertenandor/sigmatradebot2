@@ -1001,6 +1001,140 @@ app.listen(8080, () => {
 
 ---
 
+## 🔐 Admin Activity Monitoring
+
+### Daily Admin Activity Reports
+
+Для мониторинга безопасности и выявления подозрительной активности админов используется скрипт `scripts/admin_activity_report.py`.
+
+#### Запуск отчета
+
+```bash
+# Отчет за последние 24 часа (по умолчанию)
+python scripts/admin_activity_report.py
+
+# Отчет за последние 7 дней
+python scripts/admin_activity_report.py --days 7
+
+# Сохранить отчет в файл
+python scripts/admin_activity_report.py --days 1 --output /tmp/admin_report.txt
+```
+
+#### Что отслеживается
+
+1. **Общая статистика:**
+   - Общее количество действий админов за период
+   - Количество банов/терминаций
+   - Количество одобрений выводов
+
+2. **Действия по типам:**
+   - USER_BLOCKED
+   - USER_TERMINATED
+   - ADMIN_TERMINATED
+   - WITHDRAWAL_APPROVED
+   - WITHDRAWAL_REJECTED
+   - ADMIN_CREATED
+   - ADMIN_DELETED
+   - И другие типы действий
+
+3. **Самые активные админы:**
+   - Топ-10 админов по количеству действий
+   - Помогает выявить необычную активность
+
+4. **Массовые действия:**
+   - Админы с >10 действиями одного типа за последний час
+   - Сигнал о возможной компрометации или ошибке
+
+#### Пороговые значения для алертов
+
+**Критичные (требуют немедленного внимания):**
+
+- Более 20 банов/терминаций за час одним админом
+- Более 50 одобрений выводов за час одним админом
+- Более 5 созданий/удалений админов за день
+- ADMIN_TERMINATED действия (экстренная блокировка)
+
+**Высокий приоритет:**
+
+- Более 10 банов/терминаций за час одним админом
+- Более 30 одобрений выводов за час одним админом
+- Более 100 действий за день одним админом
+
+**Средний приоритет:**
+
+- Более 5 банов/терминаций за час одним админом
+- Более 20 одобрений выводов за час одним админом
+
+#### Автоматизация отчетов
+
+Рекомендуется настроить ежедневный запуск через cron:
+
+```bash
+# Добавить в crontab (каждый день в 9:00 UTC)
+0 9 * * * cd /opt/sigmatradebot && python scripts/admin_activity_report.py --days 1 --output /var/log/sigmatrade/admin_report_$(date +\%Y\%m\%d).txt
+```
+
+#### SQL запросы для ручного анализа
+
+```sql
+-- Количество банов/терминаций за день
+SELECT 
+    DATE(created_at) as date,
+    action_type,
+    COUNT(*) as count
+FROM admin_actions
+WHERE action_type IN ('USER_BLOCKED', 'USER_TERMINATED', 'ADMIN_TERMINATED')
+    AND created_at >= CURRENT_DATE - INTERVAL '7 days'
+GROUP BY DATE(created_at), action_type
+ORDER BY date DESC, count DESC;
+
+-- Самые активные админы за последние 24 часа
+SELECT 
+    admin_id,
+    COUNT(*) as action_count,
+    COUNT(DISTINCT action_type) as unique_action_types
+FROM admin_actions
+WHERE created_at >= NOW() - INTERVAL '24 hours'
+GROUP BY admin_id
+ORDER BY action_count DESC
+LIMIT 10;
+
+-- Массовые действия (подозрительная активность)
+SELECT 
+    admin_id,
+    action_type,
+    COUNT(*) as count,
+    MIN(created_at) as first_action,
+    MAX(created_at) as last_action
+FROM admin_actions
+WHERE created_at >= NOW() - INTERVAL '1 hour'
+GROUP BY admin_id, action_type
+HAVING COUNT(*) > 10
+ORDER BY count DESC;
+```
+
+#### Интеграция с алертингом
+
+Для автоматических алертов можно использовать скрипт в комбинации с системой мониторинга:
+
+```bash
+#!/bin/bash
+# scripts/check_admin_activity.sh
+
+REPORT=$(python scripts/admin_activity_report.py --days 1)
+
+# Проверка на массовые действия
+if echo "$REPORT" | grep -q "MASS ACTIONS DETECTED"; then
+    # Отправить алерт
+    echo "ALERT: Mass admin actions detected" | \
+        curl -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
+        -d "chat_id=$ADMIN_CHAT_ID" \
+        -d "text=🚨 Mass admin actions detected. Check admin_activity_report."
+fi
+```
+
+---
+
 ## 📱 On-Call Procedures
 
 ### Alert Response Playbook
@@ -1061,6 +1195,6 @@ app.listen(8080, () => {
 
 ---
 
-**Last Updated:** 2025-11-11
-**Version:** 1.0
-**Next Review:** 2025-12-11
+**Last Updated:** 2025-01-19
+**Version:** 1.1
+**Next Review:** 2025-02-19

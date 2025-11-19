@@ -540,3 +540,255 @@ async def handle_delete_admin_telegram_id(
         reply_markup=admin_management_keyboard(),
     )
 
+
+@router.message(F.text == "🛑 Экстренно заблокировать админа")
+async def handle_emergency_block_admin(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """
+    Start emergency admin blocking process.
+
+    Only accessible to super_admin.
+    """
+    is_admin = data.get("is_admin", False)
+    admin: Admin | None = data.get("admin")
+
+    if not is_admin or not admin:
+        await message.answer("❌ Эта функция доступна только администраторам")
+        return
+
+    if not admin.is_super_admin:
+        await message.answer(
+            "❌ Эта функция доступна только супер-администраторам"
+        )
+        return
+
+    # Get all admins
+    admin_service = AdminService(session)
+    admins = await admin_service.list_all_admins()
+
+    if not admins:
+        await message.answer("📋 Список админов пуст")
+        return
+
+    # Check if there's only one super_admin
+    super_admins = [a for a in admins if a.is_super_admin]
+    if len(super_admins) == 1 and super_admins[0].id == admin.id:
+        await message.answer(
+            "❌ Нельзя заблокировать последнего супер-администратора"
+        )
+        return
+
+    text = (
+        "🛑 **Экстренная блокировка админа**\n\n"
+        "⚠️ **ВНИМАНИЕ:** Это действие:\n"
+        "• Удалит админа из системы\n"
+        "• Заблокирует его Telegram ID (TERMINATED)\n"
+        "• Деактивирует все его сессии\n"
+        "• Заблокирует его как пользователя (если есть)\n\n"
+        "Введите Telegram ID админа для экстренной блокировки:\n\n"
+        "**Список админов:**\n"
+    )
+
+    for idx, a in enumerate(admins, 1):
+        role_display = {
+            "admin": "Admin",
+            "extended_admin": "Extended Admin",
+            "super_admin": "Super Admin",
+        }.get(a.role, a.role)
+
+        text += f"{idx}. {a.display_name} (ID: `{a.telegram_id}`, {role_display})\n"
+
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=cancel_keyboard(),
+    )
+
+    await state.set_state(AdminManagementStates.awaiting_emergency_telegram_id)
+
+
+@router.message(AdminManagementStates.awaiting_emergency_telegram_id)
+async def handle_emergency_block_admin_telegram_id(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """
+    Handle Telegram ID input for emergency admin blocking.
+
+    Performs atomic operation:
+    1. Add to blacklist (TERMINATED)
+    2. Delete admin
+    3. Ban user if exists
+    """
+    is_admin = data.get("is_admin", False)
+    admin: Admin | None = data.get("admin")
+
+    if not is_admin or not admin or not admin.is_super_admin:
+        await message.answer("❌ Доступ запрещен")
+        await state.clear()
+        return
+
+    telegram_id_str = message.text.strip() if message.text else ""
+
+    if not telegram_id_str:
+        await message.answer("❌ Telegram ID не может быть пустым")
+        return
+
+    try:
+        telegram_id = int(telegram_id_str)
+    except ValueError:
+        await message.answer(
+            "❌ Неверный формат Telegram ID. "
+            "Введите числовое значение:"
+        )
+        return
+
+    # Get admin to block
+    admin_service = AdminService(session)
+    admin_to_block = await admin_service.get_admin_by_telegram_id(telegram_id)
+
+    if not admin_to_block:
+        await message.answer(
+            f"❌ Админ с Telegram ID {telegram_id} не найден."
+        )
+        await state.clear()
+        return
+
+    # Check if trying to block self
+    if admin_to_block.id == admin.id:
+        await message.answer("❌ Нельзя заблокировать самого себя")
+        await state.clear()
+        return
+
+    # Check if trying to block last super_admin
+    all_admins = await admin_service.list_all_admins()
+    super_admins = [a for a in all_admins if a.is_super_admin]
+    if admin_to_block.is_super_admin and len(super_admins) == 1:
+        await message.answer(
+            "❌ Нельзя заблокировать последнего супер-администратора"
+        )
+        await state.clear()
+        return
+
+    # Atomic operation: block and delete
+    try:
+        from app.models.blacklist import BlacklistActionType
+        from app.services.blacklist_service import BlacklistService
+        from app.repositories.user_repository import UserRepository
+
+        # 1. Add to blacklist (TERMINATED)
+        blacklist_service = BlacklistService(session)
+        blacklist_entry = await blacklist_service.add_to_blacklist(
+            telegram_id=telegram_id,
+            reason="Compromised admin account",
+            added_by_admin_id=admin.id,
+            action_type=BlacklistActionType.TERMINATED,
+        )
+
+        # 2. Delete admin (deactivates all sessions)
+        deleted = await admin_service.delete_admin(admin_to_block.id)
+
+        if not deleted:
+            await message.answer("❌ Ошибка при удалении админа")
+            await state.clear()
+            return
+
+        # 3. Ban user if exists
+        user_repo = UserRepository(session)
+        user = await user_repo.get_by_telegram_id(telegram_id)
+        if user:
+            user.is_banned = True
+            await session.flush()
+
+        # Commit all changes atomically
+        await session.commit()
+
+        # Log emergency block
+        log_service = AdminLogService(session)
+        await log_service.log_action(
+            admin_id=admin.id,
+            action_type="ADMIN_TERMINATED",
+            target_user_id=user.id if user else None,
+            details={
+                "terminated_admin_id": admin_to_block.id,
+                "terminated_admin_telegram_id": telegram_id,
+                "terminated_admin_role": admin_to_block.role,
+                "reason": "Compromised admin account",
+                "blacklist_entry_id": blacklist_entry.id,
+            },
+        )
+
+        await state.clear()
+
+        logger.warning(
+            f"EMERGENCY: Admin {admin.id} terminated admin "
+            f"{admin_to_block.id} (telegram_id={telegram_id})"
+        )
+
+        # Notify all super_admins
+        try:
+            from app.config.settings import settings
+            from aiogram import Bot
+
+            bot = Bot(token=settings.telegram_bot_token)
+            notification_text = (
+                f"🚨 **Экстренная блокировка админа**\n\n"
+                f"Админ {admin.display_name} (ID: {admin.id}) "
+                f"экстренно заблокировал админа:\n\n"
+                f"• Telegram ID: `{telegram_id}`\n"
+                f"• Имя: {admin_to_block.display_name}\n"
+                f"• Роль: {admin_to_block.role}\n"
+                f"• Причина: Compromised admin account\n\n"
+                f"Действия выполнены:\n"
+                f"✅ Админ удален из системы\n"
+                f"✅ Telegram ID заблокирован (TERMINATED)\n"
+                f"✅ Все сессии деактивированы"
+            )
+
+            for super_admin in super_admins:
+                if super_admin.id != admin.id:
+                    try:
+                        await bot.send_message(
+                            chat_id=super_admin.telegram_id,
+                            text=notification_text,
+                            parse_mode="Markdown",
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to notify super_admin "
+                            f"{super_admin.id}: {e}"
+                        )
+
+            await bot.session.close()
+        except Exception as e:
+            logger.error(f"Failed to send notifications: {e}")
+
+        await message.answer(
+            f"✅ **Админ экстренно заблокирован**\n\n"
+            f"Telegram ID: `{telegram_id}`\n"
+            f"Имя: {admin_to_block.display_name}\n"
+            f"Роль: {admin_to_block.role}\n\n"
+            f"Выполнено:\n"
+            f"✅ Админ удален из системы\n"
+            f"✅ Telegram ID заблокирован (TERMINATED)\n"
+            f"✅ Все сессии деактивированы\n"
+            f"✅ Пользователь забанен (если был зарегистрирован)\n\n"
+            f"Все супер-администраторы уведомлены.",
+            parse_mode="Markdown",
+            reply_markup=admin_management_keyboard(),
+        )
+
+    except Exception as e:
+        logger.error(f"Error in emergency block: {e}")
+        await session.rollback()
+        await message.answer(
+            f"❌ Ошибка при экстренной блокировке: {e}"
+        )
+        await state.clear()
+

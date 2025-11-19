@@ -96,6 +96,21 @@ async def start_appeal(
         )
         return
 
+    # Check total open appeals limit
+    from app.config.constants import MAX_OPEN_TICKETS_PER_USER
+
+    open_appeals = await appeal_repo.get_active_appeals_for_user(user.id)
+    if len(open_appeals) >= MAX_OPEN_TICKETS_PER_USER:
+        await message.answer(
+            f"❌ Превышен лимит открытых апелляций "
+            f"({MAX_OPEN_TICKETS_PER_USER}). "
+            "Пожалуйста, дождитесь рассмотрения существующих апелляций.",
+            reply_markup=main_menu_reply_keyboard(
+                user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+            ),
+        )
+        return
+
     await message.answer(
         "📝 **Подача апелляции**\n\n"
         "Опишите ситуацию и "

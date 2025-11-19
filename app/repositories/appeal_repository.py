@@ -104,3 +104,28 @@ class AppealRepository(BaseRepository[Appeal]):
             List of appeals
         """
         return await self.find_by(status=status)
+
+    async def get_active_appeals_for_user(
+        self, user_id: int
+    ) -> list[Appeal]:
+        """
+        Get all active (pending or under_review) appeals for user.
+
+        Args:
+            user_id: User ID
+
+        Returns:
+            List of active appeals
+        """
+        stmt = (
+            select(Appeal)
+            .where(
+                Appeal.user_id == user_id,
+                Appeal.status.in_([
+                    AppealStatus.PENDING,
+                    AppealStatus.UNDER_REVIEW
+                ])
+            )
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())

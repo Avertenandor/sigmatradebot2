@@ -62,6 +62,9 @@ from bot.middlewares.menu_state_clear import (
 from bot.middlewares.rate_limit_middleware import (
     RateLimitMiddleware,  # noqa: E402
 )
+from bot.middlewares.redis_middleware import (
+    RedisMiddleware,  # noqa: E402
+)
 from bot.middlewares.request_id import RequestIDMiddleware  # noqa: E402
 
 
@@ -150,16 +153,12 @@ async def main() -> None:  # noqa: C901
     dp = Dispatcher(storage=storage)
 
     # Register middlewares (PART5: RequestID must be first!)
+    # RateLimit must be BEFORE Database to reduce DB load on spam
     dp.update.middleware(RequestIDMiddleware())
     dp.update.middleware(LoggerMiddleware())
-    dp.update.middleware(DatabaseMiddleware(session_pool=async_session_maker))
-    # Menu state clear must be after DatabaseMiddleware (needs session)
-    # but before AuthMiddleware to clear state early
-    dp.update.middleware(MenuStateClearMiddleware())
-    dp.update.middleware(AuthMiddleware())
-    dp.update.middleware(BanMiddleware())
-
-    # Rate limiting (optional, requires Redis)
+    
+    # Rate limiting (optional, requires Redis) - BEFORE Database
+    # This prevents spam requests from hitting the database
     if redis_client:
         try:
             dp.update.middleware(
@@ -169,9 +168,19 @@ async def main() -> None:  # noqa: C901
                     user_window=60,  # seconds
                 )
             )
-            logger.info("Rate limiting enabled")
+            logger.info("Rate limiting enabled (before Database)")
         except Exception as e:
             logger.warning(f"Rate limiting disabled: {e}")
+    
+    dp.update.middleware(DatabaseMiddleware(session_pool=async_session_maker))
+    # Add Redis client to data for handlers that need it
+    if redis_client:
+        dp.update.middleware(RedisMiddleware(redis_client=redis_client))
+    # Menu state clear must be after DatabaseMiddleware (needs session)
+    # but before AuthMiddleware to clear state early
+    dp.update.middleware(MenuStateClearMiddleware())
+    dp.update.middleware(AuthMiddleware())
+    dp.update.middleware(BanMiddleware())
 
     # Register error handler (MUST BE FIRST)
     @dp.error()

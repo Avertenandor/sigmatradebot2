@@ -68,6 +68,33 @@ class SupportService:
                 "Пожалуйста, дождитесь его закрытия."
             )
 
+        # Check total open tickets limit
+        from app.config.constants import MAX_OPEN_TICKETS_PER_USER
+        from app.models.enums import SupportTicketStatus
+
+        if user_id is not None:
+            # Count open tickets for registered user
+            open_tickets = await self.ticket_repo.get_by_user(
+                user_id, status=SupportTicketStatus.OPEN.value
+            )
+        else:
+            # Count open tickets for guest
+            all_guest_tickets = await self.ticket_repo.get_by_telegram_id(
+                telegram_id
+            )
+            open_tickets = [
+                t
+                for t in all_guest_tickets
+                if t.status == SupportTicketStatus.OPEN.value
+            ]
+
+        if len(open_tickets) >= MAX_OPEN_TICKETS_PER_USER:
+            return None, (
+                f"Превышен лимит открытых обращений "
+                f"({MAX_OPEN_TICKETS_PER_USER}). "
+                "Пожалуйста, дождитесь закрытия существующих обращений."
+            )
+
         # Create ticket
         ticket = await self.ticket_repo.create(
             user_id=user_id,

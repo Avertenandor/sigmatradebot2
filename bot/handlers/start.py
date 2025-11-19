@@ -286,6 +286,20 @@ async def process_wallet(
 
     wallet_address = message.text.strip()
 
+    # Check registration rate limit
+    telegram_id = message.from_user.id if message.from_user else None
+    if telegram_id:
+        from bot.utils.operation_rate_limit import OperationRateLimiter
+
+        redis_client = data.get("redis_client")
+        rate_limiter = OperationRateLimiter(redis_client=redis_client)
+        allowed, error_msg = await rate_limiter.check_registration_limit(
+            telegram_id
+        )
+        if not allowed:
+            await message.answer(error_msg or "Слишком много попыток регистрации")
+            return
+
     # Validate wallet format using proper validation
     from app.utils.validation import validate_bsc_address
 

@@ -499,6 +499,9 @@ def admin_management_keyboard() -> ReplyKeyboardMarkup:
         KeyboardButton(text="🗑️ Удалить админа"),
     )
     builder.row(
+        KeyboardButton(text="🛑 Экстренно заблокировать админа"),
+    )
+    builder.row(
         KeyboardButton(text="👑 Админ-панель"),
     )
 

@@ -22,15 +22,30 @@ from app.repositories.admin_session_repository import (
 SESSION_DURATION_HOURS = 24
 MASTER_KEY_LENGTH = 32  # 32 bytes = 256 bits
 
+# Admin login rate limiting
+ADMIN_LOGIN_MAX_ATTEMPTS = 5
+ADMIN_LOGIN_WINDOW_SECONDS = 3600  # 1 hour
+
 
 class AdminService:
     """Admin service for authentication and session management."""
 
-    def __init__(self, session: AsyncSession) -> None:
-        """Initialize admin service."""
+    def __init__(
+        self,
+        session: AsyncSession,
+        redis_client: Any | None = None,
+    ) -> None:
+        """
+        Initialize admin service.
+
+        Args:
+            session: Database session
+            redis_client: Optional Redis client for rate limiting
+        """
         self.session = session
         self.admin_repo = AdminRepository(session)
         self.session_repo = AdminSessionRepository(session)
+        self.redis_client = redis_client
 
     @staticmethod
     def generate_master_key() -> str:
@@ -182,6 +197,9 @@ class AdminService:
         if not self.verify_master_key(
             master_key, admin.master_key
         ):
+            # Track failed login attempt
+            await self._track_failed_login(telegram_id)
+            
             logger.warning(
                 "Invalid master key attempt",
                 extra={
@@ -391,3 +409,152 @@ class AdminService:
         )
 
         return True
+
+    async def _track_failed_login(self, telegram_id: int) -> None:
+        """
+        Track failed login attempt and block if limit exceeded.
+
+        Args:
+            telegram_id: Telegram user ID
+        """
+        if not self.redis_client:
+            return  # No Redis, skip rate limiting
+
+        try:
+            key = f"admin_login_attempts:{telegram_id}"
+            
+            # Get current count
+            count_str = await self.redis_client.get(key)
+            count = int(count_str) if count_str else 0
+            
+            # Increment
+            count += 1
+            await self.redis_client.setex(
+                key, ADMIN_LOGIN_WINDOW_SECONDS, str(count)
+            )
+            
+            # Check if limit exceeded
+            if count >= ADMIN_LOGIN_MAX_ATTEMPTS:
+                logger.warning(
+                    f"Admin login rate limit exceeded for {telegram_id}: "
+                    f"{count}/{ADMIN_LOGIN_MAX_ATTEMPTS}"
+                )
+                
+                # Block the Telegram ID
+                await self._block_telegram_id_for_failed_logins(telegram_id)
+                
+        except Exception as e:
+            logger.error(f"Error tracking failed login: {e}")
+
+    async def _clear_failed_login_attempts(self, telegram_id: int) -> None:
+        """
+        Clear failed login attempts on successful login.
+
+        Args:
+            telegram_id: Telegram user ID
+        """
+        if not self.redis_client:
+            return
+
+        try:
+            key = f"admin_login_attempts:{telegram_id}"
+            await self.redis_client.delete(key)
+        except Exception as e:
+            logger.error(f"Error clearing failed login attempts: {e}")
+
+    async def _block_telegram_id_for_failed_logins(
+        self, telegram_id: int
+    ) -> None:
+        """
+        Block Telegram ID after too many failed login attempts.
+
+        Args:
+            telegram_id: Telegram user ID to block
+        """
+        try:
+            from app.models.blacklist import BlacklistActionType
+            from app.services.blacklist_service import BlacklistService
+
+            # Add to blacklist
+            blacklist_service = BlacklistService(self.session)
+            await blacklist_service.add_to_blacklist(
+                telegram_id=telegram_id,
+                reason="Too many failed admin login attempts",
+                added_by_admin_id=None,  # System action
+                action_type=BlacklistActionType.BLOCKED,
+            )
+
+            # If user exists, ban them
+            from app.repositories.user_repository import UserRepository
+
+            user_repo = UserRepository(self.session)
+            user = await user_repo.get_by_telegram_id(telegram_id)
+            if user:
+                user.is_banned = True
+                await self.session.flush()
+
+            await self.session.commit()
+
+            # Notify all super_admins
+            await self._notify_super_admins_of_block(telegram_id)
+
+            logger.warning(
+                f"Telegram ID {telegram_id} blocked due to "
+                f"too many failed admin login attempts"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"Error blocking Telegram ID for failed logins: {e}"
+            )
+            await self.session.rollback()
+
+    async def _notify_super_admins_of_block(
+        self, telegram_id: int
+    ) -> None:
+        """
+        Notify all super_admins about automatic block.
+
+        Args:
+            telegram_id: Blocked Telegram ID
+        """
+        try:
+            from app.config.settings import settings
+            from aiogram import Bot
+
+            # Get all super_admins
+            super_admins = [
+                a for a in await self.list_all_admins()
+                if a.is_super_admin
+            ]
+
+            if not super_admins:
+                return
+
+            bot = Bot(token=settings.telegram_bot_token)
+            notification_text = (
+                f"🚨 **Автоматическая блокировка**\n\n"
+                f"Telegram ID `{telegram_id}` был автоматически "
+                f"заблокирован из-за превышения лимита неуспешных "
+                f"попыток входа в админ-панель.\n\n"
+                f"Лимит: {ADMIN_LOGIN_MAX_ATTEMPTS} попыток за "
+                f"{ADMIN_LOGIN_WINDOW_SECONDS // 60} минут"
+            )
+
+            for super_admin in super_admins:
+                try:
+                    await bot.send_message(
+                        chat_id=super_admin.telegram_id,
+                        text=notification_text,
+                        parse_mode="Markdown",
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Failed to notify super_admin "
+                        f"{super_admin.id}: {e}"
+                    )
+
+            await bot.session.close()
+
+        except Exception as e:
+            logger.error(f"Error notifying super_admins: {e}")

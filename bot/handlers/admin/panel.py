@@ -85,7 +85,8 @@ async def handle_master_key_input(
         return
 
     # Authenticate admin
-    admin_service = AdminService(session)
+    redis_client = data.get("redis_client")
+    admin_service = AdminService(session, redis_client=redis_client)
     session_obj, admin_obj, error = await admin_service.login(
         telegram_id=telegram_id,
         master_key=master_key,

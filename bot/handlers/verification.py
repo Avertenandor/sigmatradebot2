@@ -93,6 +93,20 @@ async def start_verification(
         )
         return
 
+    # Check verification rate limit
+    telegram_id = message.from_user.id if message.from_user else None
+    if telegram_id:
+        from bot.utils.operation_rate_limit import OperationRateLimiter
+
+        redis_client = data.get("redis_client")
+        rate_limiter = OperationRateLimiter(redis_client=redis_client)
+        allowed, error_msg = await rate_limiter.check_verification_limit(
+            telegram_id
+        )
+        if not allowed:
+            await message.answer(error_msg or "Слишком много попыток верификации")
+            return
+
     # Generate financial password
     financial_password = generate_financial_password(8)
 

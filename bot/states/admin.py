@@ -12,6 +12,7 @@ class AdminManagementStates(StatesGroup):
 
     awaiting_admin_telegram_id = State()  # Waiting for Telegram ID of new admin
     awaiting_admin_role = State()  # Waiting for role selection
+    awaiting_emergency_telegram_id = State()  # Waiting for Telegram ID for emergency block
 
 
 class DepositSettingsStates(StatesGroup):
