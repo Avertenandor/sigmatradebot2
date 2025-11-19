@@ -6,7 +6,17 @@ Initializes and runs the Telegram bot with aiogram 3.x.
 
 import asyncio
 import sys
+import warnings
 from pathlib import Path
+
+# Suppress eth_utils network warnings about invalid ChainId
+# These warnings are from eth_utils library initialization and don't affect functionality
+warnings.filterwarnings(
+    "ignore",
+    message=".*does not have a valid ChainId.*",
+    category=UserWarning,
+    module="eth_utils.network",
+)
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties

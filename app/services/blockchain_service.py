@@ -6,10 +6,20 @@ Full Web3.py implementation for BSC blockchain operations
 """
 
 import asyncio
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
+
+# Suppress eth_utils network warnings about invalid ChainId
+# These warnings are from eth_utils library initialization and don't affect functionality
+warnings.filterwarnings(
+    "ignore",
+    message=".*does not have a valid ChainId.*",
+    category=UserWarning,
+    module="eth_utils.network",
+)
 
 from eth_account import Account
 from eth_utils import is_address, to_checksum_address
