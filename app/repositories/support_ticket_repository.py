@@ -130,3 +130,28 @@ class SupportTicketRepository(BaseRepository[SupportTicket]):
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def get_by_telegram_id(
+        self, telegram_id: int
+    ) -> list[SupportTicket]:
+        """
+        Get all tickets for guest by telegram_id.
+
+        Args:
+            telegram_id: Telegram ID
+
+        Returns:
+            List of guest tickets (all statuses)
+        """
+        from sqlalchemy import select
+
+        stmt = (
+            select(SupportTicket)
+            .where(
+                SupportTicket.telegram_id == telegram_id,
+                SupportTicket.user_id.is_(None)  # Only guest tickets
+            )
+            .order_by(SupportTicket.created_at.desc())
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())

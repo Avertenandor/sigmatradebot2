@@ -191,10 +191,17 @@ async def handle_block_user_input(  # noqa: C901
                 )
             )
 
+            # Add appeal instruction to notification text
+            notification_text_with_instruction = (
+                f"{notification_text}\n\n"
+                "Чтобы подать апелляцию, нажмите кнопку "
+                "'📝 Подать апелляцию' в боте."
+            )
+
             # Send notification text
             await bot.send_message(
                 chat_id=user.telegram_id,
-                text=notification_text,
+                text=notification_text_with_instruction,
             )
 
             # Send keyboard with appeal button

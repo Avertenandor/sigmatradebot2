@@ -195,15 +195,17 @@ async def handle_my_tickets(
     **data: Any,
 ) -> None:
     """
-    Show user's tickets.
+    Show user's or guest's tickets.
     Uses session_factory for short read transaction.
+    Supports both registered users and guests.
     """
     user: User | None = data.get("user")
+    telegram_id = message.from_user.id if message.from_user else None
     from app.services.support_service import SupportService
 
-    if not user:
+    if not telegram_id:
         await message.answer(
-            "❌ Ошибка контекста пользователя. Повторите /start",
+            "❌ Системная ошибка. Отправьте /start или попробуйте позже.",
             reply_markup=support_keyboard(),
         )
         return
@@ -220,13 +222,21 @@ async def handle_my_tickets(
             )
             return
         support_service = SupportService(session)
-        tickets = await support_service.get_user_tickets(user.id)
+        if user:
+            tickets = await support_service.get_user_tickets(user.id)
+        else:
+            # Guest tickets
+            tickets = await support_service.get_guest_tickets(telegram_id)
     else:
         # NEW pattern: short read transaction
         async with session_factory() as session:
             async with session.begin():
                 support_service = SupportService(session)
-                tickets = await support_service.get_user_tickets(user.id)
+                if user:
+                    tickets = await support_service.get_user_tickets(user.id)
+                else:
+                    # Guest tickets
+                    tickets = await support_service.get_guest_tickets(telegram_id)
         # Transaction closed here
 
     if not tickets:
@@ -244,8 +254,10 @@ async def handle_my_tickets(
 
             created_date = ticket.created_at.strftime('%d.%m.%Y %H:%M')
             subject = getattr(ticket, 'subject', 'Обращение')
+            # Add "(Гость)" marker for guest tickets
+            guest_marker = " (Гость)" if user is None else ""
             text += (
-                f"{status_emoji} #{ticket.id} - {subject}\n"
+                f"{status_emoji} #{ticket.id} - {subject}{guest_marker}\n"
                 f"   Создано: {created_date}\n\n"
             )
 

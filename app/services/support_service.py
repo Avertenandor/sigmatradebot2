@@ -324,3 +324,17 @@ class SupportService:
             Active ticket or None
         """
         return await self.ticket_repo.get_active_by_user(user_id)
+
+    async def get_guest_tickets(
+        self, telegram_id: int
+    ) -> list[SupportTicket]:
+        """
+        Get all tickets for guest by telegram_id.
+
+        Args:
+            telegram_id: Telegram ID
+
+        Returns:
+            List of guest tickets (all statuses)
+        """
+        return await self.ticket_repo.get_by_telegram_id(telegram_id)

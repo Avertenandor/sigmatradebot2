@@ -216,14 +216,21 @@ async def process_wallet(
         # Получаем session из data
         session = data.get("session")
         blacklist_entry = None
+        # КРИТИЧНО: проверяем session перед использованием
         if user and session:
-            from app.repositories.blacklist_repository import (
-                BlacklistRepository,
-            )
-            blacklist_repo = BlacklistRepository(session)
-            blacklist_entry = await blacklist_repo.find_by_telegram_id(
-            user.telegram_id
-        )
+            try:
+                from app.repositories.blacklist_repository import (
+                    BlacklistRepository,
+                )
+                blacklist_repo = BlacklistRepository(session)
+                blacklist_entry = await blacklist_repo.find_by_telegram_id(
+                    user.telegram_id
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to get blacklist entry for user {user.telegram_id}: {e}"
+                )
+                blacklist_entry = None
         await message.answer(
             "👋 Добро пожаловать обратно!",
             reply_markup=ReplyKeyboardRemove(),
@@ -252,14 +259,21 @@ async def process_wallet(
         # Получаем session из data
         session = data.get("session")
         blacklist_entry = None
+        # КРИТИЧНО: проверяем session перед использованием
         if user and session:
-            from app.repositories.blacklist_repository import (
-                BlacklistRepository,
-            )
-            blacklist_repo = BlacklistRepository(session)
-            blacklist_entry = await blacklist_repo.find_by_telegram_id(
-            user.telegram_id
-        )
+            try:
+                from app.repositories.blacklist_repository import (
+                    BlacklistRepository,
+                )
+                blacklist_repo = BlacklistRepository(session)
+                blacklist_entry = await blacklist_repo.find_by_telegram_id(
+                    user.telegram_id
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to get blacklist entry for user {user.telegram_id}: {e}"
+                )
+                blacklist_entry = None
         await message.answer(
             "📊 Главное меню",
             reply_markup=main_menu_reply_keyboard(
@@ -443,14 +457,21 @@ async def process_password_confirmation(
         # Получаем session из data
         session = data.get("session")
         blacklist_entry = None
+        # КРИТИЧНО: проверяем session перед использованием
         if user and session:
-            from app.repositories.blacklist_repository import (
-                BlacklistRepository,
-            )
-            blacklist_repo = BlacklistRepository(session)
-            blacklist_entry = await blacklist_repo.find_by_telegram_id(
-            user.telegram_id
-        )
+            try:
+                from app.repositories.blacklist_repository import (
+                    BlacklistRepository,
+                )
+                blacklist_repo = BlacklistRepository(session)
+                blacklist_entry = await blacklist_repo.find_by_telegram_id(
+                    user.telegram_id
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to get blacklist entry for user {user.telegram_id}: {e}"
+                )
+                blacklist_entry = None
         await message.answer(
             "📊 Главное меню",
             reply_markup=main_menu_reply_keyboard(
