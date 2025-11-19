@@ -49,25 +49,50 @@ log "✅ Backup created: ${BACKUP_DIR}"
 # Step 3: Update code from repository
 log "Step 3/7: Updating code from repository..."
 if [ -d ".git" ]; then
+    # Fix permissions if needed
+    sudo chown -R "${USER}:${USER}" .git 2>/dev/null || true
+    
     # Check current branch
-    CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
     info "Current branch: ${CURRENT_BRANCH}"
     
-    # Fetch latest changes
-    git fetch origin "${GIT_BRANCH}" || {
-        error "Failed to fetch from origin"
-        exit 1
-    }
+    # Check remote URL and update if needed
+    CURRENT_REMOTE=$(git remote get-url origin 2>/dev/null || echo "")
+    if [ "${CURRENT_REMOTE}" != "${GIT_REPO}" ]; then
+        info "Updating remote URL to ${GIT_REPO}"
+        git remote set-url origin "${GIT_REPO}" || git remote add origin "${GIT_REPO}"
+    fi
+    
+    # Fetch latest changes (with retry)
+    info "Fetching latest changes..."
+    for i in 1 2 3; do
+        if git fetch origin "${GIT_BRANCH}" 2>&1; then
+            break
+        else
+            if [ $i -eq 3 ]; then
+                error "Failed to fetch from origin after 3 attempts"
+                # Try to fix permissions and retry once more
+                sudo chown -R "${USER}:${USER}" .git
+                git fetch origin "${GIT_BRANCH}" || {
+                    error "Failed to fetch even after fixing permissions"
+                    exit 1
+                }
+            else
+                warn "Fetch attempt $i failed, retrying..."
+                sleep 2
+            fi
+        fi
+    done
     
     # Check if there are updates
-    LOCAL=$(git rev-parse HEAD)
-    REMOTE=$(git rev-parse "origin/${GIT_BRANCH}")
+    LOCAL=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+    REMOTE=$(git rev-parse "origin/${GIT_BRANCH}" 2>/dev/null || echo "unknown")
     
-    if [ "${LOCAL}" = "${REMOTE}" ]; then
+    if [ "${LOCAL}" = "${REMOTE}" ] && [ "${LOCAL}" != "unknown" ]; then
         warn "Already up to date with origin/${GIT_BRANCH}"
     else
         info "Updating from ${LOCAL:0:7} to ${REMOTE:0:7}"
-        git checkout "${GIT_BRANCH}" || git checkout -b "${GIT_BRANCH}" --track "origin/${GIT_BRANCH}"
+        git checkout "${GIT_BRANCH}" 2>/dev/null || git checkout -b "${GIT_BRANCH}" --track "origin/${GIT_BRANCH}"
         git pull origin "${GIT_BRANCH}" || {
             error "Failed to pull from origin"
             exit 1
