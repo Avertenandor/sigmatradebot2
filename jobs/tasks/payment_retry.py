@@ -30,8 +30,15 @@ def process_payment_retries() -> dict:
     logger.info("Starting payment retry processing...")
 
     try:
-        # Run async code
-        result = asyncio.run(_process_payment_retries_async())
+        # Create a new event loop for this thread to avoid conflicts
+        # with Dramatiq's threading model
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        try:
+            result = loop.run_until_complete(_process_payment_retries_async())
+        finally:
+            loop.close()
 
         logger.info(
             f"Payment retry processing complete: "
@@ -55,14 +62,30 @@ def process_payment_retries() -> dict:
 
 async def _process_payment_retries_async() -> dict:
     """Async implementation of payment retry processing."""
-    async with async_session_maker() as session:
-        # Get blockchain service
-        blockchain_service = get_blockchain_service()
+    # Create a dedicated engine and sessionmaker for this run to avoid cross-loop reuse
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+    from app.config.settings import settings
+    
+    engine = create_async_engine(
+        settings.database_url,
+        pool_pre_ping=True,
+    )
+    SessionLocal = async_sessionmaker(
+        engine,
+        expire_on_commit=False,
+    )
+    
+    try:
+        async with SessionLocal() as session:
+            # Get blockchain service
+            blockchain_service = get_blockchain_service()
 
-        # Process retries
-        retry_service = PaymentRetryService(session)
-        result = await retry_service.process_pending_retries(
-            blockchain_service
-        )
+            # Process retries
+            retry_service = PaymentRetryService(session)
+            result = await retry_service.process_pending_retries(
+                blockchain_service
+            )
 
-        return result
+            return result
+    finally:
+        await engine.dispose()
