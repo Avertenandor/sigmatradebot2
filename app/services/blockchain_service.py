@@ -14,11 +14,18 @@ from typing import Any
 
 # Suppress eth_utils network warnings about invalid ChainId
 # These warnings are from eth_utils library initialization and don't affect functionality
+# Must be set BEFORE importing eth_utils to catch warnings during module initialization
 warnings.filterwarnings(
     "ignore",
     message=".*does not have a valid ChainId.*",
     category=UserWarning,
     module="eth_utils.network",
+)
+# Also suppress warnings from web3 which may import eth_utils
+warnings.filterwarnings(
+    "ignore",
+    message=".*does not have a valid ChainId.*",
+    category=UserWarning,
 )
 
 from eth_account import Account

@@ -11,11 +11,18 @@ from pathlib import Path
 
 # Suppress eth_utils network warnings about invalid ChainId
 # These warnings are from eth_utils library initialization and don't affect functionality
+# Must be set BEFORE importing any modules that use eth_utils
 warnings.filterwarnings(
     "ignore",
     message=".*does not have a valid ChainId.*",
     category=UserWarning,
     module="eth_utils.network",
+)
+# Also suppress warnings from any module that may import eth_utils
+warnings.filterwarnings(
+    "ignore",
+    message=".*does not have a valid ChainId.*",
+    category=UserWarning,
 )
 
 from aiogram import Bot, Dispatcher
