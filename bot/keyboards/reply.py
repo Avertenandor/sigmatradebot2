@@ -20,10 +20,10 @@ def main_menu_reply_keyboard(
     """
     Main menu reply keyboard.
 
-    Conditionally shows buttons based on user status (e.g., blocked, admin).
+    Conditionally shows buttons based on user status (e.g., blocked, admin, unregistered).
 
     Args:
-        user: The current user object (optional).
+        user: The current user object (optional). If None, shows reduced menu for unregistered users.
         blacklist_entry: The user's blacklist entry, if any (optional).
         is_admin: Whether the user is an admin (optional).
 
@@ -52,12 +52,30 @@ def main_menu_reply_keyboard(
         builder.row(
             KeyboardButton(text="📝 Подать апелляцию"),
         )
+    elif user is None:
+        # Reduced menu for unregistered users
+        logger.info(f"[KEYBOARD] Building reduced menu for unregistered user {telegram_id}")
+        builder.row(
+            KeyboardButton(text="📖 Инструкции"),
+        )
+        builder.row(
+            KeyboardButton(text="💬 Поддержка"),
+        )
+        builder.row(
+            KeyboardButton(text="⚙️ Настройки"),
+        )
+        builder.row(
+            KeyboardButton(text="📝 Регистрация"),
+        )
     else:
-        # Standard menu for active users
+        # Standard menu for registered users
         logger.info(f"[KEYBOARD] Building standard menu for user {telegram_id}")
         builder.row(
             KeyboardButton(text="💰 Депозит"),
             KeyboardButton(text="💸 Вывод"),
+        )
+        builder.row(
+            KeyboardButton(text="📦 Мои депозиты"),
         )
         builder.row(
             KeyboardButton(text="👥 Рефералы"),
@@ -73,6 +91,9 @@ def main_menu_reply_keyboard(
         )
         builder.row(
             KeyboardButton(text="✅ Пройти верификацию"),
+        )
+        builder.row(
+            KeyboardButton(text="🔑 Восстановить финпароль"),
         )
 
         # Add admin panel button for admins
@@ -270,6 +291,9 @@ def admin_keyboard(is_super_admin: bool = False) -> ReplyKeyboardMarkup:
     )
     builder.row(
         KeyboardButton(text="🚫 Управление черным списком"),
+    )
+    builder.row(
+        KeyboardButton(text="⚙️ Настроить уровни депозитов"),
     )
     
     # Add admin management button only for super_admin

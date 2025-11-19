@@ -95,40 +95,27 @@ class AuthMiddleware(BaseMiddleware):
         users = await user_repo.find_by(telegram_id=telegram_user.id)
         user: User | None = users[0] if users else None
 
-        # Create user if not exists
+        # Do NOT auto-create user - registration must be explicit
+        # If user not found, set user=None to allow registration flow
         if not user:
-            # User model only has telegram_id and username, not first_name/last_name
-            # Also need wallet_address and financial_password - these should be set later
-            # For now, create with minimal required fields
-            from decimal import Decimal
-            import secrets
-            import string
-            
-            # Generate temporary wallet address and password
-            # These will be set properly during verification
-            temp_wallet = "0x" + "".join(secrets.choice(string.hexdigits) for _ in range(40))
-            temp_password = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(16))
-            
-            user = await user_repo.create(
-                telegram_id=telegram_user.id,
-                username=telegram_user.username,
-                wallet_address=temp_wallet,
-                financial_password=temp_password,
-            )
             logger.info(
-                f"Auto-created user {user.id} for Telegram ID "
-                f"{telegram_user.id} (@{telegram_user.username})"
+                f"User not found for Telegram ID {telegram_user.id} "
+                f"(@{telegram_user.username}) - will show registration menu"
             )
 
-        # Add user to data
+        # Add user to data (may be None for unregistered users)
         data["user"] = user
 
         # Add user_id, telegram_id for handlers
-        data["user_id"] = user.id
+        if user:
+            data["user_id"] = user.id
+        else:
+            data["user_id"] = None
         data["telegram_id"] = telegram_user.id
 
         # Check if user is admin
-        # Admin check: check Admin table first (authoritative source), then user.is_admin flag
+        # Admin check: check Admin table first (authoritative source)
+        # This works even if user=None (admin can exist before user registration)
         is_admin = False
         from app.repositories.admin_repository import AdminRepository
 
@@ -140,7 +127,7 @@ class AuthMiddleware(BaseMiddleware):
                 f"User {telegram_user.id} (@{telegram_user.username}) "
                 f"identified as admin from Admin table (role: {admin.role if admin else 'unknown'})"
             )
-        elif hasattr(user, "is_admin") and user.is_admin:
+        elif user and hasattr(user, "is_admin") and user.is_admin:
             # Fallback to user.is_admin flag if not in Admin table
             is_admin = True
             logger.debug(
@@ -148,11 +135,12 @@ class AuthMiddleware(BaseMiddleware):
             )
         else:
             logger.debug(
-                f"User {telegram_user.id} is not an admin (not in Admin table, user.is_admin={getattr(user, 'is_admin', False)})"
+                f"User {telegram_user.id} is not an admin "
+                f"(not in Admin table, user={'exists' if user else 'None'})"
             )
 
         data["is_admin"] = is_admin
-        data["admin_id"] = user.id if is_admin else 0
+        data["admin_id"] = user.id if (user and is_admin) else 0
         logger.info(
             f"AuthMiddleware: Set is_admin={is_admin}, admin_id={data['admin_id']} for user {telegram_user.id}"
         )

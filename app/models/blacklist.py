@@ -6,7 +6,7 @@ Tracks banned users with reason and admin who banned them.
 
 from datetime import UTC, datetime
 
-from sqlalchemy import BigInteger, DateTime, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -82,7 +82,7 @@ class Blacklist(Base):
 
     # Active status
     is_active: Mapped[bool] = mapped_column(
-        Integer, nullable=False, default=1, index=True
+        Boolean, nullable=False, default=True, index=True
     )
 
     # Timestamps

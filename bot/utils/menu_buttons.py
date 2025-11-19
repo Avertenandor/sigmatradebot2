@@ -9,6 +9,7 @@ Centralized list of menu button texts to prevent handlers from intercepting
 MAIN_MENU_BUTTONS = [
     "💰 Депозит",
     "💸 Вывод",
+    "📦 Мои депозиты",
     "👥 Рефералы",
     "📊 Баланс",
     "💬 Поддержка",
@@ -16,7 +17,9 @@ MAIN_MENU_BUTTONS = [
     "📖 Инструкции",
     "📜 История",
     "✅ Пройти верификацию",
+    "🔑 Восстановить финпароль",
     "📝 Подать апелляцию",
+    "📝 Регистрация",
     "📊 Главное меню",
     "👑 Админ-панель",
 ]
@@ -62,12 +65,14 @@ SUPPORT_MENU_BUTTONS = [
 # Admin menu buttons
 ADMIN_MENU_BUTTONS = [
     "👥 Управление пользователями",
-    "💸 Управление выводами",
-    "📊 Статистика бота",
+    "💸 Заявки на вывод",
+    "📊 Статистика",  # Admin panel button (shown in admin_keyboard)
     "📢 Рассылка",
-    "⚙️ Настройки депозитов",
-    "🔑 Настройки кошелька",
-    "🚫 Управление blacklist",
+    "🆘 Техподдержка",
+    "🔐 Управление кошельком",
+    "🚫 Управление черным списком",
+    "⚙️ Настроить уровни депозитов",
+    "👥 Управление админами",  # Only for super_admin
 ]
 
 # Admin users menu buttons
@@ -92,6 +97,15 @@ CONFIRMATION_BUTTONS = [
     "❌ Отмена",
 ]
 
+# Navigation buttons (used across multiple menus)
+NAVIGATION_BUTTONS = [
+    "⬅ Назад",
+    "◀️ Главное меню",
+    "👑 Админ-панель",
+    # Note: "📊 Статистика" is also in ADMIN_MENU_BUTTONS, but included here
+    # for completeness as it's used in navigation contexts
+]
+
 # All menu buttons
 ALL_MENU_BUTTONS = (
     MAIN_MENU_BUTTONS
@@ -104,6 +118,7 @@ ALL_MENU_BUTTONS = (
     + ADMIN_USERS_MENU_BUTTONS
     + ADMIN_WITHDRAWALS_MENU_BUTTONS
     + CONFIRMATION_BUTTONS
+    + NAVIGATION_BUTTONS
 )
 
 

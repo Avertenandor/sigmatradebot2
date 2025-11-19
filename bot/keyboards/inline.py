@@ -4,8 +4,13 @@ Inline keyboards.
 Inline keyboard builders for various bot functions.
 """
 
+from typing import TYPE_CHECKING
+
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+if TYPE_CHECKING:
+    from app.models.user_notification_settings import UserNotificationSettings
 
 
 def main_menu_keyboard() -> InlineKeyboardMarkup:
@@ -239,6 +244,66 @@ def settings_keyboard() -> InlineKeyboardMarkup:
     )
     builder.row(
         InlineKeyboardButton(text="◀️ Главное меню", callback_data="menu:main"),
+    )
+
+    return builder.as_markup()
+
+
+def notification_settings_keyboard(
+    settings: "UserNotificationSettings",
+) -> InlineKeyboardMarkup:
+    """
+    Notification settings keyboard.
+
+    Args:
+        settings: UserNotificationSettings instance
+
+    Returns:
+        InlineKeyboardMarkup with notification toggle buttons
+    """
+    builder = InlineKeyboardBuilder()
+
+    # Deposit notifications toggle
+    deposit_text = (
+        "✅ Уведомления о депозитах" if settings.deposit_notifications
+        else "❌ Уведомления о депозитах"
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=deposit_text,
+            callback_data="toggle_notification_deposit"
+        )
+    )
+
+    # Withdrawal notifications toggle
+    withdrawal_text = (
+        "✅ Уведомления о выводах" if settings.withdrawal_notifications
+        else "❌ Уведомления о выводах"
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=withdrawal_text,
+            callback_data="toggle_notification_withdrawal"
+        )
+    )
+
+    # Marketing notifications toggle
+    marketing_text = (
+        "✅ Маркетинговые уведомления" if settings.marketing_notifications
+        else "❌ Маркетинговые уведомления"
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=marketing_text,
+            callback_data="toggle_notification_marketing"
+        )
+    )
+
+    builder.row(
+        InlineKeyboardButton(
+            text="◀️ Назад к настройкам",
+            callback_data="menu:settings"
+        )
     )
 
     return builder.as_markup()

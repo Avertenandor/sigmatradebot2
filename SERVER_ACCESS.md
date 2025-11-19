@@ -25,15 +25,17 @@
 
 ### Публичный ключ (google_compute_engine)
 
-```
+```text
 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDXJITOQ0FfX2mZnBxKjC0niB/ZZwco2EyMnig6J+pXUiiSw/TDg++9z8bGC7ee67yxWA809+gl29LfrRsZBcmi+h4NRr2hfVTUMl5MeGIJW1qu4yBmeWY6JMpx+IR23shFGWmvB10HrE+tiJNikqk4DTo/prhkPZQySt3NFF6JrNS41V5u8/kWlp0j7Swnalnhi5MyiQdcxRgbwyg2H5oEBJc6RZsDWXAMwSkA78evXsZ8js3w/018h14KZR01OxuEtiidGn1V0sS1sSZXNRhBYwSAvSm4orXCBgyyhfhEA4OUCnYwS4n4qivrcyUH0gANAc2XCw4H9j6p81FyMXsN PEICHAYCHMO\konfu@PeiChayChmo
 ```
 
 **Расположение на локальной машине:**
+
 - Windows: `C:\Users\konfu\.ssh\google_compute_engine` (приватный)
 - Windows: `C:\Users\konfu\.ssh\google_compute_engine.pub` (публичный)
 
 **Расположение на сервере:**
+
 - Добавлен в: `/home/mflorinp1978/.ssh/authorized_keys`
 - Добавлен в: `/home/konfu/.ssh/authorized_keys` (если существует)
 
@@ -77,6 +79,7 @@ Host sigmatrade-direct
 ```
 
 **Использование:**
+
 ```powershell
 # Через IAP туннель
 ssh sigmatrade
@@ -207,6 +210,7 @@ nano .env
 ```
 
 **Заполнить:**
+
 - `TELEGRAM_BOT_TOKEN` - токен от @BotFather
 - `WALLET_PRIVATE_KEY` - приватный ключ кошелька
 - `WALLET_ADDRESS` - адрес кошелька (0x...)
@@ -276,6 +280,7 @@ docker-compose -f docker-compose.python.yml up -d --build
 ### Проблема: Permission denied при SSH
 
 **Решение:**
+
 1. Проверить что ключ добавлен в `authorized_keys` на сервере
 2. Проверить права: `chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys`
 3. Использовать gcloud для подключения
@@ -283,6 +288,7 @@ docker-compose -f docker-compose.python.yml up -d --build
 ### Проблема: Не могу подключиться через gcloud
 
 **Решение:**
+
 ```powershell
 # Проверить что сервер запущен
 gcloud compute instances list --project=telegram-bot-444304
@@ -297,6 +303,7 @@ gcloud config set project telegram-bot-444304
 ### Проблема: Docker permission denied
 
 **Решение:**
+
 ```bash
 # На сервере
 sudo usermod -aG docker $USER
@@ -309,7 +316,7 @@ ssh sigmatrade
 
 ## 📚 Дополнительная информация
 
-- **GCP Console:** https://console.cloud.google.com/compute/instancesDetail/zones/europe-north1-a/instances/sigmatrade-20251108-210354?project=telegram-bot-444304
+- **GCP Console:** <https://console.cloud.google.com/compute/instancesDetail/zones/europe-north1-a/instances/sigmatrade-20251108-210354?project=telegram-bot-444304>
 - **Документация деплоя:** `docs/deployment/DEPLOYMENT.md`
 - **Настройка сервера:** `docs/deployment/SIGMATRADE_SERVER_SETUP.md`
 
@@ -318,6 +325,7 @@ ssh sigmatrade
 ## 🔒 Безопасность
 
 ⚠️ **ВАЖНО:**
+
 - Этот файл содержит публичные ключи (безопасно)
 - НЕ коммитьте приватные ключи в репозиторий
 - Приватные ключи должны быть только в `C:\Users\konfu\.ssh\`
@@ -328,4 +336,3 @@ ssh sigmatrade
 **Дата создания:** 2025-01-15  
 **Последнее обновление:** 2025-01-15  
 **Версия:** 1.0
-

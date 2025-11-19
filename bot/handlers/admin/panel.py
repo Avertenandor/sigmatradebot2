@@ -732,13 +732,25 @@ async def handle_reopen_ticket(
     )
 
 
-@router.message(F.text == "🚫 Управление blacklist")
+@router.message(F.text == "🚫 Управление черным списком")
 async def handle_admin_blacklist_menu(
     message: Message,
     session: AsyncSession,
     **data: Any,
 ) -> None:
     """Redirect to blacklist management."""
+    from bot.handlers.admin.blacklist import show_blacklist
+    
+    await show_blacklist(message, session, **data)
+
+
+@router.message(F.text == "🚫 Управление blacklist")
+async def handle_admin_blacklist_menu_old(
+    message: Message,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """Redirect to blacklist management (backward compatibility)."""
     from bot.handlers.admin.blacklist import show_blacklist
     
     await show_blacklist(message, session, **data)
@@ -825,3 +837,27 @@ async def handle_admin_withdrawals(
 
 
 # Broadcast handler is now in broadcast.py as @router.message(F.text == "📢 Рассылка")
+
+
+@router.message(F.text == "⚙️ Настроить уровни депозитов")
+async def handle_admin_deposit_settings(
+    message: Message,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """Redirect to deposit settings management."""
+    from bot.handlers.admin.deposit_settings import show_deposit_settings
+    
+    await show_deposit_settings(message, session, **data)
+
+
+@router.message(F.text == "👥 Управление админами")
+async def handle_admin_management(
+    message: Message,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """Redirect to admin management."""
+    from bot.handlers.admin.management import show_admin_management
+    
+    await show_admin_management(message, session, **data)

@@ -6,7 +6,7 @@ Tracks user appeals for blocked accounts.
 
 from datetime import UTC, datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -53,7 +53,7 @@ class Appeal(Base):
 
     # User who submitted appeal
     user_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
 
     # Related blacklist entry
@@ -71,7 +71,7 @@ class Appeal(Base):
 
     # Review information (optional, set when reviewed)
     reviewed_by_admin_id: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("admins.id", ondelete="SET NULL"), nullable=True
+        Integer, ForeignKey("admins.id", ondelete="SET NULL"), nullable=True
     )
 
     review_notes: Mapped[str | None] = mapped_column(Text, nullable=True)

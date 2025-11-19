@@ -24,6 +24,7 @@ from app.models.base import Base
 if TYPE_CHECKING:
     from app.models.deposit import Deposit
     from app.models.transaction import Transaction
+    from app.models.user_notification_settings import UserNotificationSettings
 
 
 class User(Base):
@@ -45,7 +46,9 @@ class User(Base):
     )
 
     # Primary key
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(
+        Integer, primary_key=True, autoincrement=True
+    )
 
     # Telegram data
     telegram_id: Mapped[int] = mapped_column(
@@ -144,6 +147,14 @@ class User(Base):
     transactions: Mapped[list["Transaction"]] = relationship(
         "Transaction",
         back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    # Notification settings relationship
+    notification_settings: Mapped["UserNotificationSettings | None"] = relationship(
+        "UserNotificationSettings",
+        back_populates="user",
+        uselist=False,
         cascade="all, delete-orphan",
     )
 

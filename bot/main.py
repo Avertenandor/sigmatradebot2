@@ -182,7 +182,7 @@ async def main() -> None:  # noqa: C901
     from bot.handlers import (
         appeal,
         deposit,
-        # finpass_recovery,  # Temporarily disabled due to encoding issues
+        finpass_recovery,
         instructions,
         menu,
         profile,

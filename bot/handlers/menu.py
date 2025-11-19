@@ -22,6 +22,8 @@ from bot.keyboards.reply import (
     settings_keyboard,
     withdrawal_keyboard,
 )
+from bot.states.profile_update import ProfileUpdateStates
+from bot.states.registration import RegistrationStates
 
 router = Router()
 
@@ -498,6 +500,13 @@ async def show_my_profile(
         f"💳 Кошелек: `{wallet_display}`\n\n"
         f"*Статус:*\n"
         f"{verify_emoji} Верификация: {verify_status}\n"
+    )
+    
+    # Add warning for unverified users
+    if not user.is_verified:
+        text += "⚠ Без верификации вывод средств недоступен\n\n"
+    
+    text += (
         f"{account_status}\n\n"
         f"*Баланс:*\n"
         f"💰 Доступно для вывода: *{available} USDT*\n"
@@ -569,3 +578,430 @@ async def show_my_wallet(
     )
 
     await message.answer(text, parse_mode="Markdown")
+
+
+@router.message(F.text == "📝 Регистрация")
+async def start_registration(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """
+    Start registration process from menu button.
+
+    Args:
+        message: Telegram message
+        session: Database session
+        state: FSM state
+        **data: Handler data
+    """
+    user: User | None = data.get("user")
+    
+    # If user already registered, show main menu
+    if user:
+        logger.info(
+            f"start_registration: User {user.telegram_id} already registered, "
+            "showing main menu"
+        )
+        is_admin = data.get("is_admin", False)
+        blacklist_repo = BlacklistRepository(session)
+        blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
+        await message.answer(
+            "✅ Вы уже зарегистрированы!",
+            reply_markup=main_menu_reply_keyboard(
+                user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+            ),
+        )
+        await state.clear()
+        return
+    
+    # Clear any active FSM state
+    await state.clear()
+    
+    # Show registration welcome message
+    welcome_text = (
+        "👋 **Добро пожаловать в SigmaTrade!**\n\n"
+        "SigmaTrade — это платформа для инвестиций в USDT на сети "
+        "Binance Smart Chain (BEP-20).\n\n"
+        "**Важно:**\n"
+        "• Работа ведется только с сетью **BSC (BEP-20)**\n"
+        "• Базовая валюта депозитов — **USDT BEP-20**\n\n"
+        "🌐 **Официальный сайт:**\n"
+        "[sigmatrade.org](https://sigmatrade.org/index.html#exchange)\n\n"
+        "Для начала работы необходимо пройти регистрацию.\n\n"
+        "📝 **Шаг 1:** Введите ваш BSC (BEP-20) адрес кошелька\n"
+        "Формат: `0x...` (42 символа)\n\n"
+        "❗️ **Внимание:** убедитесь, что адрес указан правильно!"
+    )
+    
+    from aiogram.types import ReplyKeyboardRemove
+    
+    await message.answer(
+        welcome_text,
+        parse_mode="Markdown",
+        disable_web_page_preview=False,
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    
+    # Start registration FSM
+    await state.set_state(RegistrationStates.waiting_for_wallet)
+
+
+@router.message(F.text == "📦 Мои депозиты")
+async def show_my_deposits(
+    message: Message,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """
+    Show user's active deposits.
+
+    Args:
+        message: Telegram message
+        session: Database session
+        **data: Handler data
+    """
+    user: User | None = data.get("user")
+    if not user:
+        await message.answer("❌ Ошибка: пользователь не найден")
+        return
+    
+    from app.services.deposit_service import DepositService
+    from bot.utils.formatters import format_usdt
+    from bot.keyboards.reply import main_menu_reply_keyboard
+    
+    deposit_service = DepositService(session)
+    
+    # Get active deposits
+    active_deposits = await deposit_service.get_active_deposits(user.id)
+    
+    if not active_deposits:
+        is_admin = data.get("is_admin", False)
+        blacklist_repo = BlacklistRepository(session)
+        blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
+        await message.answer(
+            "📦 *Мои депозиты*\n\n"
+            "У вас пока нет активных депозитов.\n\n"
+            "Создайте депозит через меню '💰 Депозит'.",
+            parse_mode="Markdown",
+            reply_markup=main_menu_reply_keyboard(
+                user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+            ),
+        )
+        return
+    
+    # Build deposits list
+    text = "📦 *Мои депозиты*\n\n"
+    
+    for deposit in active_deposits:
+        # Calculate ROI progress
+        roi_paid = getattr(deposit, "roi_paid_amount", 0) or 0
+        roi_cap = getattr(deposit, "roi_cap_amount", 0) or 0
+        
+        if roi_cap > 0:
+            roi_percent = (roi_paid / roi_cap) * 100
+            roi_status = f"{roi_percent:.1f}% из 500%"
+        else:
+            roi_status = "0% из 500%"
+        
+        # Check if completed
+        is_completed = getattr(deposit, "is_roi_completed", False)
+        status_emoji = "✅" if is_completed else "🟢"
+        status_text = "Закрыт (ROI 500%)" if is_completed else "Активен"
+        
+        created_date = deposit.created_at.strftime("%d.%m.%Y %H:%M")
+        
+        text += (
+            f"{status_emoji} *Уровень {deposit.level}*\n"
+            f"💰 Сумма: {format_usdt(deposit.amount)} USDT\n"
+            f"📊 ROI: {roi_status}\n"
+            f"📅 Создан: {created_date}\n"
+            f"📋 Статус: {status_text}\n"
+            f"─────────────────────────────\n\n"
+        )
+    
+    is_admin = data.get("is_admin", False)
+    blacklist_repo = BlacklistRepository(session)
+    blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
+    
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=main_menu_reply_keyboard(
+            user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+        ),
+    )
+
+
+@router.message(F.text == "🔔 Настройки уведомлений")
+async def show_notification_settings(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """
+    Show notification settings menu.
+
+    Args:
+        message: Telegram message
+        session: Database session
+        state: FSM state
+        **data: Handler data
+    """
+    user: User | None = data.get("user")
+    if not user:
+        await message.answer("❌ Ошибка: пользователь не найден")
+        return
+    
+    from app.services.user_notification_service import UserNotificationService
+    from bot.keyboards.inline import notification_settings_keyboard
+    
+    notification_service = UserNotificationService(session)
+    settings = await notification_service.get_settings(user.id)
+    await session.commit()
+    
+    # Build status text
+    deposit_status = "✅ Включены" if settings.deposit_notifications else "❌ Выключены"
+    withdrawal_status = "✅ Включены" if settings.withdrawal_notifications else "❌ Выключены"
+    marketing_status = "✅ Включены" if settings.marketing_notifications else "❌ Выключены"
+    
+    text = (
+        f"🔔 *Настройки уведомлений*\n\n"
+        f"Управляйте уведомлениями, которые вы хотите получать:\n\n"
+        f"💰 Уведомления о депозитах: {deposit_status}\n"
+        f"💸 Уведомления о выводах: {withdrawal_status}\n"
+        f"📢 Маркетинговые уведомления: {marketing_status}\n\n"
+        f"Используйте кнопки ниже для изменения настроек."
+    )
+    
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=notification_settings_keyboard(settings),
+    )
+
+
+@router.callback_query(F.data.startswith("toggle_notification_"))
+async def toggle_notification(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """
+    Toggle notification setting.
+
+    Args:
+        callback: Callback query
+        session: Database session
+        **data: Handler data
+    """
+    user: User | None = data.get("user")
+    if not user:
+        await callback.answer("❌ Ошибка: пользователь не найден", show_alert=True)
+        return
+    
+    from app.services.user_notification_service import UserNotificationService
+    from bot.keyboards.inline import notification_settings_keyboard
+    
+    # Parse callback data: toggle_notification_{setting_name}
+    setting_name = callback.data.replace("toggle_notification_", "")
+    
+    notification_service = UserNotificationService(session)
+    settings = await notification_service.get_settings(user.id)
+    
+    # Toggle the setting
+    if setting_name == "deposit":
+        new_value = not settings.deposit_notifications
+        await notification_service.update_settings(
+            user.id, deposit_notifications=new_value
+        )
+    elif setting_name == "withdrawal":
+        new_value = not settings.withdrawal_notifications
+        await notification_service.update_settings(
+            user.id, withdrawal_notifications=new_value
+        )
+    elif setting_name == "marketing":
+        new_value = not settings.marketing_notifications
+        await notification_service.update_settings(
+            user.id, marketing_notifications=new_value
+        )
+    else:
+        await callback.answer("❌ Неизвестная настройка", show_alert=True)
+        return
+    
+    await session.commit()
+    
+    # Refresh settings
+    settings = await notification_service.get_settings(user.id)
+    
+    # Update message
+    deposit_status = "✅ Включены" if settings.deposit_notifications else "❌ Выключены"
+    withdrawal_status = "✅ Включены" if settings.withdrawal_notifications else "❌ Выключены"
+    marketing_status = "✅ Включены" if settings.marketing_notifications else "❌ Выключены"
+    
+    text = (
+        f"🔔 *Настройки уведомлений*\n\n"
+        f"Управляйте уведомлениями, которые вы хотите получать:\n\n"
+        f"💰 Уведомления о депозитах: {deposit_status}\n"
+        f"💸 Уведомления о выводах: {withdrawal_status}\n"
+        f"📢 Маркетинговые уведомления: {marketing_status}\n\n"
+        f"Используйте кнопки ниже для изменения настроек."
+    )
+    
+    if callback.message:
+        await callback.message.edit_text(
+            text,
+            parse_mode="Markdown",
+            reply_markup=notification_settings_keyboard(settings),
+        )
+    
+    await callback.answer("✅ Настройка обновлена")
+
+
+@router.message(F.text == "📝 Обновить контакты")
+async def start_update_contacts(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """
+    Start contact update flow.
+
+    Args:
+        message: Telegram message
+        session: Database session
+        state: FSM state
+        **data: Handler data
+    """
+    user: User | None = data.get("user")
+    if not user:
+        await message.answer("❌ Ошибка: пользователь не найден")
+        return
+    
+    # Show current contacts
+    phone_display = user.phone or "не указан"
+    email_display = user.email or "не указан"
+    
+    text = (
+        f"📝 *Обновление контактов*\n\n"
+        f"Текущие контакты:\n"
+        f"📞 Телефон: {phone_display}\n"
+        f"📧 Email: {email_display}\n\n"
+        f"Введите новый номер телефона или отправьте /skip чтобы пропустить:"
+    )
+    
+    await message.answer(text, parse_mode="Markdown")
+    await state.set_state(ProfileUpdateStates.waiting_for_phone)
+
+
+@router.message(ProfileUpdateStates.waiting_for_phone)
+async def process_phone_update(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """
+    Process phone number update.
+
+    Args:
+        message: Telegram message
+        session: Database session
+        state: FSM state
+        **data: Handler data
+    """
+    user: User | None = data.get("user")
+    if not user:
+        await message.answer("❌ Ошибка: пользователь не найден")
+        await state.clear()
+        return
+    
+    phone = message.text.strip() if message.text and message.text != "/skip" else None
+    
+    if phone:
+        # Basic phone validation (can be enhanced)
+        if len(phone) < 10:
+            await message.answer(
+                "❌ Номер телефона слишком короткий. Попробуйте еще раз или отправьте /skip:"
+            )
+            return
+        
+        user.phone = phone
+    else:
+        user.phone = None
+    
+    await session.commit()
+    
+    # Move to email update
+    text = (
+        f"✅ Телефон {'обновлен' if phone else 'оставлен без изменений'}\n\n"
+        f"Введите новый email адрес или отправьте /skip чтобы пропустить:"
+    )
+    
+    await message.answer(text, parse_mode="Markdown")
+    await state.set_state(ProfileUpdateStates.waiting_for_email)
+
+
+@router.message(ProfileUpdateStates.waiting_for_email)
+async def process_email_update(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """
+    Process email update.
+
+    Args:
+        message: Telegram message
+        session: Database session
+        state: FSM state
+        **data: Handler data
+    """
+    user: User | None = data.get("user")
+    if not user:
+        await message.answer("❌ Ошибка: пользователь не найден")
+        await state.clear()
+        return
+    
+    email = message.text.strip() if message.text and message.text != "/skip" else None
+    
+    if email:
+        # Basic email validation
+        if "@" not in email or "." not in email:
+            await message.answer(
+                "❌ Неверный формат email. Попробуйте еще раз или отправьте /skip:"
+            )
+            return
+        
+        user.email = email
+    else:
+        user.email = None
+    
+    await session.commit()
+    await state.clear()
+    
+    # Show updated contacts
+    phone_display = user.phone or "не указан"
+    email_display = user.email or "не указан"
+    
+    is_admin = data.get("is_admin", False)
+    blacklist_repo = BlacklistRepository(session)
+    blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
+    
+    text = (
+        f"✅ *Контакты обновлены*\n\n"
+        f"📞 Телефон: {phone_display}\n"
+        f"📧 Email: {email_display}"
+    )
+    
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=main_menu_reply_keyboard(
+            user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+        ),
+    )

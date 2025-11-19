@@ -21,7 +21,7 @@ from bot.states.admin_states import AdminStates
 router = Router()
 
 
-@router.message(F.text == "🚫 Управление blacklist")
+@router.message(F.text.in_({"🚫 Управление черным списком", "🚫 Управление blacklist"}))
 async def show_blacklist(
     message: Message,
     session: AsyncSession,

@@ -46,8 +46,9 @@ async def withdraw_all(
     # Check verification status (from TZ: withdrawals require verification)
     if not user.is_verified:
         await message.answer(
-            "❌ Для вывода средств необходимо пройти верификацию!\n\n"
-            "Используйте кнопку '✅ Пройти верификацию' в настройках.",
+            "❌ Вывод недоступен до верификации!\n\n"
+            "Для вывода средств необходимо пройти верификацию.\n"
+            "Сначала нажмите '✅ Пройти верификацию' в главном меню.",
             reply_markup=withdrawal_keyboard(),
         )
         return
@@ -150,8 +151,10 @@ async def process_withdrawal_amount(
     # Check verification status (from TZ: withdrawals require verification)
     if not user.is_verified:
         await message.answer(
-            "❌ Для вывода средств необходимо пройти верификацию!\n\n"
-            "Используйте кнопку '✅ Пройти верификацию' в настройках."
+            "❌ Вывод недоступен до верификации!\n\n"
+            "Для вывода средств необходимо пройти верификацию.\n"
+            "Сначала нажмите '✅ Пройти верификацию' в главном меню.",
+            reply_markup=withdrawal_keyboard(),
         )
         await state.clear()
         return

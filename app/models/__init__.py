@@ -49,6 +49,7 @@ from app.models.transaction import Transaction
 # Core Models
 from app.models.user import User
 from app.models.user_action import UserAction
+from app.models.user_notification_settings import UserNotificationSettings
 from app.models.wallet_change_request import WalletChangeRequest
 
 __all__ = [
@@ -91,5 +92,6 @@ __all__ = [
     # System Models
     "SystemSetting",
     "UserAction",
+    "UserNotificationSettings",
     "WalletChangeRequest",
 ]
