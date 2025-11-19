@@ -10,11 +10,8 @@ from aiogram import F, Router
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
-    CallbackQuery,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
     Message,
-        ReplyKeyboardRemove,
+    ReplyKeyboardRemove,
 )
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -302,7 +299,10 @@ async def process_wallet(
 
 @router.message(RegistrationStates.waiting_for_financial_password)
 async def process_financial_password(
-    message: Message, state: FSMContext
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession | None = None,
+    **data: Any,
 ) -> None:
     """
     Process financial password.
@@ -310,6 +310,8 @@ async def process_financial_password(
     Args:
         message: Telegram message
         state: FSM state
+        session: Database session (optional, can be from data)
+        data: Additional data from middlewares
     """
     # КРИТИЧНО: пропускаем /start к основному обработчику
     if message.text and message.text.startswith("/start"):
@@ -321,19 +323,31 @@ async def process_financial_password(
 
     if is_menu_button(message.text):
         await state.clear()
+        # Get session from data if not provided
+        if session is None:
+            session = data.get("session")
         user: User | None = data.get("user")
         is_admin = data.get("is_admin", False)
         from app.repositories.blacklist_repository import BlacklistRepository
-        blacklist_repo = BlacklistRepository(session)
-        blacklist_entry = None
-        if user:
-            blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
-        await message.answer(
-            "📊 Главное меню",
-            reply_markup=main_menu_reply_keyboard(
-                user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
-            ),
-        )
+        if session:
+            blacklist_repo = BlacklistRepository(session)
+            blacklist_entry = None
+            if user:
+                blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
+            await message.answer(
+                "📊 Главное меню",
+                reply_markup=main_menu_reply_keyboard(
+                    user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+                ),
+            )
+        else:
+            # Fallback if no session
+            await message.answer(
+                "📊 Главное меню",
+                reply_markup=main_menu_reply_keyboard(
+                    user=user, blacklist_entry=None, is_admin=is_admin
+                ),
+            )
         return
 
     password = message.text.strip()
@@ -550,59 +564,47 @@ async def process_password_confirmation(
     )
 
     # Ask if user wants to provide contacts (optional)
-    contacts_keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="✅ Да, оставить контакты",
-                    callback_data="registration:add_contacts",
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    text="⏭ Пропустить",
-                    callback_data="registration:skip_contacts",
-                ),
-            ],
-        ]
-    )
+    from bot.keyboards.reply import contacts_choice_keyboard
 
     await message.answer(
         "📝 **Опционально:** Вы можете оставить контакты для связи "
         "(телефон и/или email). Это необязательно.\n\n"
         "Хотите оставить контакты?",
         parse_mode="Markdown",
-        reply_markup=contacts_keyboard,
+        reply_markup=contacts_choice_keyboard(),
     )
 
     await state.set_state(RegistrationStates.waiting_for_contacts_choice)
 
 
-@router.callback_query(F.data == "registration:add_contacts")
-async def start_contacts_collection(
-    callback: CallbackQuery,
+@router.message(RegistrationStates.waiting_for_contacts_choice)
+async def handle_contacts_choice(
+    message: Message,
     state: FSMContext,
+    **data: Any,
 ) -> None:
-    """Start optional contacts collection."""
-    await callback.message.edit_text(
-        "📞 Введите номер телефона (или отправьте /skip чтобы пропустить):",
-    )
-    await callback.answer()
-    await state.set_state(RegistrationStates.waiting_for_phone)
-
-
-@router.callback_query(F.data == "registration:skip_contacts")
-async def skip_contacts(
-    callback: CallbackQuery,
-    state: FSMContext,
-) -> None:
-    """Skip contacts collection."""
-    await callback.message.edit_text(
-        "✅ Контакты пропущены. Вы можете добавить их позже "
-        "в настройках профиля.",
-    )
-    await callback.answer()
-    await state.clear()
+    """Handle contacts choice during registration."""
+    if message.text == "✅ Да, оставить контакты":
+        await message.answer(
+            "📞 Введите номер телефона (или отправьте /skip чтобы пропустить):",
+        )
+        await state.set_state(RegistrationStates.waiting_for_phone)
+    elif message.text == "⏭ Пропустить":
+        await message.answer(
+            "✅ Контакты пропущены. Вы можете добавить их позже "
+            "в настройках профиля.",
+        )
+        await state.clear()
+    else:
+        # If user sent something else, show menu again
+        from bot.keyboards.reply import contacts_choice_keyboard
+        await message.answer(
+            "📝 **Опционально:** Вы можете оставить контакты для связи "
+            "(телефон и/или email). Это необязательно.\n\n"
+            "Хотите оставить контакты?",
+            parse_mode="Markdown",
+            reply_markup=contacts_choice_keyboard(),
+        )
 
 
 @router.message(RegistrationStates.waiting_for_phone)
@@ -708,11 +710,12 @@ async def process_email(
             )
             return
 
-    # Get phone from state
-    data = await state.get_data()
-    phone = data.get("phone")
+    # Get phone from state (don't override data parameter)
+    state_data = await state.get_data()
+    phone = state_data.get("phone")
 
     # Update user with contacts
+    # Get user from middleware data (parameter), not from state
     user_service = UserService(session)
     current_user: User | None = data.get("user")
     if not current_user:

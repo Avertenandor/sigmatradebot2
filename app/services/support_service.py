@@ -33,25 +33,34 @@ class SupportService:
 
     async def create_ticket(
         self,
-        user_id: int,
+        user_id: int | None,
         category: str,
         initial_message: str | None = None,
         attachments: list[dict[str, Any]] | None = None,
+        telegram_id: int | None = None,
     ) -> tuple[SupportTicket | None, str | None]:
         """
         Create new support ticket.
 
         Args:
-            user_id: User ID
+            user_id: User ID (None for guest tickets)
             category: Ticket category
             initial_message: Initial message text
             attachments: List of attachment dicts
+            telegram_id: Telegram ID (required for guest tickets when user_id is None)
 
         Returns:
             Tuple of (ticket, error_message)
         """
-        # Check if user already has active ticket
-        existing = await self.ticket_repo.get_active_by_user(user_id)
+        # Validate: if user_id is None, telegram_id must be provided
+        if user_id is None and telegram_id is None:
+            return None, "Для гостевых тикетов требуется telegram_id"
+
+        # Check if user/guest already has active ticket
+        if user_id is not None:
+            existing = await self.ticket_repo.get_active_by_user(user_id)
+        else:
+            existing = await self.ticket_repo.get_active_by_telegram_id(telegram_id)
 
         if existing:
             return None, (
@@ -62,6 +71,7 @@ class SupportService:
         # Create ticket
         ticket = await self.ticket_repo.create(
             user_id=user_id,
+            telegram_id=telegram_id,
             category=category,
             status=SupportStatus.OPEN.value,
             last_user_message_at=datetime.now(UTC),
@@ -82,7 +92,9 @@ class SupportService:
             extra={
                 "ticket_id": ticket.id,
                 "user_id": user_id,
+                "telegram_id": telegram_id,
                 "category": category,
+                "is_guest": user_id is None,
             },
         )
 

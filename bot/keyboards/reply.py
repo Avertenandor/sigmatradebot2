@@ -62,9 +62,6 @@ def main_menu_reply_keyboard(
             KeyboardButton(text="💬 Поддержка"),
         )
         builder.row(
-            KeyboardButton(text="⚙️ Настройки"),
-        )
-        builder.row(
             KeyboardButton(text="📝 Регистрация"),
         )
     else:
@@ -522,6 +519,96 @@ def admin_deposit_settings_keyboard() -> ReplyKeyboardMarkup:
     )
     builder.row(
         KeyboardButton(text="👑 Админ-панель"),
+    )
+
+    return builder.as_markup(resize_keyboard=True)
+
+
+def notification_settings_reply_keyboard(
+    deposit_enabled: bool,
+    withdrawal_enabled: bool,
+    marketing_enabled: bool,
+) -> ReplyKeyboardMarkup:
+    """
+    Notification settings reply keyboard.
+
+    Args:
+        deposit_enabled: Whether deposit notifications are enabled
+        withdrawal_enabled: Whether withdrawal notifications are enabled
+        marketing_enabled: Whether marketing notifications are enabled
+
+    Returns:
+        ReplyKeyboardMarkup with notification toggle buttons
+    """
+    builder = ReplyKeyboardBuilder()
+
+    # Deposit notifications toggle
+    deposit_text = (
+        "✅ Уведомления о депозитах" if deposit_enabled
+        else "❌ Уведомления о депозитах"
+    )
+    builder.row(
+        KeyboardButton(text=deposit_text),
+    )
+
+    # Withdrawal notifications toggle
+    withdrawal_text = (
+        "✅ Уведомления о выводах" if withdrawal_enabled
+        else "❌ Уведомления о выводах"
+    )
+    builder.row(
+        KeyboardButton(text=withdrawal_text),
+    )
+
+    # Marketing notifications toggle
+    marketing_text = (
+        "✅ Маркетинговые уведомления" if marketing_enabled
+        else "❌ Маркетинговые уведомления"
+    )
+    builder.row(
+        KeyboardButton(text=marketing_text),
+    )
+
+    builder.row(
+        KeyboardButton(text="📊 Главное меню"),
+    )
+
+    return builder.as_markup(resize_keyboard=True)
+
+
+def contacts_choice_keyboard() -> ReplyKeyboardMarkup:
+    """
+    Contacts choice keyboard for registration.
+
+    Returns:
+        ReplyKeyboardMarkup with contacts choice options
+    """
+    builder = ReplyKeyboardBuilder()
+
+    builder.row(
+        KeyboardButton(text="✅ Да, оставить контакты"),
+    )
+    builder.row(
+        KeyboardButton(text="⏭ Пропустить"),
+    )
+
+    return builder.as_markup(resize_keyboard=True)
+
+
+def finpass_recovery_keyboard() -> ReplyKeyboardMarkup:
+    """
+    Financial password recovery keyboard.
+
+    Returns:
+        ReplyKeyboardMarkup with recovery options
+    """
+    builder = ReplyKeyboardBuilder()
+
+    builder.row(
+        KeyboardButton(text="❌ Отмена"),
+    )
+    builder.row(
+        KeyboardButton(text="📊 Главное меню"),
     )
 
     return builder.as_markup(resize_keyboard=True)

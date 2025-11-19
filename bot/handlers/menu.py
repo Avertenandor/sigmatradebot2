@@ -8,7 +8,7 @@ from typing import Any
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import Message
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -126,53 +126,6 @@ async def handle_main_menu(
     await show_main_menu(message, session, user, state, **safe_data)
 
 
-@router.callback_query(F.data == "main_menu")
-async def handle_main_menu_callback(
-    callback: CallbackQuery,
-    session: AsyncSession,
-    state: FSMContext,
-    **data: Any,
-) -> None:
-    """Handle main menu callback from inline keyboard."""
-    user: User | None = data.get("user")
-    if not user:
-        # Try to get user from database
-        from app.repositories.user_repository import UserRepository
-        user_repo = UserRepository(session)
-        if callback.from_user:
-            users = await user_repo.find_by(telegram_id=callback.from_user.id)
-            user = users[0] if users else None
-        if not user:
-            await callback.answer("⚠️ Ошибка: не удалось загрузить данные пользователя", show_alert=True)
-            return
-    
-    await state.clear()
-    
-    # Get blacklist status
-    blacklist_repo = BlacklistRepository(session)
-    blacklist_entry = await blacklist_repo.find_by_telegram_id(
-        user.telegram_id
-    )
-    
-    # Get is_admin from middleware data (set by AuthMiddleware)
-    is_admin = data.get("is_admin", False)
-    
-    text = (
-        f"📊 *Главное меню*\n\n"
-        f"Добро пожаловать, {user.username or 'пользователь'}!\n\n"
-        f"Выберите действие из меню ниже:"
-    )
-    
-    if callback.message:
-        # For reply keyboards, we need to send a new message, not edit
-        await callback.message.answer(
-            text,
-            reply_markup=main_menu_reply_keyboard(
-                user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
-            ),
-            parse_mode="Markdown",
-        )
-        await callback.answer()
 
 
 @router.message(F.text == "📊 Баланс")
@@ -756,7 +709,7 @@ async def show_notification_settings(
         return
     
     from app.services.user_notification_service import UserNotificationService
-    from bot.keyboards.inline import notification_settings_keyboard
+    from bot.keyboards.reply import notification_settings_reply_keyboard
     
     notification_service = UserNotificationService(session)
     settings = await notification_service.get_settings(user.id)
@@ -779,58 +732,40 @@ async def show_notification_settings(
     await message.answer(
         text,
         parse_mode="Markdown",
-        reply_markup=notification_settings_keyboard(settings),
+        reply_markup=notification_settings_reply_keyboard(
+            deposit_enabled=settings.deposit_notifications,
+            withdrawal_enabled=settings.withdrawal_notifications,
+            marketing_enabled=settings.marketing_notifications,
+        ),
     )
 
 
-@router.callback_query(F.data.startswith("toggle_notification_"))
-async def toggle_notification(
-    callback: CallbackQuery,
+@router.message(F.text.in_({
+    "✅ Уведомления о депозитах",
+    "❌ Уведомления о депозитах",
+}))
+async def toggle_deposit_notification(
+    message: Message,
     session: AsyncSession,
     **data: Any,
 ) -> None:
-    """
-    Toggle notification setting.
-
-    Args:
-        callback: Callback query
-        session: Database session
-        **data: Handler data
-    """
+    """Toggle deposit notifications."""
     user: User | None = data.get("user")
     if not user:
-        await callback.answer("❌ Ошибка: пользователь не найден", show_alert=True)
+        await message.answer("❌ Ошибка: пользователь не найден")
         return
     
     from app.services.user_notification_service import UserNotificationService
-    from bot.keyboards.inline import notification_settings_keyboard
-    
-    # Parse callback data: toggle_notification_{setting_name}
-    setting_name = callback.data.replace("toggle_notification_", "")
+    from bot.keyboards.reply import notification_settings_reply_keyboard
     
     notification_service = UserNotificationService(session)
     settings = await notification_service.get_settings(user.id)
     
-    # Toggle the setting
-    if setting_name == "deposit":
-        new_value = not settings.deposit_notifications
-        await notification_service.update_settings(
-            user.id, deposit_notifications=new_value
-        )
-    elif setting_name == "withdrawal":
-        new_value = not settings.withdrawal_notifications
-        await notification_service.update_settings(
-            user.id, withdrawal_notifications=new_value
-        )
-    elif setting_name == "marketing":
-        new_value = not settings.marketing_notifications
-        await notification_service.update_settings(
-            user.id, marketing_notifications=new_value
-        )
-    else:
-        await callback.answer("❌ Неизвестная настройка", show_alert=True)
-        return
-    
+    # Toggle deposit notifications
+    new_value = not settings.deposit_notifications
+    await notification_service.update_settings(
+        user.id, deposit_notifications=new_value
+    )
     await session.commit()
     
     # Refresh settings
@@ -850,14 +785,127 @@ async def toggle_notification(
         f"Используйте кнопки ниже для изменения настроек."
     )
     
-    if callback.message:
-        await callback.message.edit_text(
-            text,
-            parse_mode="Markdown",
-            reply_markup=notification_settings_keyboard(settings),
-        )
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=notification_settings_reply_keyboard(
+            deposit_enabled=settings.deposit_notifications,
+            withdrawal_enabled=settings.withdrawal_notifications,
+            marketing_enabled=settings.marketing_notifications,
+        ),
+    )
+
+
+@router.message(F.text.in_({
+    "✅ Уведомления о выводах",
+    "❌ Уведомления о выводах",
+}))
+async def toggle_withdrawal_notification(
+    message: Message,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """Toggle withdrawal notifications."""
+    user: User | None = data.get("user")
+    if not user:
+        await message.answer("❌ Ошибка: пользователь не найден")
+        return
     
-    await callback.answer("✅ Настройка обновлена")
+    from app.services.user_notification_service import UserNotificationService
+    from bot.keyboards.reply import notification_settings_reply_keyboard
+    
+    notification_service = UserNotificationService(session)
+    settings = await notification_service.get_settings(user.id)
+    
+    # Toggle withdrawal notifications
+    new_value = not settings.withdrawal_notifications
+    await notification_service.update_settings(
+        user.id, withdrawal_notifications=new_value
+    )
+    await session.commit()
+    
+    # Refresh settings
+    settings = await notification_service.get_settings(user.id)
+    
+    # Update message
+    deposit_status = "✅ Включены" if settings.deposit_notifications else "❌ Выключены"
+    withdrawal_status = "✅ Включены" if settings.withdrawal_notifications else "❌ Выключены"
+    marketing_status = "✅ Включены" if settings.marketing_notifications else "❌ Выключены"
+    
+    text = (
+        f"🔔 *Настройки уведомлений*\n\n"
+        f"Управляйте уведомлениями, которые вы хотите получать:\n\n"
+        f"💰 Уведомления о депозитах: {deposit_status}\n"
+        f"💸 Уведомления о выводах: {withdrawal_status}\n"
+        f"📢 Маркетинговые уведомления: {marketing_status}\n\n"
+        f"Используйте кнопки ниже для изменения настроек."
+    )
+    
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=notification_settings_reply_keyboard(
+            deposit_enabled=settings.deposit_notifications,
+            withdrawal_enabled=settings.withdrawal_notifications,
+            marketing_enabled=settings.marketing_notifications,
+        ),
+    )
+
+
+@router.message(F.text.in_({
+    "✅ Маркетинговые уведомления",
+    "❌ Маркетинговые уведомления",
+}))
+async def toggle_marketing_notification(
+    message: Message,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """Toggle marketing notifications."""
+    user: User | None = data.get("user")
+    if not user:
+        await message.answer("❌ Ошибка: пользователь не найден")
+        return
+    
+    from app.services.user_notification_service import UserNotificationService
+    from bot.keyboards.reply import notification_settings_reply_keyboard
+    
+    notification_service = UserNotificationService(session)
+    settings = await notification_service.get_settings(user.id)
+    
+    # Toggle marketing notifications
+    new_value = not settings.marketing_notifications
+    await notification_service.update_settings(
+        user.id, marketing_notifications=new_value
+    )
+    await session.commit()
+    
+    # Refresh settings
+    settings = await notification_service.get_settings(user.id)
+    
+    # Update message
+    deposit_status = "✅ Включены" if settings.deposit_notifications else "❌ Выключены"
+    withdrawal_status = "✅ Включены" if settings.withdrawal_notifications else "❌ Выключены"
+    marketing_status = "✅ Включены" if settings.marketing_notifications else "❌ Выключены"
+    
+    text = (
+        f"🔔 *Настройки уведомлений*\n\n"
+        f"Управляйте уведомлениями, которые вы хотите получать:\n\n"
+        f"💰 Уведомления о депозитах: {deposit_status}\n"
+        f"💸 Уведомления о выводах: {withdrawal_status}\n"
+        f"📢 Маркетинговые уведомления: {marketing_status}\n\n"
+        f"Используйте кнопки ниже для изменения настроек."
+    )
+    
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=notification_settings_reply_keyboard(
+            deposit_enabled=settings.deposit_notifications,
+            withdrawal_enabled=settings.withdrawal_notifications,
+            marketing_enabled=settings.marketing_notifications,
+        ),
+    )
 
 
 @router.message(F.text == "📝 Обновить контакты")

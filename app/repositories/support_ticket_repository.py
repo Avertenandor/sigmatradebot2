@@ -104,3 +104,29 @@ class SupportTicketRepository(BaseRepository[SupportTicket]):
         return await self.get_by(
             user_id=user_id, status=SupportTicketStatus.OPEN.value
         )
+
+    async def get_active_by_telegram_id(
+        self, telegram_id: int
+    ) -> SupportTicket | None:
+        """
+        Get active (open) ticket for guest by telegram_id.
+
+        Args:
+            telegram_id: Telegram ID
+
+        Returns:
+            Active ticket or None
+        """
+        from app.models.enums import SupportTicketStatus
+        from sqlalchemy import select
+
+        stmt = (
+            select(SupportTicket)
+            .where(
+                SupportTicket.telegram_id == telegram_id,
+                SupportTicket.status == SupportTicketStatus.OPEN.value,
+                SupportTicket.user_id.is_(None)  # Only guest tickets
+            )
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()

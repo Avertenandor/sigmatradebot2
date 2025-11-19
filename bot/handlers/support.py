@@ -72,14 +72,13 @@ async def process_ticket_message(
     from app.models.enums import SupportCategory
     from app.services.support_service import SupportService
 
-    if not user:
-        await state.clear()
-        await message.answer(
-            "❌ Ошибка контекста пользователя. Повторите /start"
-        )
-        return
-
     session_factory = data.get("session_factory")
+    telegram_id = message.from_user.id if message.from_user else None
+    
+    if not telegram_id:
+        await state.clear()
+        await message.answer("❌ Ошибка: не удалось определить пользователя")
+        return
     
     try:
         if not session_factory:
@@ -91,8 +90,11 @@ async def process_ticket_message(
                 return
             
             support_service = SupportService(session)
+            # Create ticket: use user.id if user exists, otherwise None for guest ticket
+            user_id = user.id if user else None
             ticket, error = await support_service.create_ticket(
-                user_id=user.id,
+                user_id=user_id,
+                telegram_id=telegram_id if user_id is None else None,
                 category=SupportCategory.OTHER,
                 initial_message=message.text,
             )
@@ -101,8 +103,11 @@ async def process_ticket_message(
             async with session_factory() as session:
                 async with session.begin():
                     support_service = SupportService(session)
+                    # Create ticket: use user.id if user exists, otherwise None for guest ticket
+                    user_id = user.id if user else None
                     ticket, error = await support_service.create_ticket(
-                        user_id=user.id,
+                        user_id=user_id,
+                        telegram_id=telegram_id if user_id is None else None,
                         category=SupportCategory.OTHER,
                         initial_message=message.text,
                     )
@@ -134,12 +139,22 @@ async def process_ticket_message(
         from bot.main import bot_instance
 
         if bot_instance:
-            admin_text = (
-                f"🆕 *Новое обращение #{ticket.id}*\n\n"
-                f"От: @{user.username or 'пользователь'}"
-                f" (`{user.telegram_id}`)\n"
-                f"Текст: {message.text}"
-            )
+            # Format admin notification
+            if user:
+                admin_text = (
+                    f"🆕 *Новое обращение #{ticket.id}*\n\n"
+                    f"От: @{user.username or 'пользователь'} "
+                    f"(`{user.telegram_id}`)\n"
+                    f"Текст: {message.text}"
+                )
+            else:
+                # Guest ticket
+                username = message.from_user.username if message.from_user else "гость"
+                admin_text = (
+                    f"🆕 *Новое обращение #{ticket.id}* (Гость)\n\n"
+                    f"От: @{username} (`{telegram_id}`)\n"
+                    f"Текст: {message.text}"
+                )
 
             for admin_id in settings.get_admin_ids():
                 try:

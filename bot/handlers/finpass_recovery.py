@@ -8,8 +8,7 @@ from typing import Any
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, InlineKeyboardButton, Message
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.types import Message
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,20 +21,24 @@ router = Router()
 
 
 async def _start_finpass_recovery_flow(
-    message_or_callback: Message | CallbackQuery,
+    message: Message,
     session: AsyncSession,
     user: User,
     state: FSMContext,
+    **data: Any,
 ) -> None:
     """
     Common logic for starting financial password recovery.
 
     Args:
-        message_or_callback: Message or CallbackQuery
+        message: Telegram message
         session: Database session
         user: Current user
         state: FSM state
+        **data: Handler data
     """
+    from bot.keyboards.reply import finpass_recovery_keyboard, main_menu_reply_keyboard
+    
     recovery_service = FinpassRecoveryService(session)
 
     # Check if already has pending request
@@ -49,20 +52,18 @@ async def _start_finpass_recovery_flow(
             "Дождитесь рассмотрения администратором."
         )
         
-        if isinstance(message_or_callback, CallbackQuery):
-            await message_or_callback.message.edit_text(
-                text,
-                reply_markup=InlineKeyboardBuilder()
-                .row(
-                    InlineKeyboardButton(
-                        text="◀️ Назад", callback_data="menu:settings"
-                    )
-                )
-                .as_markup(),
-            )
-            await message_or_callback.answer()
-        else:
-            await message_or_callback.answer(text, parse_mode="Markdown")
+        is_admin = data.get("is_admin", False)
+        from app.repositories.blacklist_repository import BlacklistRepository
+        blacklist_repo = BlacklistRepository(session)
+        blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
+        
+        await message.answer(
+            text,
+            parse_mode="Markdown",
+            reply_markup=main_menu_reply_keyboard(
+                user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+            ),
+        )
         return
 
     # Check if has active recovery (approved but not verified)
@@ -78,25 +79,18 @@ async def _start_finpass_recovery_flow(
             "Используйте раздел 'Вывод' для проверки нового пароля."
         )
         
-        if isinstance(message_or_callback, CallbackQuery):
-            await message_or_callback.message.edit_text(
-                text,
-                reply_markup=InlineKeyboardBuilder()
-                .row(
-                    InlineKeyboardButton(
-                        text="💸 Вывод", callback_data="menu:withdrawal"
-                    )
-                )
-                .row(
-                    InlineKeyboardButton(
-                        text="◀️ Назад", callback_data="menu:settings"
-                    )
-                )
-                .as_markup(),
-            )
-            await message_or_callback.answer()
-        else:
-            await message_or_callback.answer(text, parse_mode="Markdown")
+        is_admin = data.get("is_admin", False)
+        from app.repositories.blacklist_repository import BlacklistRepository
+        blacklist_repo = BlacklistRepository(session)
+        blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
+        
+        await message.answer(
+            text,
+            parse_mode="Markdown",
+            reply_markup=main_menu_reply_keyboard(
+                user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+            ),
+        )
         return
 
     # Show recovery warning
@@ -109,20 +103,11 @@ async def _start_finpass_recovery_flow(
         "Укажите причину восстановления пароля:"
     )
     
-    if isinstance(message_or_callback, CallbackQuery):
-        await message_or_callback.message.edit_text(
-            text,
-            reply_markup=InlineKeyboardBuilder()
-            .row(
-                InlineKeyboardButton(
-                    text="❌ Отмена", callback_data="menu:settings"
-                )
-            )
-            .as_markup(),
-        )
-        await message_or_callback.answer()
-    else:
-        await message_or_callback.answer(text, parse_mode="Markdown")
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=finpass_recovery_keyboard(),
+    )
 
     await state.set_state(FinpassRecoveryStates.waiting_for_reason)
 
@@ -145,26 +130,7 @@ async def start_finpass_recovery_from_button(
         state: FSM state
         **data: Handler data
     """
-    await _start_finpass_recovery_flow(message, session, user, state)
-
-
-@router.callback_query(lambda c: c.data == "menu:finpass_recovery")
-async def start_finpass_recovery(
-    callback: CallbackQuery,
-    session: AsyncSession,
-    user: User,
-    state: FSMContext,
-) -> None:
-    """
-    Start financial password recovery from callback (for backward compatibility).
-
-    Args:
-        callback: Callback query
-        session: Database session
-        user: Current user
-        state: FSM state
-    """
-    await _start_finpass_recovery_flow(callback, session, user, state)
+    await _start_finpass_recovery_flow(message, session, user, state, **data)
 
 
 @router.message(FinpassRecoveryStates.waiting_for_reason)
@@ -183,12 +149,26 @@ async def process_recovery_reason(
         user: Current user
         state: FSM state
     """
-    # Check if message is a menu button - if so, clear state and ignore
+    # Check if message is a menu button or cancel - if so, clear state
     from bot.utils.menu_buttons import is_menu_button
 
-    if is_menu_button(message.text):
+    if is_menu_button(message.text) or message.text == "❌ Отмена":
         await state.clear()
-        return  # Let menu handlers process this
+        is_admin = False
+        blacklist_entry = None
+        try:
+            from app.repositories.blacklist_repository import BlacklistRepository
+            blacklist_repo = BlacklistRepository(session)
+            blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
+        except Exception:
+            pass
+        await message.answer(
+            "❌ Восстановление пароля отменено.",
+            reply_markup=main_menu_reply_keyboard(
+                user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+            ),
+        )
+        return
 
     reason = message.text.strip()
 

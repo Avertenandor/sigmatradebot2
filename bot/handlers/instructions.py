@@ -10,7 +10,6 @@ from aiogram import F, Router
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import User
 from bot.keyboards.reply import deposit_keyboard
 
 router = Router()
@@ -30,11 +29,6 @@ async def show_instructions(
         session: Database session
         data: Additional data from middlewares
     """
-    user: User | None = data.get("user")
-    if not user:
-        await message.answer("Ошибка: пользователь не найден")
-        return
-    
     from app.config.settings import settings
 
     instructions_text = (

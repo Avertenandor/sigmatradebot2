@@ -48,9 +48,14 @@ class SupportTicket(Base):
         Integer, primary_key=True, autoincrement=True
     )
 
-    # User
-    user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=False, index=True
+    # User (nullable for guest tickets)
+    user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=True, index=True
+    )
+    
+    # Telegram ID for guest tickets (when user_id is None)
+    telegram_id: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, index=True
     )
 
     # Category & Status
@@ -91,7 +96,7 @@ class SupportTicket(Base):
     )
 
     # Relationships
-    user: Mapped["User"] = relationship("User", lazy="joined")
+    user: Mapped[Optional["User"]] = relationship("User", lazy="joined")
     assigned_admin: Mapped[Optional["Admin"]] = relationship(
         "Admin", lazy="joined"
     )
