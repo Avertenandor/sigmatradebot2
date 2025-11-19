@@ -121,11 +121,21 @@ info "Building images with cache optimization..."
 export DOCKER_BUILDKIT=1
 export COMPOSE_DOCKER_CLI_BUILD=1
 
+# Check if docker-compose or docker compose is available
+if command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE="docker-compose"
+elif docker compose version &> /dev/null; then
+    DOCKER_COMPOSE="docker compose"
+else
+    error "Neither docker-compose nor docker compose found"
+    exit 1
+fi
+
 # Build with cache optimization
 # --no-cache=false: use cache
 # --pull=false: don't pull base images if they exist
 # --build-arg BUILDKIT_INLINE_CACHE=1: enable inline cache
-docker-compose -f docker-compose.python.yml build \
+${DOCKER_COMPOSE} -f docker-compose.python.yml build \
     --build-arg BUILDKIT_INLINE_CACHE=1 \
     --parallel \
     --no-cache=false || {
@@ -141,13 +151,13 @@ info "Running Alembic migrations..."
 
 # Run migrations in bot container (if it exists) or create temporary container
 if docker ps -a --format '{{.Names}}' | grep -q "^sigmatrade-bot$"; then
-    docker-compose -f docker-compose.python.yml run --rm bot \
+    ${DOCKER_COMPOSE} -f docker-compose.python.yml run --rm bot \
         alembic upgrade head || {
         warn "Migration failed, but continuing..."
     }
 else
     # Create temporary container for migration
-    docker-compose -f docker-compose.python.yml run --rm bot \
+    ${DOCKER_COMPOSE} -f docker-compose.python.yml run --rm bot \
         alembic upgrade head || {
         warn "Migration failed, but continuing..."
     }
@@ -163,7 +173,7 @@ log "Step 7/7: Restarting services..."
 # --no-deps: don't start linked services
 # --build: build images before starting
 info "Recreating containers with new images..."
-docker-compose -f docker-compose.python.yml up -d \
+${DOCKER_COMPOSE} -f docker-compose.python.yml up -d \
     --force-recreate \
     --no-deps \
     --build \
@@ -178,13 +188,18 @@ sleep 10
 
 # Check container status
 info "Container status:"
-docker-compose -f docker-compose.python.yml ps
+${DOCKER_COMPOSE} -f docker-compose.python.yml ps
 
 # Check logs for errors
 log "Checking logs for errors..."
-BOT_ERRORS=$(docker-compose -f docker-compose.python.yml logs bot --tail 50 2>&1 | grep -i "error\|exception\|traceback" | wc -l || echo "0")
-WORKER_ERRORS=$(docker-compose -f docker-compose.python.yml logs worker --tail 50 2>&1 | grep -i "error\|exception\|traceback" | wc -l || echo "0")
-SCHEDULER_ERRORS=$(docker-compose -f docker-compose.python.yml logs scheduler --tail 50 2>&1 | grep -i "error\|exception\|traceback" | wc -l || echo "0")
+BOT_ERRORS=$(${DOCKER_COMPOSE} -f docker-compose.python.yml logs bot --tail 50 2>&1 | grep -i "error\|exception\|traceback" | wc -l | tr -d ' ' || echo "0")
+WORKER_ERRORS=$(${DOCKER_COMPOSE} -f docker-compose.python.yml logs worker --tail 50 2>&1 | grep -i "error\|exception\|traceback" | wc -l | tr -d ' ' || echo "0")
+SCHEDULER_ERRORS=$(${DOCKER_COMPOSE} -f docker-compose.python.yml logs scheduler --tail 50 2>&1 | grep -i "error\|exception\|traceback" | wc -l | tr -d ' ' || echo "0")
+
+# Convert to integers
+BOT_ERRORS=$((BOT_ERRORS + 0))
+WORKER_ERRORS=$((WORKER_ERRORS + 0))
+SCHEDULER_ERRORS=$((SCHEDULER_ERRORS + 0))
 
 if [ "${BOT_ERRORS}" -gt 0 ] || [ "${WORKER_ERRORS}" -gt 0 ] || [ "${SCHEDULER_ERRORS}" -gt 0 ]; then
     warn "Found errors in logs:"
@@ -199,15 +214,15 @@ fi
 # Show recent logs
 echo ""
 info "Bot logs (last 20 lines):"
-docker-compose -f docker-compose.python.yml logs bot --tail 20
+${DOCKER_COMPOSE} -f docker-compose.python.yml logs bot --tail 20
 
 echo ""
 info "Worker logs (last 15 lines):"
-docker-compose -f docker-compose.python.yml logs worker --tail 15
+${DOCKER_COMPOSE} -f docker-compose.python.yml logs worker --tail 15
 
 echo ""
 info "Scheduler logs (last 15 lines):"
-docker-compose -f docker-compose.python.yml logs scheduler --tail 15
+${DOCKER_COMPOSE} -f docker-compose.python.yml logs scheduler --tail 15
 
 # Cleanup old images (optional, keep last 2)
 info "Cleaning up old Docker images..."
@@ -223,10 +238,10 @@ echo ""
 log "✅ Deployment completed successfully!"
 info ""
 info "Useful commands:"
-info "  - View bot logs: docker-compose -f docker-compose.python.yml logs -f bot"
-info "  - View worker logs: docker-compose -f docker-compose.python.yml logs -f worker"
-info "  - Restart services: docker-compose -f docker-compose.python.yml restart"
-info "  - Stop services: docker-compose -f docker-compose.python.yml down"
+info "  - View bot logs: ${DOCKER_COMPOSE} -f docker-compose.python.yml logs -f bot"
+info "  - View worker logs: ${DOCKER_COMPOSE} -f docker-compose.python.yml logs -f worker"
+info "  - Restart services: ${DOCKER_COMPOSE} -f docker-compose.python.yml restart"
+info "  - Stop services: ${DOCKER_COMPOSE} -f docker-compose.python.yml down"
 info ""
 info "Backup location: ${BACKUP_DIR}"
 
