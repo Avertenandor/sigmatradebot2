@@ -62,6 +62,9 @@ from app.repositories.user_action_repository import (
 
 # Core Repositories
 from app.repositories.user_repository import UserRepository
+from app.repositories.user_notification_settings_repository import (
+    UserNotificationSettingsRepository,
+)
 from app.repositories.wallet_change_request_repository import (
     WalletChangeRequestRepository,
 )
@@ -74,6 +77,7 @@ __all__ = [
     "DepositRepository",
     "TransactionRepository",
     "ReferralRepository",
+    "UserNotificationSettingsRepository",
     # Admin
     "AdminRepository",
     "AdminSessionRepository",
