@@ -57,26 +57,26 @@ class AuthMiddleware(BaseMiddleware):
             return await handler(event, data)
 
         # Get telegram user - try from data first (set by aiogram), then from event
-        logger.info(
+        logger.debug(
             f"AuthMiddleware: Checking for telegram_user. Event type: {type(event).__name__}, "
             f"data keys: {list(data.keys())}"
         )
         
         telegram_user = data.get("event_from_user")
-        logger.info(
+        logger.debug(
             f"AuthMiddleware: event_from_user from data: {telegram_user}, "
             f"type: {type(telegram_user).__name__ if telegram_user else 'None'}"
         )
         
         if not telegram_user:
             # Fallback: try to get from event directly
-            logger.info(f"AuthMiddleware: Trying to get from event directly")
+            logger.debug(f"AuthMiddleware: Trying to get from event directly")
             if isinstance(event, Message):
                 telegram_user = event.from_user
-                logger.info(f"AuthMiddleware: Message.from_user: {telegram_user}")
+                logger.debug(f"AuthMiddleware: Message.from_user: {telegram_user}")
             elif isinstance(event, CallbackQuery):
                 telegram_user = event.from_user
-                logger.info(f"AuthMiddleware: CallbackQuery.from_user: {telegram_user}")
+                logger.debug(f"AuthMiddleware: CallbackQuery.from_user: {telegram_user}")
 
         if not telegram_user:
             # No user in event, skip
@@ -86,7 +86,7 @@ class AuthMiddleware(BaseMiddleware):
             )
             return await handler(event, data)
 
-        logger.info(
+        logger.debug(
             f"AuthMiddleware: Processing event for user {telegram_user.id} (@{telegram_user.username})"
         )
 

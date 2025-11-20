@@ -39,9 +39,11 @@ async def start_appeal(
         user: Current user
         state: FSM state
     """
-    # Check if user is blocked
-    blacklist_repo = BlacklistRepository(session)
-    blacklist_entry = await blacklist_repo.get_by_telegram_id(user.telegram_id)
+    # Check if user is blocked (try to get from middleware first)
+    blacklist_entry = data.get("blacklist_entry")
+    if blacklist_entry is None:
+        blacklist_repo = BlacklistRepository(session)
+        blacklist_entry = await blacklist_repo.get_by_telegram_id(user.telegram_id)
 
     is_admin = data.get("is_admin", False)
     if not blacklist_entry or not blacklist_entry.is_active:
@@ -155,9 +157,11 @@ async def process_appeal_text(
         )
         return
 
-    # Get blacklist entry
-    blacklist_repo = BlacklistRepository(session)
-    blacklist_entry = await blacklist_repo.get_by_telegram_id(user.telegram_id)
+    # Get blacklist entry (try to get from middleware first)
+    blacklist_entry = data.get("blacklist_entry")
+    if blacklist_entry is None:
+        blacklist_repo = BlacklistRepository(session)
+        blacklist_entry = await blacklist_repo.get_by_telegram_id(user.telegram_id)
 
     if not blacklist_entry:
         is_admin = data.get("is_admin", False)

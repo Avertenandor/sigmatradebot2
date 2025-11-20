@@ -352,10 +352,11 @@ async def process_financial_password(
 
     if error:
         is_admin = data.get("is_admin", False)
-        from app.repositories.blacklist_repository import BlacklistRepository
-        blacklist_repo = BlacklistRepository(session)
-        blacklist_entry = None
-        if user:
+        # Try to get from middleware first
+        blacklist_entry = data.get("blacklist_entry")
+        if blacklist_entry is None and user:
+            from app.repositories.blacklist_repository import BlacklistRepository
+            blacklist_repo = BlacklistRepository(session)
             blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
         await message.answer(
             f"❌ Ошибка создания заявки:\n{error}",
@@ -387,9 +388,12 @@ async def process_financial_password(
         )
 
         is_admin = data.get("is_admin", False)
-        from app.repositories.blacklist_repository import BlacklistRepository
-        blacklist_repo = BlacklistRepository(session)
-        blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
+        # Try to get from middleware first
+        blacklist_entry = data.get("blacklist_entry")
+        if blacklist_entry is None:
+            from app.repositories.blacklist_repository import BlacklistRepository
+            blacklist_repo = BlacklistRepository(session)
+            blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
         await message.answer(
             text,
             reply_markup=main_menu_reply_keyboard(
@@ -399,10 +403,11 @@ async def process_financial_password(
         await state.clear()
     else:
         is_admin = data.get("is_admin", False)
-        from app.repositories.blacklist_repository import BlacklistRepository
-        blacklist_repo = BlacklistRepository(session)
-        blacklist_entry = None
-        if user:
+        # Try to get from middleware first
+        blacklist_entry = data.get("blacklist_entry")
+        if blacklist_entry is None and user:
+            from app.repositories.blacklist_repository import BlacklistRepository
+            blacklist_repo = BlacklistRepository(session)
             blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
         await message.answer(
             "❌ Ошибка при создании заявки на вывод. Попробуйте позже.",

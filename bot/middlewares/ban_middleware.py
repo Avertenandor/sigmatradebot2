@@ -58,6 +58,9 @@ class BanMiddleware(BaseMiddleware):
         blacklist_repo = BlacklistRepository(session)
         blacklist_entry = await blacklist_repo.get_by_telegram_id(user.id)
 
+        # Pass blacklist_entry to handlers to avoid repeated queries
+        data["blacklist_entry"] = blacklist_entry
+
         if blacklist_entry and blacklist_entry.is_active:
             # For terminated users, block completely (all update types)
             if blacklist_entry.action_type == BlacklistActionType.TERMINATED:

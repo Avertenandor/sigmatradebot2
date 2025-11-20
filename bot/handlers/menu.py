@@ -204,19 +204,49 @@ async def show_deposit_menu(
     
     await state.clear()
 
-    from app.config.settings import settings
+    # Get level statuses using DepositValidationService
+    from app.services.deposit_validation_service import DepositValidationService
+    
+    validation_service = DepositValidationService(session)
+    levels_status = await validation_service.get_available_levels(user.id)
 
-    text = (
-        f"💰 *Выберите уровень депозита:*\n\n"
-        f"Level 1: `{settings.deposit_level_1:.0f} USDT`\n"
-        f"Level 2: `{settings.deposit_level_2:.0f} USDT`\n"
-        f"Level 3: `{settings.deposit_level_3:.0f} USDT`\n"
-        f"Level 4: `{settings.deposit_level_4:.0f} USDT`\n"
-        f"Level 5: `{settings.deposit_level_5:.0f} USDT`"
-    )
+    # Build text with statuses
+    from app.config.settings import settings
+    
+    text = "💰 *Выберите уровень депозита:*\n\n"
+    for level in [1, 2, 3, 4, 5]:
+        if level in levels_status:
+            level_info = levels_status[level]
+            amount = level_info["amount"]
+            status = level_info["status"]
+            status_text = level_info.get("status_text", "")
+            
+            if status == "active":
+                text += f"✅ Level {level}: `{amount} USDT` - Активен\n"
+            elif status == "available":
+                text += f"💰 Level {level}: `{amount} USDT` - Доступен\n"
+            else:
+                # Show reason for unavailability
+                error = level_info.get("error", "")
+                if "необходимо сначала купить" in error:
+                    text += f"🔒 Level {level}: `{amount} USDT` - Недоступен (нет предыдущего уровня)\n"
+                elif "необходимо минимум" in error:
+                    text += f"🔒 Level {level}: `{amount} USDT` - Недоступен (не хватает партнёров)\n"
+                else:
+                    text += f"🔒 Level {level}: `{amount} USDT` - Недоступен\n"
+        else:
+            # Fallback
+            amounts = {
+                1: settings.deposit_level_1,
+                2: settings.deposit_level_2,
+                3: settings.deposit_level_3,
+                4: settings.deposit_level_4,
+                5: settings.deposit_level_5,
+            }
+            text += f"💰 Level {level}: `{amounts[level]:.0f} USDT`\n"
 
     await message.answer(
-        text, reply_markup=deposit_keyboard(), parse_mode="Markdown"
+        text, reply_markup=deposit_keyboard(levels_status=levels_status), parse_mode="Markdown"
     )
 
 

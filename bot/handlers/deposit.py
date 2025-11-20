@@ -107,10 +107,18 @@ async def select_deposit_level(
         # Transaction closed here
 
     if not can_purchase:
+        # Get level statuses to show in keyboard
+        session_for_status = data.get("session")
+        if session_for_status:
+            validation_service_status = DepositValidationService(session_for_status)
+            levels_status = await validation_service_status.get_available_levels(user.id)
+        else:
+            levels_status = None
+        
         await message.answer(
             f"❌ {error_msg or 'Нельзя купить этот уровень депозита'}\n\n"
             "Попробуйте выбрать другой уровень депозита.",
-            reply_markup=deposit_keyboard(),
+            reply_markup=deposit_keyboard(levels_status=levels_status),
         )
         return
 

@@ -32,7 +32,7 @@ def main_menu_reply_keyboard(
     """
     user_id = user.id if user else None
     telegram_id = user.telegram_id if user else None
-    logger.info(
+    logger.debug(
         f"[KEYBOARD] main_menu_reply_keyboard called: "
         f"user_id={user_id}, telegram_id={telegram_id}, "
         f"is_admin={is_admin}, "
@@ -48,13 +48,14 @@ def main_menu_reply_keyboard(
         and blacklist_entry.is_active
         and blacklist_entry.action_type == BlacklistActionType.BLOCKED
     ):
+        # Keep this on INFO as it's a rare security event
         logger.info(f"[KEYBOARD] User {telegram_id} is blocked, showing appeal button only")
         builder.row(
             KeyboardButton(text="📝 Подать апелляцию"),
         )
     elif user is None:
         # Reduced menu for unregistered users
-        logger.info(f"[KEYBOARD] Building reduced menu for unregistered user {telegram_id}")
+        logger.debug(f"[KEYBOARD] Building reduced menu for unregistered user {telegram_id}")
         builder.row(
             KeyboardButton(text="📖 Инструкции"),
         )
@@ -66,7 +67,7 @@ def main_menu_reply_keyboard(
         )
     else:
         # Standard menu for registered users
-        logger.info(f"[KEYBOARD] Building standard menu for user {telegram_id}")
+        logger.debug(f"[KEYBOARD] Building standard menu for user {telegram_id}")
         builder.row(
             KeyboardButton(text="💰 Депозит"),
             KeyboardButton(text="💸 Вывод"),
@@ -135,30 +136,51 @@ def support_keyboard() -> ReplyKeyboardMarkup:
     return builder.as_markup(resize_keyboard=True)
 
 
-def deposit_keyboard() -> ReplyKeyboardMarkup:
+def deposit_keyboard(
+    levels_status: dict[int, dict] | None = None,
+) -> ReplyKeyboardMarkup:
     """
-    Deposit menu reply keyboard.
+    Deposit menu reply keyboard with status indicators.
+
+    Args:
+        levels_status: Optional dict with level statuses from DepositValidationService.get_available_levels()
 
     Returns:
         ReplyKeyboardMarkup with deposit options
     """
     builder = ReplyKeyboardBuilder()
 
-    builder.row(
-        KeyboardButton(text="💰 Пополнить Level 1 (10 USDT)"),
-    )
-    builder.row(
-        KeyboardButton(text="💰 Пополнить Level 2 (50 USDT)"),
-    )
-    builder.row(
-        KeyboardButton(text="💰 Пополнить Level 3 (100 USDT)"),
-    )
-    builder.row(
-        KeyboardButton(text="💰 Пополнить Level 4 (150 USDT)"),
-    )
-    builder.row(
-        KeyboardButton(text="💰 Пополнить Level 5 (300 USDT)"),
-    )
+    # Default amounts if statuses not provided
+    default_amounts = {1: 10, 2: 50, 3: 100, 4: 150, 5: 300}
+    
+    for level in [1, 2, 3, 4, 5]:
+        if levels_status and level in levels_status:
+            level_info = levels_status[level]
+            amount = level_info["amount"]
+            status = level_info["status"]
+            status_text = level_info.get("status_text", "")
+            
+            # Build button text with status indicator
+            if status == "active":
+                button_text = f"✅ Level {level} ({amount} USDT) - Активен"
+            elif status == "available":
+                button_text = f"💰 Пополнить Level {level} ({amount} USDT)"
+            else:
+                # unavailable - show reason in button
+                error = level_info.get("error", "")
+                if "необходимо сначала купить" in error:
+                    button_text = f"🔒 Level {level} ({amount} USDT) - Нет предыдущего"
+                elif "необходимо минимум" in error:
+                    button_text = f"🔒 Level {level} ({amount} USDT) - Нет партнёров"
+                else:
+                    button_text = f"🔒 Level {level} ({amount} USDT) - Недоступен"
+        else:
+            # Fallback to default
+            amount = default_amounts[level]
+            button_text = f"💰 Пополнить Level {level} ({amount} USDT)"
+        
+        builder.row(KeyboardButton(text=button_text))
+
     builder.row(
         KeyboardButton(text="📊 Главное меню"),
     )

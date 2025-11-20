@@ -35,17 +35,15 @@ async def show_admin_management(
         data: Handler data
     """
     is_admin = data.get("is_admin", False)
-    if not is_admin:
+    admin: Admin | None = data.get("admin")
+    is_super_admin = data.get("is_super_admin", False)
+    
+    if not is_admin or not admin:
         await message.answer("❌ Эта функция доступна только администраторам")
         return
 
     # Check if user is super_admin
-    from app.repositories.admin_repository import AdminRepository
-    
-    admin_repo = AdminRepository(session)
-    admin = await admin_repo.get_by(telegram_id=message.from_user.id)
-    
-    if not admin or admin.role != "super_admin":
+    if not is_super_admin:
         await message.answer(
             "❌ Только super admin может управлять администраторами!",
             reply_markup=admin_keyboard(),
@@ -92,17 +90,15 @@ async def start_add_admin(
 ) -> None:
     """Start adding new admin."""
     is_admin = data.get("is_admin", False)
-    if not is_admin:
+    admin: Admin | None = data.get("admin")
+    is_super_admin = data.get("is_super_admin", False)
+    
+    if not is_admin or not admin:
         await message.answer("❌ Эта функция доступна только администраторам")
         return
 
     # Check if user is super_admin
-    from app.repositories.admin_repository import AdminRepository
-    
-    admin_repo = AdminRepository(session)
-    admin = await admin_repo.get_by(telegram_id=message.from_user.id)
-    
-    if not admin or admin.role != "super_admin":
+    if not is_super_admin:
         await message.answer(
             "❌ Доступ запрещён!",
             reply_markup=admin_management_keyboard(),
@@ -220,13 +216,11 @@ async def process_role(
         await state.clear()
         return
 
-    # Get current admin
-    from app.repositories.admin_repository import AdminRepository
+    # Get current admin from data
+    admin: Admin | None = data.get("admin")
+    is_super_admin = data.get("is_super_admin", False)
     
-    admin_repo = AdminRepository(session)
-    admin = await admin_repo.get_by(telegram_id=message.from_user.id)
-    
-    if not admin or admin.role != "super_admin":
+    if not admin or not is_super_admin:
         await message.answer(
             "❌ Доступ запрещён!",
             reply_markup=admin_management_keyboard(),

@@ -118,12 +118,14 @@ async def cmd_start(
             f"[START] cmd_start for registered user {user.telegram_id}: "
             f"is_admin={is_admin}, data keys: {list(data.keys())}"
         )
-        # Get blacklist status if needed
-        from app.repositories.blacklist_repository import BlacklistRepository
-        blacklist_repo = BlacklistRepository(session)
-        blacklist_entry = await blacklist_repo.find_by_telegram_id(
-            user.telegram_id
-        )
+        # Get blacklist status if needed (try to get from middleware first)
+        blacklist_entry = data.get("blacklist_entry")
+        if blacklist_entry is None:
+            from app.repositories.blacklist_repository import BlacklistRepository
+            blacklist_repo = BlacklistRepository(session)
+            blacklist_entry = await blacklist_repo.find_by_telegram_id(
+                user.telegram_id
+            )
         logger.info(
             f"[START] Creating keyboard for user {user.telegram_id} with "
             f"is_admin={is_admin}, "
@@ -215,9 +217,10 @@ async def process_wallet(
         is_admin = data.get("is_admin", False)
         # Получаем session из data
         session = data.get("session")
-        blacklist_entry = None
+        # Try to get from middleware first
+        blacklist_entry = data.get("blacklist_entry")
         # КРИТИЧНО: проверяем session перед использованием
-        if user and session:
+        if blacklist_entry is None and user and session:
             try:
                 from app.repositories.blacklist_repository import (
                     BlacklistRepository,

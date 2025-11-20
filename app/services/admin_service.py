@@ -6,6 +6,7 @@ Handles admin authentication and session management.
 
 import secrets
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import bcrypt
 from loguru import logger
@@ -208,6 +209,9 @@ class AdminService:
                 },
             )
             return None, None, "Неверный мастер-ключ"
+
+        # Clear failed login attempts on successful login
+        await self._clear_failed_login_attempts(telegram_id)
 
         # Deactivate all existing sessions
         await self.session_repo.deactivate_all_for_admin(admin.id)
@@ -436,8 +440,13 @@ class AdminService:
             # Check if limit exceeded
             if count >= ADMIN_LOGIN_MAX_ATTEMPTS:
                 logger.warning(
-                    f"Admin login rate limit exceeded for {telegram_id}: "
-                    f"{count}/{ADMIN_LOGIN_MAX_ATTEMPTS}"
+                    "[SECURITY] Admin login rate limit exceeded",
+                    extra={
+                        "telegram_id": telegram_id,
+                        "action_type": "ADMIN_LOGIN_BRUTE_FORCE",
+                        "attempts": count,
+                        "limit": ADMIN_LOGIN_MAX_ATTEMPTS,
+                    }
                 )
                 
                 # Block the Telegram ID
@@ -499,8 +508,12 @@ class AdminService:
             await self._notify_super_admins_of_block(telegram_id)
 
             logger.warning(
-                f"Telegram ID {telegram_id} blocked due to "
-                f"too many failed admin login attempts"
+                "[SECURITY] Telegram ID blocked due to failed admin login attempts",
+                extra={
+                    "telegram_id": telegram_id,
+                    "action_type": "AUTO_BLOCKED",
+                    "reason": "Too many failed admin login attempts",
+                }
             )
 
         except Exception as e:
