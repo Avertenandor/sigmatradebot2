@@ -77,15 +77,15 @@ async def _process_payment_retries_async() -> dict:
     
     try:
         async with SessionLocal() as session:
-        # Get blockchain service
-        blockchain_service = get_blockchain_service()
+            # Get blockchain service
+            blockchain_service = get_blockchain_service()
 
-        # Process retries
-        retry_service = PaymentRetryService(session)
-        result = await retry_service.process_pending_retries(
-            blockchain_service
-        )
+            # Process retries
+            retry_service = PaymentRetryService(session)
+            result = await retry_service.process_pending_retries(
+                blockchain_service
+            )
 
-        return result
+            return result
     finally:
         await engine.dispose()
