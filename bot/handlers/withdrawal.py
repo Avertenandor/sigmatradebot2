@@ -303,7 +303,10 @@ async def process_financial_password(
             return
         
         user_service = UserService(session)
-        if not user_service.verify_financial_password(user, password):
+        
+        # Verify financial password (CRITICAL: must use await and user.id)
+        is_valid = await user_service.verify_financial_password(user.id, password)
+        if not is_valid:
             await message.answer(
                 "❌ Неверный финансовый пароль!\n\nПопробуйте еще раз:"
             )
@@ -312,6 +315,21 @@ async def process_financial_password(
         # Get amount from state
         state_data = await state.get_data()
         amount = state_data.get("amount")
+        
+        # Get fresh user from DB to check earnings_blocked
+        current_user = await user_service.get_by_id(user.id)
+        if not current_user:
+            await message.answer("❌ Ошибка: пользователь не найден")
+            await state.clear()
+            return
+        
+        # Unblock earnings if blocked (after successful finpass verification)
+        if current_user.earnings_blocked:
+            await user_service.block_earnings(user.id, block=False)
+            logger.info(
+                "Earnings unblocked after successful finpass usage",
+                extra={"user_id": user.id, "telegram_id": user.telegram_id},
+            )
         
         # Get balance
         balance = await user_service.get_user_balance(user.id)
@@ -328,7 +346,10 @@ async def process_financial_password(
         async with session_factory() as session:
             async with session.begin():
                 user_service = UserService(session)
-                if not user_service.verify_financial_password(user, password):
+                
+                # Verify financial password (CRITICAL: must use await and user.id)
+                is_valid = await user_service.verify_financial_password(user.id, password)
+                if not is_valid:
                     await message.answer(
                         "❌ Неверный финансовый пароль!\n\nПопробуйте еще раз:"
                     )
@@ -337,6 +358,22 @@ async def process_financial_password(
                 # Get amount from state
                 state_data = await state.get_data()
                 amount = state_data.get("amount")
+                
+                # Get fresh user from DB to check earnings_blocked
+                current_user = await user_service.get_by_id(user.id)
+                if not current_user:
+                    await message.answer("❌ Ошибка: пользователь не найден")
+                    await state.clear()
+                    return
+                
+                # Unblock earnings if blocked (after successful finpass verification)
+                # This happens in the same transaction as withdrawal creation
+                if current_user.earnings_blocked:
+                    await user_service.block_earnings(user.id, block=False)
+                    logger.info(
+                        "Earnings unblocked after successful finpass usage",
+                        extra={"user_id": user.id, "telegram_id": user.telegram_id},
+                    )
                 
                 # Get balance
                 balance = await user_service.get_user_balance(user.id)

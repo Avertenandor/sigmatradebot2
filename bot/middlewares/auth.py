@@ -127,20 +127,17 @@ class AuthMiddleware(BaseMiddleware):
                 f"User {telegram_user.id} (@{telegram_user.username}) "
                 f"identified as admin from Admin table (role: {admin.role if admin else 'unknown'})"
             )
-        elif user and hasattr(user, "is_admin") and user.is_admin:
-            # Fallback to user.is_admin flag if not in Admin table
-            is_admin = True
-            logger.debug(
-                f"User {telegram_user.id} is_admin from user.is_admin flag: {is_admin}"
-            )
         else:
             logger.debug(
                 f"User {telegram_user.id} is not an admin "
                 f"(not in Admin table, user={'exists' if user else 'None'})"
             )
 
+        # Store admin object and admin_id
+        # Admin rights come ONLY from Admin table, not from user.is_admin flag
         data["is_admin"] = is_admin
-        data["admin_id"] = user.id if (user and is_admin) else 0
+        data["admin"] = admin if admin else None
+        data["admin_id"] = admin.id if admin else 0
         logger.info(
             f"AuthMiddleware: Set is_admin={is_admin}, admin_id={data['admin_id']} for user {telegram_user.id}"
         )

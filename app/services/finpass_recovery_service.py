@@ -115,6 +115,17 @@ class FinpassRecoveryService:
             video_verified=not video_required,
         )
 
+        # Block earnings immediately upon creating recovery request
+        # This prevents any new earnings while recovery is in progress
+        from app.services.user_service import UserService
+
+        user_service = UserService(self.session)
+        await user_service.block_earnings(user_id, block=True)
+        logger.info(
+            "Earnings blocked for user due to finpass recovery request",
+            extra={"user_id": user_id, "request_id": request.id},
+        )
+
         logger.info(
             "Created financial password recovery request",
             extra={
