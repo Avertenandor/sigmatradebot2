@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.config.database import Base
+from app.models.base import Base
 from app.models import (
     Admin,
     Deposit,
@@ -55,7 +55,11 @@ from app.services import (
     UserService,
     WithdrawalService,
 )
-from app.utils.encryption import hash_password
+# Helper function for hashing passwords in tests
+def hash_password(password: str) -> str:
+    """Hash password for tests (simple bcrypt-like hash)."""
+    import hashlib
+    return hashlib.sha256(password.encode()).hexdigest()
 
 # ==================== PYTEST CONFIGURATION ====================
 

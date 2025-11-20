@@ -108,8 +108,10 @@ pip-delete-this-directory.txt
 # Project specific
 backups/*.sql
 backups/*.dump
+# Ignore test files, but allow tests/ directory
 test_*.py
 *_test.py
+!tests/**/*.py
 
 # Corrupted paths / encoding issues
 **/PEICHAYCHMO/**
