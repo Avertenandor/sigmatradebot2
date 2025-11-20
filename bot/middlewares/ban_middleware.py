@@ -64,7 +64,12 @@ class BanMiddleware(BaseMiddleware):
         if blacklist_entry and blacklist_entry.is_active:
             # For terminated users, block completely (all update types)
             if blacklist_entry.action_type == BlacklistActionType.TERMINATED:
-                logger.info(f"Terminated user attempted to use bot: {user.id}")
+                from app.utils.security_logging import log_security_event
+
+                log_security_event(
+                    "Terminated user attempted to use bot",
+                    {"telegram_id": user.id}
+                )
                 return None
 
             # For blocked users, only allow appeal-related actions
@@ -96,9 +101,18 @@ class BanMiddleware(BaseMiddleware):
                     return await handler(event, data)
 
                 # Block all other interactions for blocked users
-                logger.info(
-                    f"Blocked user attempted to use bot "
-                    f"(non-appeal): {user.id}"
+                from app.utils.security_logging import log_security_event
+
+                action_text = (
+                    event.text if hasattr(event, "text") and event.text
+                    else "callback" if hasattr(event, "data") else "unknown"
+                )
+                log_security_event(
+                    "Blocked user attempted non-appeal action",
+                    {
+                        "telegram_id": user.id,
+                        "action": action_text,
+                    }
                 )
                 return None
 

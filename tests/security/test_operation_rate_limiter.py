@@ -11,105 +11,106 @@ from bot.utils.operation_rate_limit import OperationRateLimiter
 
 @pytest.mark.security
 @pytest.mark.asyncio
-async def test_rate_limiter_blocks_after_limit() -> None:
+async def test_registration_rate_limit() -> None:
     """
-    Test that rate limiter blocks operations after limit is exceeded.
+    Test registration rate limit (3 attempts per hour).
 
     Scenario:
-    1. Create rate limiter with limit=3, window=3600
-    2. Make 3 operations (should be allowed)
-    3. Make 4th operation (should be blocked)
+    1. Make 3 registration attempts (should be allowed)
+    2. Make 4th attempt (should be blocked)
     """
     # Create mock Redis
     mock_redis = AsyncMock()
-    mock_redis.get.return_value = "3"  # Already at limit
-    mock_redis.incr = AsyncMock()
-    mock_redis.expire = AsyncMock()
+    mock_redis.get = AsyncMock(return_value=None)  # Start with no count
+    mock_redis.setex = AsyncMock()
 
-    limiter = OperationRateLimiter(
-        redis_client=mock_redis,
-        limit=3,
-        window_seconds=3600,
-        operation_name="test_operation",
-    )
+    limiter = OperationRateLimiter(redis_client=mock_redis)
 
-    # Check if limited
-    is_limited = await limiter.is_limited(123456789)
+    telegram_id = 123456789
 
-    assert is_limited is True, "Should be limited after 3 attempts"
+    # First 3 attempts should succeed
+    for i in range(3):
+        allowed, error = await limiter.check_registration_limit(telegram_id)
+        assert allowed is True, f"Attempt {i+1} should be allowed"
+        assert error is None, f"Attempt {i+1} should have no error"
+
+    # Simulate that we've reached the limit
+    mock_redis.get = AsyncMock(return_value="3")  # At limit
+
+    # 4th attempt should fail
+    allowed, error = await limiter.check_registration_limit(telegram_id)
+    assert allowed is False, "4th attempt should be blocked"
+    assert error is not None, "Should return error message"
+    assert "регистрация" in error.lower(), "Error should mention registration"
 
 
 @pytest.mark.security
 @pytest.mark.asyncio
-async def test_rate_limiter_allows_below_limit() -> None:
+async def test_verification_rate_limit() -> None:
     """
-    Test that rate limiter allows operations below limit.
+    Test verification rate limit (5 attempts per hour).
 
     Scenario:
-    1. Create rate limiter with limit=3
-    2. Make operation when count < limit
-    3. Verify operation is allowed
+    1. Make 5 verification attempts (should be allowed)
+    2. Make 6th attempt (should be blocked)
     """
     # Create mock Redis
     mock_redis = AsyncMock()
-    mock_redis.get.return_value = "1"  # Below limit
-    mock_redis.incr = AsyncMock()
-    mock_redis.expire = AsyncMock()
+    mock_redis.get = AsyncMock(return_value=None)  # Start with no count
+    mock_redis.setex = AsyncMock()
 
-    limiter = OperationRateLimiter(
-        redis_client=mock_redis,
-        limit=3,
-        window_seconds=3600,
-        operation_name="test_operation",
-    )
+    limiter = OperationRateLimiter(redis_client=mock_redis)
 
-    # Check if limited
-    is_limited = await limiter.is_limited(123456789)
+    telegram_id = 123456789
 
-    assert is_limited is False, "Should not be limited below limit"
+    # First 5 attempts should succeed
+    for i in range(5):
+        allowed, error = await limiter.check_verification_limit(telegram_id)
+        assert allowed is True, f"Attempt {i+1} should be allowed"
+        assert error is None, f"Attempt {i+1} should have no error"
+
+    # Simulate that we've reached the limit
+    mock_redis.get = AsyncMock(return_value="5")  # At limit
+
+    # 6th attempt should fail
+    allowed, error = await limiter.check_verification_limit(telegram_id)
+    assert allowed is False, "6th attempt should be blocked"
+    assert error is not None, "Should return error message"
+    assert "верификация" in error.lower(), "Error should mention verification"
 
 
 @pytest.mark.security
 @pytest.mark.asyncio
-async def test_rate_limiter_increments_counter() -> None:
+async def test_withdrawal_rate_limit() -> None:
     """
-    Test that rate limiter increments counter on increment().
+    Test withdrawal rate limit (10 per day, 3 per hour).
 
     Scenario:
-    1. Create rate limiter
-    2. Call increment()
-    3. Verify Redis incr and expire are called
+    1. Check daily limit (10 per day)
+    2. Check hourly limit (3 per hour)
     """
     # Create mock Redis
     mock_redis = AsyncMock()
-    mock_redis.incr = AsyncMock(return_value=1)
-    mock_redis.expire = AsyncMock()
+    mock_redis.get = AsyncMock(return_value=None)  # Start with no count
+    mock_redis.setex = AsyncMock()
 
-    limiter = OperationRateLimiter(
-        redis_client=mock_redis,
-        limit=3,
-        window_seconds=3600,
-        operation_name="test_operation",
-    )
+    limiter = OperationRateLimiter(redis_client=mock_redis)
 
-    # Increment
-    await limiter.increment(123456789)
+    telegram_id = 123456789
 
-    # Verify Redis methods were called
-    assert mock_redis.incr.called, "Redis incr should be called"
-    assert mock_redis.expire.called, "Redis expire should be called"
+    # Test daily limit
+    mock_redis.get = AsyncMock(return_value="10")  # At daily limit
+    allowed, error = await limiter.check_withdrawal_limit(telegram_id)
+    assert allowed is False, "Should be blocked at daily limit"
+    assert error is not None, "Should return error message"
+    assert "дневной" in error.lower() or "день" in error.lower(), "Error should mention daily limit"
 
-    # Verify correct key format
-    incr_key = mock_redis.incr.call_args[0][0]
-    assert "op_ratelimit" in incr_key
-    assert "test_operation" in incr_key
-    assert "123456789" in incr_key
-
-    # Verify expire was called with correct TTL
-    expire_key = mock_redis.expire.call_args[0][0]
-    expire_ttl = mock_redis.expire.call_args[0][1]
-    assert expire_key == incr_key
-    assert expire_ttl == 3600
+    # Test hourly limit
+    mock_redis.get = AsyncMock(side_effect=["0", "3"])  # Daily OK, hourly at limit
+    allowed, error = await limiter.check_withdrawal_limit(telegram_id)
+    assert allowed is False, "Should be blocked at hourly limit"
+    assert error is not None, "Should return error message"
+    assert "часовой" in error.lower() or "час" in error.lower(), "Error should mention hourly limit"
 
 
 @pytest.mark.security
@@ -120,18 +121,46 @@ async def test_rate_limiter_fail_open_without_redis() -> None:
 
     Scenario:
     1. Create rate limiter without Redis client
-    2. Check if limited
-    3. Verify returns False (not limited) - fail open
+    2. Check limits
+    3. Verify returns True (allowed) - fail open
     """
-    limiter = OperationRateLimiter(
-        redis_client=None,
-        limit=3,
-        window_seconds=3600,
-        operation_name="test_operation",
-    )
+    limiter = OperationRateLimiter(redis_client=None)
 
-    # Check if limited (should return False when no Redis)
-    is_limited = await limiter.is_limited(123456789)
+    telegram_id = 123456789
 
-    assert is_limited is False, "Should fail open (not limit) when Redis unavailable"
+    # All checks should allow when no Redis
+    allowed, error = await limiter.check_registration_limit(telegram_id)
+    assert allowed is True, "Should fail open (allow) when Redis unavailable"
+    assert error is None, "Should have no error when Redis unavailable"
 
+    allowed, error = await limiter.check_verification_limit(telegram_id)
+    assert allowed is True, "Should fail open (allow) when Redis unavailable"
+
+    allowed, error = await limiter.check_withdrawal_limit(telegram_id)
+    assert allowed is True, "Should fail open (allow) when Redis unavailable"
+
+
+@pytest.mark.security
+@pytest.mark.asyncio
+async def test_rate_limiter_redis_error_handling() -> None:
+    """
+    Test that rate limiter handles Redis errors gracefully (fail open).
+
+    Scenario:
+    1. Create rate limiter with Redis that raises errors
+    2. Check limits
+    3. Verify returns True (allowed) - fail open on error
+    """
+    # Create mock Redis that raises errors
+    mock_redis = AsyncMock()
+    mock_redis.get = AsyncMock(side_effect=Exception("Redis connection error"))
+    mock_redis.setex = AsyncMock(side_effect=Exception("Redis connection error"))
+
+    limiter = OperationRateLimiter(redis_client=mock_redis)
+
+    telegram_id = 123456789
+
+    # All checks should allow when Redis errors
+    allowed, error = await limiter.check_registration_limit(telegram_id)
+    assert allowed is True, "Should fail open (allow) on Redis error"
+    assert error is None, "Should have no error on Redis error"

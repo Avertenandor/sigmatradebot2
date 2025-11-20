@@ -726,9 +726,11 @@ async def handle_emergency_block_admin_telegram_id(
 
         await state.clear()
 
-        logger.warning(
-            "[SECURITY] Emergency admin block executed",
-            extra={
+        from app.utils.security_logging import log_security_event
+
+        log_security_event(
+            "EMERGENCY: Admin terminated",
+            {
                 "admin_id": admin.id,
                 "target_telegram_id": telegram_id,
                 "target_admin_id": admin_to_block.id,
@@ -736,6 +738,19 @@ async def handle_emergency_block_admin_telegram_id(
                 "reason": "Compromised admin account",
                 "blacklist_entry_id": blacklist_entry.id,
             }
+        )
+
+        # Send security notification
+        from app.utils.admin_notifications import notify_security_event
+
+        await notify_security_event(
+            "EMERGENCY: Admin Terminated",
+            (
+                f"Admin {admin.display_name} (ID: {admin.id}) "
+                f"terminated admin {admin_to_block.display_name} "
+                f"(Telegram ID: {telegram_id}) due to compromised account"
+            ),
+            priority="critical",
         )
 
         # Notify all super_admins

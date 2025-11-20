@@ -322,6 +322,22 @@ async def main() -> None:  # noqa: C901
     # Start polling
     logger.info("Bot started successfully")
 
+    # Start health check server in background
+    try:
+        from app.http_health_server import run_health_server
+
+        asyncio.create_task(
+            run_health_server(
+                host="0.0.0.0",
+                port=settings.health_check_port or 8080,
+            )
+        )
+        logger.info(
+            f"Health check server started on port {settings.health_check_port or 8080}"
+        )
+    except Exception as e:
+        logger.warning(f"Failed to start health check server: {e}")
+
     try:
         logger.info("Starting polling...")
         await dp.start_polling(

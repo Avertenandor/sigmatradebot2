@@ -239,6 +239,19 @@ async def handle_block_user_input(  # noqa: C901
                 user_telegram_id=user.telegram_id,
                 reason="Блокировка администратором",
             )
+            
+            # Security log
+            from app.utils.security_logging import log_security_event
+
+            log_security_event(
+                "User blocked",
+                {
+                    "telegram_id": user.telegram_id,
+                    "admin_id": admin.id,
+                    "user_id": user.id,
+                    "reason": "Блокировка администратором",
+                }
+            )
     except Exception as e:
         logger.error(f"Error blocking user: {e}")
         await message.reply(
@@ -385,6 +398,19 @@ async def handle_terminate_user_input(  # noqa: C901
                 user_id=user.id,
                 user_telegram_id=user.telegram_id,
                 reason="Терминация администратором",
+            )
+            
+            # Security log
+            from app.utils.security_logging import log_security_event
+
+            log_security_event(
+                "User terminated",
+                {
+                    "telegram_id": user.telegram_id,
+                    "admin_id": admin.id,
+                    "user_id": user.id,
+                    "reason": "Терминация администратором",
+                }
             )
     except Exception as e:
         logger.error(f"Error terminating user: {e}")

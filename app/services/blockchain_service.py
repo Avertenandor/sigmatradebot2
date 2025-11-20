@@ -86,6 +86,8 @@ class BlockchainService:
         rpc_url: str,
         usdt_contract: str,
         wallet_private_key: str | None,
+        max_concurrent_rpc: int = 10,
+        max_rps: int = 25,
     ) -> None:
         """
         Initialize blockchain service.
@@ -94,10 +96,19 @@ class BlockchainService:
             rpc_url: BSC RPC endpoint URL
             usdt_contract: USDT token contract address
             wallet_private_key: Hot wallet private key for sending payments
+            max_concurrent_rpc: Maximum concurrent RPC requests (default: 10)
+            max_rps: Maximum requests per second (default: 25 for $49 plan)
         """
         self.rpc_url = rpc_url
         self.usdt_contract_address = to_checksum_address(usdt_contract)
         self.wallet_private_key = wallet_private_key
+
+        # Initialize RPC rate limiter
+        from app.services.blockchain.rpc_rate_limiter import RPCRateLimiter
+
+        self.rpc_limiter = RPCRateLimiter(
+            max_concurrent=max_concurrent_rpc, max_rps=max_rps
+        )
 
         # Thread pool executor for running synchronous Web3 calls
         self._executor = ThreadPoolExecutor(
@@ -148,6 +159,19 @@ class BlockchainService:
             if hasattr(self, '_executor'):
                 self._executor.shutdown(wait=True)
             raise
+
+    def get_rpc_stats(self) -> dict[str, Any]:
+        """
+        Get RPC usage statistics.
+
+        Returns:
+            Dict with:
+            - requests_last_minute: int
+            - avg_response_time_ms: float
+            - error_count: int
+            - total_requests: int
+        """
+        return self.rpc_limiter.get_stats()
 
     def __del__(self) -> None:
         """
@@ -221,34 +245,38 @@ class BlockchainService:
             # Run synchronous Web3 calls in thread pool
             loop = asyncio.get_event_loop()
 
-            # Get current gas price
-            gas_price = await loop.run_in_executor(
-                self._executor, lambda: self.web3.eth.gas_price
-            )
-
-            # Estimate gas
-            try:
-                gas_estimate = await loop.run_in_executor(
-                    self._executor,
-                    lambda: transfer_function.estimate_gas(
-                        {"from": self.wallet_address}
-                    ),
+            # Get current gas price (with rate limiting)
+            async with self.rpc_limiter:
+                gas_price = await loop.run_in_executor(
+                    self._executor, lambda: self.web3.eth.gas_price
                 )
+
+            # Estimate gas (with rate limiting)
+            try:
+                async with self.rpc_limiter:
+                    gas_estimate = await loop.run_in_executor(
+                        self._executor,
+                        lambda: transfer_function.estimate_gas(
+                            {"from": self.wallet_address}
+                        ),
+                    )
             except Exception as e:
                 logger.error(f"Gas estimation failed: {e}")
+                self.rpc_limiter.record_error()
                 return {
                     "success": False,
                     "tx_hash": None,
                     "error": f"Gas estimation failed: {str(e)}",
                 }
 
-            # Get nonce
-            nonce = await loop.run_in_executor(
-                self._executor,
-                lambda: self.web3.eth.get_transaction_count(
-                    self.wallet_address
-                ),
-            )
+            # Get nonce (with rate limiting)
+            async with self.rpc_limiter:
+                nonce = await loop.run_in_executor(
+                    self._executor,
+                    lambda: self.web3.eth.get_transaction_count(
+                        self.wallet_address
+                    ),
+                )
 
             # Build transaction
             transaction = transfer_function.build_transaction(
@@ -263,13 +291,14 @@ class BlockchainService:
             # Sign transaction
             signed_txn = self.wallet_account.sign_transaction(transaction)
 
-            # Send transaction
-            tx_hash = await loop.run_in_executor(
-                self._executor,
-                lambda: self.web3.eth.send_raw_transaction(
-                    signed_txn.rawTransaction
-                ),
-            )
+            # Send transaction (with rate limiting)
+            async with self.rpc_limiter:
+                tx_hash = await loop.run_in_executor(
+                    self._executor,
+                    lambda: self.web3.eth.send_raw_transaction(
+                        signed_txn.rawTransaction
+                    ),
+                )
 
             # Convert bytes to hex string if needed
             tx_hash_str = (
@@ -327,24 +356,27 @@ class BlockchainService:
             # Run synchronous Web3 calls in thread pool
             loop = asyncio.get_event_loop()
 
-            # Get transaction receipt
+            # Get transaction receipt (with rate limiting)
             try:
-                receipt = await loop.run_in_executor(
-                    self._executor,
-                    lambda: self.web3.eth.get_transaction_receipt(tx_hash),
-                )
-            except Exception:
+                async with self.rpc_limiter:
+                    receipt = await loop.run_in_executor(
+                        self._executor,
+                        lambda: self.web3.eth.get_transaction_receipt(tx_hash),
+                    )
+            except Exception as e:
                 # Transaction not found or not yet mined
+                self.rpc_limiter.record_error()
                 return {
                     "status": "pending",
                     "confirmations": 0,
                     "block_number": None,
                 }
 
-            # Get current block number
-            current_block = await loop.run_in_executor(
-                self._executor, lambda: self.web3.eth.block_number
-            )
+            # Get current block number (with rate limiting)
+            async with self.rpc_limiter:
+                current_block = await loop.run_in_executor(
+                    self._executor, lambda: self.web3.eth.block_number
+                )
 
             # Calculate confirmations
             confirmations = max(0, current_block - receipt.blockNumber)
@@ -392,28 +424,32 @@ class BlockchainService:
             # Run synchronous Web3 calls in thread pool
             loop = asyncio.get_event_loop()
 
-            # Get transaction
+            # Get transaction (with rate limiting)
             try:
-                tx = await loop.run_in_executor(
-                    self._executor,
-                    lambda: self.web3.eth.get_transaction(tx_hash)
-                )
-            except Exception:
+                async with self.rpc_limiter:
+                    tx = await loop.run_in_executor(
+                        self._executor,
+                        lambda: self.web3.eth.get_transaction(tx_hash)
+                    )
+            except Exception as e:
+                self.rpc_limiter.record_error()
                 return None
 
-            # Get receipt
+            # Get receipt (with rate limiting)
             try:
-                receipt = await loop.run_in_executor(
-                    self._executor,
-                    lambda: self.web3.eth.get_transaction_receipt(tx_hash),
-                )
+                async with self.rpc_limiter:
+                    receipt = await loop.run_in_executor(
+                        self._executor,
+                        lambda: self.web3.eth.get_transaction_receipt(tx_hash),
+                    )
             except Exception:
                 receipt = None
 
-            # Get current block
-            current_block = await loop.run_in_executor(
-                self._executor, lambda: self.web3.eth.block_number
-            )
+            # Get current block (with rate limiting)
+            async with self.rpc_limiter:
+                current_block = await loop.run_in_executor(
+                    self._executor, lambda: self.web3.eth.block_number
+                )
 
             # Parse transaction data for USDT transfer
             from_address = to_checksum_address(tx["from"])
@@ -538,12 +574,13 @@ class BlockchainService:
             # Convert to checksum address
             address = to_checksum_address(address)
 
-            # Run synchronous Web3 call in thread pool
+            # Run synchronous Web3 call in thread pool (with rate limiting)
             loop = asyncio.get_event_loop()
-            balance_wei = await loop.run_in_executor(
-                self._executor,
-                lambda: self.usdt_contract.functions.balanceOf(address).call(),
-            )
+            async with self.rpc_limiter:
+                balance_wei = await loop.run_in_executor(
+                    self._executor,
+                    lambda: self.usdt_contract.functions.balanceOf(address).call(),
+                )
 
             # Convert from wei to USDT
             balance = Decimal(balance_wei) / Decimal(10 ** USDT_DECIMALS)
@@ -589,18 +626,20 @@ class BlockchainService:
             # Run synchronous Web3 calls in thread pool
             loop = asyncio.get_event_loop()
 
-            # Estimate gas
-            gas_estimate = await loop.run_in_executor(
-                self._executor,
-                lambda: transfer_function.estimate_gas(
-                    {"from": self.wallet_address}
-                ),
-            )
+            # Estimate gas (with rate limiting)
+            async with self.rpc_limiter:
+                gas_estimate = await loop.run_in_executor(
+                    self._executor,
+                    lambda: transfer_function.estimate_gas(
+                        {"from": self.wallet_address}
+                    ),
+                )
 
-            # Get current gas price
-            gas_price = await loop.run_in_executor(
-                self._executor, lambda: self.web3.eth.gas_price
-            )
+            # Get current gas price (with rate limiting)
+            async with self.rpc_limiter:
+                gas_price = await loop.run_in_executor(
+                    self._executor, lambda: self.web3.eth.gas_price
+                )
 
             # Calculate total fee in wei
             total_fee_wei = gas_estimate * gas_price
@@ -642,25 +681,28 @@ class BlockchainService:
             # Run synchronous Web3 calls in thread pool
             loop = asyncio.get_event_loop()
 
-            # Get current block
-            current_block = await loop.run_in_executor(
-                self._executor, lambda: self.web3.eth.block_number
-            )
+            # Get current block (with rate limiting)
+            async with self.rpc_limiter:
+                current_block = await loop.run_in_executor(
+                    self._executor, lambda: self.web3.eth.block_number
+                )
 
-            # Create event filter for Transfer events
-            event_filter = await loop.run_in_executor(
-                self._executor,
-                lambda: self.usdt_contract.events.Transfer.create_filter(
-                    fromBlock=from_block,
-                    toBlock=current_block,
-                    argument_filters={"to": wallet_address},
-                ),
-            )
+            # Create event filter for Transfer events (with rate limiting)
+            async with self.rpc_limiter:
+                event_filter = await loop.run_in_executor(
+                    self._executor,
+                    lambda: self.usdt_contract.events.Transfer.create_filter(
+                        fromBlock=from_block,
+                        toBlock=current_block,
+                        argument_filters={"to": wallet_address},
+                    ),
+                )
 
-            # Get all events
-            events = await loop.run_in_executor(
-                self._executor, lambda: event_filter.get_all_entries()
-            )
+            # Get all events (with rate limiting)
+            async with self.rpc_limiter:
+                events = await loop.run_in_executor(
+                    self._executor, lambda: event_filter.get_all_entries()
+                )
 
             # Parse events
             deposits = []
@@ -744,6 +786,8 @@ def init_blockchain_service(
         rpc_url=rpc_url,
         usdt_contract=usdt_contract,
         wallet_private_key=wallet_private_key,
+        max_concurrent_rpc=10,  # Default: 10 concurrent requests
+        max_rps=25,  # Default: 25 RPS for $49 QuickNode plan
     )
 
     logger.info("BlockchainService singleton initialized")

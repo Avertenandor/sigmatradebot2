@@ -261,6 +261,61 @@ ps aux | grep "bot.main"
 psql -h localhost -U botuser -d sigmatradebot -c "SELECT COUNT(*) FROM users;"
 ```
 
+### Health Check HTTP Endpoint
+
+The bot provides a `/health` HTTP endpoint for external monitoring (nginx, UptimeRobot, etc.).
+
+**URL:** `http://<bot-host>:8080/health`
+
+**Response Codes:**
+- `200`: All systems healthy
+- `503`: One or more systems degraded/unhealthy
+
+**Response Format (JSON):**
+```json
+{
+  "status": "healthy",
+  "checks": {
+    "database": {
+      "status": "healthy",
+      "message": "Database connection successful"
+    },
+    "redis": {
+      "status": "healthy",
+      "message": "Redis connection successful"
+    },
+    "blockchain": {
+      "status": "healthy",
+      "message": "Blockchain connection successful (Chain ID: 56)",
+      "chain_id": 56,
+      "rpc_stats": {
+        "requests_last_minute": 15,
+        "avg_response_time_ms": 245.5,
+        "error_count": 0,
+        "total_requests": 1234
+      }
+    }
+  }
+}
+```
+
+**Configuration:**
+- Port is configurable via `HEALTH_CHECK_PORT` environment variable (default: 8080)
+- For Docker deployments, port is exposed in `docker-compose.python.yml`
+- For systemd deployments, ensure port 8080 is accessible (firewall rules)
+
+**Example Usage:**
+```bash
+# Test health endpoint
+curl http://localhost:8080/health
+
+# With jq for formatted output
+curl -s http://localhost:8080/health | jq
+
+# Check specific component
+curl -s http://localhost:8080/health | jq '.checks.blockchain.status'
+```
+
 ## 🔄 Updates & Maintenance
 
 ### Update Bot Code

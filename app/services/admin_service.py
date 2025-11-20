@@ -439,9 +439,11 @@ class AdminService:
             
             # Check if limit exceeded
             if count >= ADMIN_LOGIN_MAX_ATTEMPTS:
-                logger.warning(
-                    "[SECURITY] Admin login rate limit exceeded",
-                    extra={
+                from app.utils.security_logging import log_security_event
+
+                log_security_event(
+                    "Admin login rate limit exceeded",
+                    {
                         "telegram_id": telegram_id,
                         "action_type": "ADMIN_LOGIN_BRUTE_FORCE",
                         "attempts": count,
@@ -507,13 +509,25 @@ class AdminService:
             # Notify all super_admins
             await self._notify_super_admins_of_block(telegram_id)
 
-            logger.warning(
-                "[SECURITY] Telegram ID blocked due to failed admin login attempts",
-                extra={
+            from app.utils.security_logging import log_security_event
+
+            log_security_event(
+                "Telegram ID blocked due to failed admin login attempts",
+                {
                     "telegram_id": telegram_id,
                     "action_type": "AUTO_BLOCKED",
                     "reason": "Too many failed admin login attempts",
                 }
+            )
+
+            # Send security notification
+            from app.utils.admin_notifications import notify_security_event
+
+            await notify_security_event(
+                "Admin Login Brute Force Detected",
+                f"Telegram ID {telegram_id} blocked after "
+                f"{ADMIN_LOGIN_MAX_ATTEMPTS} failed login attempts",
+                priority="critical",
             )
 
         except Exception as e:

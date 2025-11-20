@@ -116,11 +116,13 @@ docker compose -f docker-compose.python.yml logs bot | grep -i "\[SECURITY\]"
 ```
 
 **Ожидаемые события:**
-- `[SECURITY] Admin login rate limit exceeded` - при превышении лимита логинов админа
-- `[SECURITY] Telegram ID X blocked due to too many failed admin login attempts` - автоматический бан
-- `[SECURITY] EMERGENCY: Admin X terminated admin Y` - экстренная блокировка админа
-- `[SECURITY] User blocked:` - блокировка пользователя
-- `[SECURITY] User terminated:` - терминация пользователя
+- `[SECURITY] Admin login rate limit exceeded` - при превышении лимита логинов админа (5 попыток/час)
+- `[SECURITY] Telegram ID blocked due to failed admin login attempts` - автоматический бан после превышения лимита
+- `[SECURITY] EMERGENCY: Admin terminated` - экстренная блокировка админа через админ-панель
+- `[SECURITY] User blocked` - блокировка пользователя администратором
+- `[SECURITY] User terminated` - терминация пользователя администратором
+- `[SECURITY] Terminated user attempted to use bot` - попытка терминированного пользователя использовать бота
+- `[SECURITY] Blocked user attempted non-appeal action` - попытка заблокированного пользователя выполнить не-апелляционное действие
 
 **Проверка частоты событий:**
 ```bash
@@ -262,6 +264,7 @@ LIMIT 10;
 - [ ] Проверить security-события: `docker compose logs bot --since 6h | grep -c "\[SECURITY\]"`
 - [ ] Проверить статус контейнеров: `docker compose ps`
 - [ ] Проверить использование ресурсов: `docker stats --no-stream`
+- [ ] Проверить health endpoint: `curl http://localhost:8080/health`
 
 ### Еженедельная проверка
 
@@ -269,6 +272,7 @@ LIMIT 10;
 - [ ] Проверить консистентность admin roles (SQL-запросы выше)
 - [ ] Проверить старые admin sessions: `SELECT COUNT(*) FROM admin_sessions WHERE last_activity_at < NOW() - INTERVAL '7 days';`
 - [ ] Запустить `scripts/admin_activity_report.py` для анализа активности админов
+- [ ] Проверить RPC stats в health endpoint: `curl -s http://localhost:8080/health | jq '.checks.blockchain.rpc_stats'`
 
 ---
 

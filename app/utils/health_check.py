@@ -94,12 +94,16 @@ async def check_blockchain() -> dict[str, Any]:
             lambda: blockchain_service.web3.eth.chain_id
         )
 
+        # Get RPC stats
+        rpc_stats = blockchain_service.get_rpc_stats()
+
         return {
             "status": "healthy",
             "message": (
                 f"Blockchain connection successful (Chain ID: {chain_id})"
             ),
             "chain_id": chain_id,
+            "rpc_stats": rpc_stats,
         }
     except RuntimeError as e:
         if "not initialized" in str(e):

@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     environment: str = "production"
     debug: bool = False
     log_level: str = "INFO"
+    health_check_port: int = Field(
+        default=8080, ge=1, le=65535, description="Health check HTTP server port"
+    )
 
     # Broadcast settings
     broadcast_rate_limit: int = 15  # messages per second
