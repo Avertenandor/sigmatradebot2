@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User
 from app.repositories.blacklist_repository import BlacklistRepository
 from app.services.user_service import UserService
+from bot.i18n.loader import get_translator, get_user_language
 from bot.keyboards.reply import (
     deposit_keyboard,
     main_menu_reply_keyboard,
@@ -68,10 +69,14 @@ async def show_main_menu(
         f"data keys: {list(data.keys())}"
     )
 
+    # R13-3: Get user language for i18n
+    user_language = await get_user_language(session, user.id)
+    _ = get_translator(user_language)
+    
     text = (
-        f"📊 *Главное меню*\n\n"
-        f"Добро пожаловать, {user.username or 'пользователь'}!\n\n"
-        f"Выберите действие из меню ниже:"
+        f"{_('menu.main')}\n\n"
+        f"{_('common.welcome_user', username=user.username or _('common.user'))}\n\n"
+        f"{_('common.choose_action')}"
     )
 
     logger.info(

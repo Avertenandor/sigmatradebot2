@@ -93,7 +93,7 @@ async def start_verification(
         )
         return
 
-    # Check verification rate limit
+    # R2-10: Check verification rate limit
     telegram_id = message.from_user.id if message.from_user else None
     if telegram_id:
         from bot.utils.operation_rate_limit import OperationRateLimiter
@@ -104,7 +104,13 @@ async def start_verification(
             telegram_id
         )
         if not allowed:
-            await message.answer(error_msg or "Слишком много попыток верификации")
+            # R2-10: Improved error message for rate limit
+            await message.answer(
+                f"❌ **Превышен лимит попыток верификации**\n\n"
+                f"{error_msg or 'Слишком много попыток верификации'}\n\n"
+                f"Попробуйте позже или обратитесь в поддержку, если проблема сохраняется.",
+                parse_mode="Markdown",
+            )
             return
 
     # Generate financial password
@@ -116,16 +122,69 @@ async def start_verification(
     # Import bcrypt hashing
     import bcrypt
 
-    password_hash = bcrypt.hashpw(
-        financial_password.encode("utf-8"), bcrypt.gensalt(rounds=12)
-    ).decode("utf-8")
+    try:
+        password_hash = bcrypt.hashpw(
+            financial_password.encode("utf-8"), bcrypt.gensalt(rounds=12)
+        ).decode("utf-8")
 
-    # Update user
-    await user_service.update_profile(
-        user.id,
-        financial_password=password_hash,
-        is_verified=True,
-    )
+        # R2-10: Update user with error handling
+        try:
+            await user_service.update_profile(
+                user.id,
+                financial_password=password_hash,
+                is_verified=True,
+            )
+        except ValueError as e:
+            # R2-10: Handle validation errors (e.g., invalid data)
+            logger.error(
+                "Verification failed - validation error",
+                extra={
+                    "user_id": user.id,
+                    "telegram_id": user.telegram_id,
+                    "error": str(e),
+                },
+            )
+            await message.answer(
+                f"❌ **Ошибка верификации**\n\n"
+                f"Не удалось сохранить данные верификации: {str(e)}\n\n"
+                f"Попробуйте еще раз или обратитесь в поддержку.",
+                parse_mode="Markdown",
+            )
+            return
+        except Exception as e:
+            # R2-10: Handle database/system errors
+            logger.error(
+                "Verification failed - system error",
+                extra={
+                    "user_id": user.id,
+                    "telegram_id": user.telegram_id,
+                    "error": str(e),
+                },
+            )
+            await message.answer(
+                "❌ **Системная ошибка**\n\n"
+                "Не удалось завершить верификацию из-за технической ошибки.\n\n"
+                "Попробуйте позже или обратитесь в поддержку.",
+                parse_mode="Markdown",
+            )
+            return
+    except Exception as e:
+        # R2-10: Handle password generation/hashing errors
+        logger.error(
+            "Verification failed - password generation error",
+            extra={
+                "user_id": user.id,
+                "telegram_id": user.telegram_id,
+                "error": str(e),
+            },
+        )
+        await message.answer(
+            "❌ **Ошибка генерации пароля**\n\n"
+            "Не удалось сгенерировать финансовый пароль.\n\n"
+            "Попробуйте еще раз или обратитесь в поддержку.",
+            parse_mode="Markdown",
+        )
+        return
 
     logger.info(
         "User verified with generated password",

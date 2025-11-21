@@ -195,10 +195,17 @@ class FinpassRecoveryService:
         self,
         *,
         request_id: int,
-        admin_id: int,
+        admin_id: int | None = None,
         admin_notes: str | None = None,
     ) -> FinancialPasswordRecovery:
-        """Reject a recovery request."""
+        """
+        Reject a recovery request.
+
+        Args:
+            request_id: Recovery request ID
+            admin_id: Admin ID (optional, None for system rejection)
+            admin_notes: Admin notes (optional)
+        """
         request = await self._get_request(request_id)
         self._ensure_status(
             request,

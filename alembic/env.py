@@ -11,6 +11,33 @@ from app.config.settings import settings
 
 # Import all models to ensure they are registered with Base.metadata
 from app.models import Base
+# Import all models to register them with Base.metadata
+from app.models import (  # noqa: F401
+    Admin,
+    AdminAction,
+    AdminActionEscrow,  # R18-4: Dual control escrow
+    AdminSession,
+    Appeal,
+    Blacklist,
+    Deposit,
+    DepositReward,
+    FailedNotification,
+    NotificationQueueFallback,  # R11-3: PostgreSQL fallback for notifications
+    FinancialPasswordRecovery,
+    PaymentRetry,
+    Referral,
+    ReferralEarning,
+    RewardSession,
+    SupportMessage,
+    SupportTicket,
+    SystemSetting,
+    Transaction,
+    User,
+    UserAction,
+    UserFsmState,  # R11-2: FSM states fallback
+    UserNotificationSettings,
+    WalletChangeRequest,
+)
 
 # this is the Alembic Config object
 config = context.config

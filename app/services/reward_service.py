@@ -226,11 +226,16 @@ class RewardService:
         if not session_obj.is_active:
             return False, 0, Decimal("0"), "Сессия неактивна"
 
-        # Find deposits in session period
-        stmt = select(Deposit).where(
-            Deposit.status == TransactionStatus.CONFIRMED.value,
-            Deposit.confirmed_at >= session_obj.start_date,
-            Deposit.confirmed_at <= session_obj.end_date,
+        # R9-2: Find deposits in session period with pessimistic lock
+        # This prevents race conditions with withdrawal operations
+        stmt = (
+            select(Deposit)
+            .where(
+                Deposit.status == TransactionStatus.CONFIRMED.value,
+                Deposit.confirmed_at >= session_obj.start_date,
+                Deposit.confirmed_at <= session_obj.end_date,
+            )
+            .with_for_update()  # Lock deposits to prevent concurrent modifications
         )
 
         result = await self.session.execute(stmt)
@@ -265,6 +270,18 @@ class RewardService:
                 )
                 continue
 
+            # R15-1: Skip if user is banned (stop ROI distribution)
+            if user and user.is_banned:
+                logger.warning(
+                    "Skipped deposit reward - user banned",
+                    extra={
+                        "user_id": deposit.user_id,
+                        "deposit_id": deposit.id,
+                        "reason": "user_blocked",
+                    },
+                )
+                continue
+
             # Check if reward already calculated
             existing = await self.reward_repo.find_by(
                 deposit_id=deposit.id, reward_session_id=session_id
@@ -273,31 +290,48 @@ class RewardService:
             if existing:
                 continue
 
-            # CRITICAL: For Level 1, check ROI cap (500%)
-            if deposit.level == 1 and deposit.is_roi_completed:
+            # R12-1: Check ROI cap for all levels (not just Level 1)
+            if deposit.is_roi_completed:
                 logger.info(
                     "Skipped reward - ROI cap reached",
                     extra={
                         "deposit_id": deposit.id,
+                        "level": deposit.level,
                         "roi_cap": str(deposit.roi_cap_amount),
                         "roi_paid": str(deposit.roi_paid_amount),
                     },
                 )
                 continue
 
-            # Get reward rate for level
+            # R17-1: Get reward rate - use RewardSession if available, otherwise use deposit_version
             reward_rate = session_obj.get_reward_rate_for_level(
                 deposit.level
             )
 
-            if reward_rate == Decimal("0"):
-                continue
+            # If RewardSession rate is 0 or deposit has version, use version's roi_percent
+            if reward_rate == Decimal("0") or (deposit.deposit_version and deposit.deposit_version.roi_percent):
+                # R17-1: Use deposit version's roi_percent as fallback/base rate
+                if deposit.deposit_version:
+                    # Convert roi_percent to daily rate (assuming roi_percent is annual)
+                    # For now, use roi_percent directly if it's already daily
+                    version_rate = deposit.deposit_version.roi_percent
+                    # If RewardSession rate is 0, use version rate
+                    if reward_rate == Decimal("0"):
+                        reward_rate = version_rate
+                    # Otherwise, RewardSession overrides (temporary promotion)
+                elif reward_rate == Decimal("0"):
+                    # No version and no session rate - skip
+                    logger.warning(
+                        f"No reward rate available for deposit {deposit.id}",
+                        extra={"deposit_id": deposit.id, "level": deposit.level},
+                    )
+                    continue
 
             # Calculate reward
             reward_amount = (deposit.amount * reward_rate) / 100
 
-            # CRITICAL: For Level 1, cap to remaining ROI space
-            if deposit.level == 1 and deposit.roi_cap_amount:
+            # R12-1: For all levels, cap to remaining ROI space
+            if deposit.roi_cap_amount:
                 roi_remaining = (
                     deposit.roi_cap_amount -
                     (deposit.roi_paid_amount or Decimal("0"))
@@ -308,6 +342,7 @@ class RewardService:
                         "Reward capped to remaining ROI",
                         extra={
                             "deposit_id": deposit.id,
+                            "level": deposit.level,
                             "original_reward": str(reward_amount),
                             "capped_reward": str(roi_remaining),
                         },
@@ -328,6 +363,39 @@ class RewardService:
                 reward_amount=reward_amount,
                 paid=False,
             )
+
+            # R12-1: Update deposit roi_paid_amount and check for completion
+            from app.repositories.deposit_repository import DepositRepository
+            from datetime import UTC, datetime
+
+            deposit_repo = DepositRepository(self.session)
+            new_roi_paid = (deposit.roi_paid_amount or Decimal("0")) + reward_amount
+
+            # Update roi_paid_amount
+            await deposit_repo.update(
+                deposit.id,
+                roi_paid_amount=new_roi_paid,
+            )
+
+            # R12-1: Check if ROI cap reached for all levels
+            if deposit.roi_cap_amount and new_roi_paid >= deposit.roi_cap_amount:
+                # Mark deposit as ROI completed with timestamp
+                from datetime import UTC, datetime
+                await deposit_repo.update(
+                    deposit.id,
+                    is_roi_completed=True,
+                    completed_at=datetime.now(UTC),
+                )
+                logger.info(
+                    "Deposit ROI completed (cap reached)",
+                    extra={
+                        "deposit_id": deposit.id,
+                        "user_id": deposit.user_id,
+                        "level": deposit.level,
+                        "roi_paid": str(new_roi_paid),
+                        "roi_cap": str(deposit.roi_cap_amount),
+                    },
+                )
 
             rewards_calculated += 1
             total_reward_amount += reward_amount

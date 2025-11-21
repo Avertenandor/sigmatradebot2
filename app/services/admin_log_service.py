@@ -16,9 +16,23 @@ from app.repositories.admin_action_repository import AdminActionRepository
 class AdminLogService:
     """Service for logging admin actions."""
 
-    def __init__(self, session: AsyncSession) -> None:
-        """Initialize admin log service."""
+    def __init__(
+        self,
+        session: AsyncSession,
+        bot: Any | None = None,
+        redis_client: Any | None = None,
+    ) -> None:
+        """
+        Initialize admin log service.
+
+        Args:
+            session: Database session
+            bot: Optional Bot instance for security notifications
+            redis_client: Optional Redis client for operation blocks
+        """
         self.session = session
+        self.bot = bot
+        self.redis_client = redis_client
         self.action_repo = AdminActionRepository(session)
 
     async def log_action(
@@ -52,6 +66,71 @@ class AdminLogService:
             logger.debug(
                 f"Admin action logged: {action_type} by admin {admin_id}"
             )
+
+            # R10-3: Check for suspicious activity after logging
+            try:
+                from app.services.admin_security_monitor import (
+                    AdminSecurityMonitor,
+                )
+
+                monitor = AdminSecurityMonitor(
+                    self.session, bot=self.bot, redis_client=self.redis_client
+                )
+                check_result = await monitor.check_action(
+                    admin_id=admin_id,
+                    action_type=action_type,
+                    details=details,
+                )
+
+                if check_result.get("suspicious"):
+                    logger.warning(
+                        f"R10-3: Suspicious admin activity detected",
+                        extra={
+                            "admin_id": admin_id,
+                            "action_type": action_type,
+                            "reason": check_result.get("reason"),
+                            "severity": check_result.get("severity"),
+                        },
+                    )
+
+                    # Auto-block if should_block is True
+                    if check_result.get("should_block"):
+                        # R10-3: Notify super_admins, force logout, block operations
+                        await monitor._notify_super_admins(
+                            admin_id=admin_id,
+                            reason=check_result.get("reason", "Suspicious activity"),
+                            severity=check_result.get("severity", "critical"),
+                        )
+                        await monitor._force_logout(admin_id)
+                        await monitor._block_critical_operations(admin_id)
+
+                        success, error = await monitor.block_admin(
+                            admin_id, check_result.get("reason", "Suspicious activity")
+                        )
+                        if success:
+                            logger.critical(
+                                f"R10-3: Admin {admin_id} automatically blocked "
+                                f"due to suspicious activity"
+                            )
+                        else:
+                            logger.error(
+                                f"R10-3: Failed to auto-block admin {admin_id}: {error}"
+                            )
+                    elif check_result.get("severity") in ("critical", "high"):
+                        # Notify even if not blocking
+                        await monitor._notify_super_admins(
+                            admin_id=admin_id,
+                            reason=check_result.get("reason", "Suspicious activity"),
+                            severity=check_result.get("severity", "high"),
+                        )
+
+            except Exception as monitor_error:
+                # Don't fail the action if monitoring fails
+                logger.error(
+                    f"Error in admin security monitor: {monitor_error}",
+                    exc_info=True,
+                )
+
         except Exception as e:
             logger.error(
                 f"Failed to log admin action: {e}",

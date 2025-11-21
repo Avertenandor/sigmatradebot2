@@ -7,6 +7,7 @@ Exports all SQLAlchemy models for easy imports.
 # Admin Models
 from app.models.admin import Admin
 from app.models.admin_action import AdminAction
+from app.models.admin_action_escrow import AdminActionEscrow
 from app.models.admin_session import AdminSession
 from app.models.appeal import Appeal, AppealStatus
 from app.models.base import Base
@@ -26,6 +27,7 @@ from app.models.enums import (
     WalletChangeType,
 )
 from app.models.failed_notification import FailedNotification
+from app.models.notification_queue_fallback import NotificationQueueFallback
 from app.models.financial_password_recovery import (
     FinancialPasswordRecovery,
 )
@@ -49,6 +51,7 @@ from app.models.transaction import Transaction
 # Core Models
 from app.models.user import User
 from app.models.user_action import UserAction
+from app.models.user_fsm_state import UserFsmState
 from app.models.user_notification_settings import UserNotificationSettings
 from app.models.wallet_change_request import WalletChangeRequest
 
@@ -73,6 +76,7 @@ __all__ = [
     # Admin Models
     "Admin",
     "AdminAction",
+    "AdminActionEscrow",
     "AdminSession",
     # Security Models
     "Blacklist",
@@ -86,12 +90,14 @@ __all__ = [
     # PART5 Critical Models
     "PaymentRetry",
     "FailedNotification",
+    "NotificationQueueFallback",  # R11-3: PostgreSQL fallback for notifications
     # Support Models
     "SupportTicket",
     "SupportMessage",
     # System Models
     "SystemSetting",
     "UserAction",
+    "UserFsmState",
     "UserNotificationSettings",
     "WalletChangeRequest",
 ]

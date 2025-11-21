@@ -38,31 +38,155 @@ class NotificationService:
         user_telegram_id: int,
         message: str,
         critical: bool = False,
+        redis_client: Any | None = None,
     ) -> bool:
         """
         Send text notification.
+
+        R11-3: If Redis is unavailable, writes to PostgreSQL fallback queue.
 
         Args:
             bot: Bot instance
             user_telegram_id: Telegram user ID
             message: Message text
             critical: Mark as critical
+            redis_client: Optional Redis client for checking availability
 
         Returns:
-            True if sent successfully
+            True if sent successfully or queued to fallback
         """
+        # R11-3: Check if Redis is available
+        redis_available = False
+        if redis_client is not None:
+            try:
+                await redis_client.ping()
+                redis_available = True
+            except Exception:
+                redis_available = False
+                logger.warning(
+                    "R11-3: Redis unavailable, will use PostgreSQL fallback"
+                )
+
+        # R11-3: If Redis is unavailable, write to PostgreSQL fallback
+        if not redis_available:
+            try:
+                from app.models.notification_queue_fallback import (
+                    NotificationQueueFallback,
+                )
+                from app.repositories.user_repository import UserRepository
+
+                user_repo = UserRepository(self.session)
+                user = await user_repo.get_by_telegram_id(user_telegram_id)
+
+                if user:
+                    # Create fallback queue entry
+                    fallback_entry = NotificationQueueFallback(
+                        user_id=user.id,
+                        notification_type="text",
+                        payload={
+                            "message": message,
+                            "critical": critical,
+                        },
+                        priority=100 if critical else 0,
+                    )
+                    self.session.add(fallback_entry)
+                    await self.session.flush()
+
+                    logger.info(
+                        f"R11-3: Notification queued to PostgreSQL fallback "
+                        f"for user {user_telegram_id} (user_id={user.id})"
+                    )
+                    return True
+                else:
+                    logger.warning(
+                        f"R11-3: Cannot queue notification for unknown user "
+                        f"{user_telegram_id}"
+                    )
+            except Exception as fallback_error:
+                logger.error(
+                    f"R11-3: Failed to write to PostgreSQL fallback: {fallback_error}",
+                    exc_info=True,
+                )
+
         try:
             await bot.send_message(
                 chat_id=user_telegram_id, text=message
             )
+            
+            # R8-2: If message sent successfully, check if user was previously blocked
+            # and reset the flag (user unblocked the bot)
+            try:
+                from app.repositories.user_repository import UserRepository
+                user_repo = UserRepository(self.session)
+                user = await user_repo.get_by_telegram_id(user_telegram_id)
+                if user and hasattr(user, 'bot_blocked') and user.bot_blocked:
+                    # User unblocked the bot - reset flag
+                    await user_repo.update(user.id, bot_blocked=False)
+                    logger.info(
+                        f"User {user_telegram_id} unblocked the bot, flag reset"
+                    )
+            except Exception as reset_error:
+                # Don't fail notification if flag reset fails
+                logger.warning(f"Failed to reset bot_blocked flag: {reset_error}")
+            
             return True
         except Exception as e:
+            # R8-2: Improved 403 error handling with specific TelegramAPIError check
+            from aiogram.exceptions import TelegramAPIError
+            from datetime import UTC, datetime
+            
+            # Check for specific "bot was blocked by the user" error
+            is_bot_blocked = False
+            if isinstance(e, TelegramAPIError):
+                # Check error code and message
+                if e.error_code == 403:
+                    error_message = str(e).lower()
+                    if "bot was blocked by the user" in error_message or "blocked" in error_message:
+                        is_bot_blocked = True
+            else:
+                # Fallback for non-TelegramAPIError exceptions
+                error_str = str(e).lower()
+                if "403" in error_str or "forbidden" in error_str:
+                    if "blocked" in error_str or "bot was blocked" in error_str:
+                        is_bot_blocked = True
+            
+            if is_bot_blocked:
+                logger.warning(
+                    f"Bot blocked by user {user_telegram_id}",
+                    extra={"user_id": user_telegram_id},
+                )
+                
+                # Mark user as having blocked bot
+                try:
+                    from app.repositories.user_repository import UserRepository
+                    
+                    user_repo = UserRepository(self.session)
+                    user = await user_repo.find_by_telegram_id(user_telegram_id)
+                    if user and not user.bot_blocked:
+                        await user_repo.update(
+                            user.id,
+                            bot_blocked=True,
+                            bot_blocked_at=datetime.now(UTC),
+                        )
+                        await self.session.commit()
+                        logger.info(
+                            f"Marked user {user_telegram_id} as bot_blocked"
+                        )
+                except Exception as update_error:
+                    logger.error(
+                        f"Failed to mark user as bot_blocked: {update_error}"
+                    )
+                
+                # Don't save to failed notifications for blocked users
+                # (they won't receive it anyway)
+                return False
+            
             logger.error(
                 f"Failed to send notification: {e}",
                 extra={"user_id": user_telegram_id},
             )
 
-            # Save to failed notifications (PART5)
+            # Save to failed notifications (PART5) for other errors
             await self._save_failed_notification(
                 user_telegram_id,
                 "text_message",

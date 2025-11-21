@@ -25,6 +25,7 @@ from app.models.base import Base
 if TYPE_CHECKING:
     from app.models.deposit import Deposit
     from app.models.transaction import Transaction
+    from app.models.user_fsm_state import UserFsmState
     from app.models.user_notification_settings import UserNotificationSettings
 
 
@@ -109,6 +110,24 @@ class User(Base):
     earnings_blocked: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
     )
+    suspicious: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, index=True
+    )
+    withdrawal_blocked: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, index=True
+    )
+    # R8-2: Bot blocked tracking
+    bot_blocked: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, index=True
+    )
+    bot_blocked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # R13-3: Language preference
+    language: Mapped[str | None] = mapped_column(
+        String(10), nullable=True, default="ru", index=True
+    )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -156,6 +175,13 @@ class User(Base):
         "UserNotificationSettings",
         back_populates="user",
         uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+    # R11-2: FSM states relationship (fallback when Redis is unavailable)
+    fsm_states: Mapped[list["UserFsmState"]] = relationship(
+        "UserFsmState",
+        back_populates="user",
         cascade="all, delete-orphan",
     )
 

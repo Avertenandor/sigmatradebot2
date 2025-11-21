@@ -138,6 +138,14 @@ class UserService:
 
         await self.session.commit()
 
+        # R10-1: Check fraud risk after registration
+        from app.services.fraud_detection_service import (
+            FraudDetectionService,
+        )
+
+        fraud_service = FraudDetectionService(self.session)
+        await fraud_service.check_and_block_if_needed(user.id)
+
         # Create referral relationships if referrer exists
         if referrer_id:
             result = (

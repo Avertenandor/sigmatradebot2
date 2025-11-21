@@ -7,50 +7,135 @@ Handles referral program actions including stats, leaderboard, and earnings.
 from typing import Any
 
 from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from app.services.referral_service import ReferralService
 from app.services.user_service import UserService
-from bot.keyboards.reply import referral_keyboard
+from bot.keyboards.reply import referral_keyboard, referral_list_keyboard
 from bot.utils.constants import REFERRAL_RATES
 from bot.utils.formatters import format_usdt
 
 router = Router(name="referral")
 
 
+async def _show_referral_list(
+    message: Message,
+    session: AsyncSession,
+    user: User,
+    state: FSMContext,
+    level: int = 1,
+    page: int = 1,
+) -> None:
+    """
+    Show referral list for specific level and page.
+    
+    R4-3: Shows detailed list with dates and earnings.
+    R4-4: Supports pagination.
+    
+    Args:
+        message: Telegram message
+        session: Database session
+        user: Current user
+        state: FSM context
+        level: Referral level (1-3)
+        page: Page number
+    """
+    referral_service = ReferralService(session)
+    
+    # Get referrals for the level
+    result = await referral_service.get_referrals_by_level(
+        user.id, level=level, page=page, limit=10
+    )
+    
+    referrals = result["referrals"]
+    total = result["total"]
+    total_pages = result["pages"]
+    
+    # Save to FSM for navigation
+    await state.update_data(
+        referral_level=level,
+        referral_page=page,
+    )
+    
+    # Build message text
+    text = f"👥 *Мои рефералы - Уровень {level}*\n\n"
+    
+    if not referrals:
+        text += f"На уровне {level} у вас пока нет рефералов."
+    else:
+        text += f"*Всего рефералов уровня {level}: {total}*\n\n"
+        
+        for idx, ref in enumerate(referrals, start=1):
+            ref_user = ref["user"]
+            earned = ref["earned"]
+            joined_at = ref["joined_at"]
+            
+            username = ref_user.username or "без username"
+            date_str = joined_at.strftime("%d.%m.%Y")
+            
+            text += (
+                f"*{idx + (page - 1) * 10}.* @{username}\n"
+                f"📅 Дата регистрации: {date_str}\n"
+                f"💰 Заработано: *{format_usdt(earned)} USDT*\n\n"
+            )
+        
+        if total_pages > 1:
+            text += f"*Страница {page} из {total_pages}*\n\n"
+    
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=referral_list_keyboard(
+            level=level,
+            page=page,
+            total_pages=total_pages,
+        ),
+    )
+
+
 @router.message(F.text == "👥 Мои рефералы")
 async def handle_my_referrals(
     message: Message,
     session: AsyncSession,
+    state: FSMContext,
     user: User,
 ) -> None:
-    """Show user's referrals list."""
+    """
+    Show user's referrals list.
+    
+    R4-2: Checks if user has any referrals, shows message if none.
+    R4-3: Shows detailed list by levels.
+    """
     referral_service = ReferralService(session)
 
-    # Get referral stats
-    stats = await referral_service.get_referral_stats(user.id)
+    # R4-2: Check if user has any referrals across all levels
+    total_referrals = 0
+    for level in [1, 2, 3]:
+        result = await referral_service.get_referrals_by_level(
+            user.id, level=level, page=1, limit=1
+        )
+        total_referrals += result["total"]
+    
+    # R4-2: If no referrals at all, show message
+    if total_referrals == 0:
+        text = (
+            "👥 *Мои рефералы*\n\n"
+            "У вас пока нет рефералов.\n\n"
+            "Приглашайте друзей по вашей реферальной ссылке "
+            "и получайте комиссию с их депозитов!\n\n"
+            "Вашу реферальную ссылку можно найти в разделе "
+            "\"📊 Статистика рефералов\"."
+        )
+        await message.answer(
+            text, parse_mode="Markdown", reply_markup=referral_keyboard()
+        )
+        return
 
-    text = (
-        f"👥 *Мои рефералы*\n\n"
-        f"*Статистика:*\n"
-        f"👥 Прямые партнеры (Уровень 1): *{stats['direct_referrals']}*\n"
-        f"👥 Уровень 2: *{stats['level2_referrals']}*\n"
-        f"👥 Уровень 3: *{stats['level3_referrals']}*\n\n"
-        f"*Комиссии:*\n"
-        f"• Уровень 1: {REFERRAL_RATES[1] * 100}% от депозитов прямых"
-            "партнеров\n"
-        f"• Уровень 2: {REFERRAL_RATES[2] * 100}% от партнеров второго"
-            "уровня\n"
-        f"• Уровень 3: {REFERRAL_RATES[3] * 100}% от партнеров третьего"
-            "уровня\n\n"
-        f"📈 Чем больше ваша сеть, тем больше доход!"
-    )
-
-    await message.answer(
-        text, parse_mode="Markdown", reply_markup=referral_keyboard()
-    )
+    # R4-3: Show detailed list for Level 1 by default
+    await _show_referral_list(message, session, user, state, level=1, page=1)
 
 
 @router.message(F.text == "💰 Мой заработок")
@@ -64,6 +149,19 @@ async def handle_my_earnings(
 
     # Get referral stats
     stats = await referral_service.get_referral_stats(user.id)
+
+    # R4-6: Check for zero earnings
+    total_earned = stats.get('total_earned', 0)
+    if total_earned == 0:
+        text = (
+            "💰 *Мой заработок*\n\n"
+            "У вас пока нет реферальных начислений.\n\n"
+            "💡 Приглашайте друзей по вашей реферальной ссылке, чтобы начать зарабатывать!"
+        )
+        await message.answer(
+            text, parse_mode="Markdown", reply_markup=referral_keyboard()
+        )
+        return
 
     # Get pending earnings
     result = await referral_service.get_pending_earnings(

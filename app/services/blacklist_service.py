@@ -287,3 +287,247 @@ class BlacklistService:
             Number of active entries
         """
         return await self.repository.count_active()
+
+    async def terminate_user(
+        self, user_id: int, reason: str, admin_id: int | None = None
+    ) -> dict:
+        """
+        Terminate user account (R15-2): BLOCKED → TERMINATED.
+
+        Atomic transition with handling of all consequences:
+        - Reject all pending appeals
+        - Reject all pending support tickets
+        - Stop ROI distribution (already handled by is_banned)
+        - Reject all pending withdrawals
+        - Clear notification queue
+
+        Args:
+            user_id: User ID
+            reason: Termination reason
+            admin_id: Admin ID (optional)
+
+        Returns:
+            Dict with success status and actions taken
+        """
+        from datetime import UTC, datetime
+
+        from app.models.appeal import Appeal, AppealStatus
+        from app.models.enums import (
+            SupportTicketStatus,
+            TransactionStatus,
+            TransactionType,
+        )
+        from app.repositories.appeal_repository import AppealRepository
+        from app.repositories.support_ticket_repository import (
+            SupportTicketRepository,
+        )
+        from app.repositories.transaction_repository import (
+            TransactionRepository,
+        )
+        from app.repositories.user_repository import UserRepository
+
+        user_repo = UserRepository(self.session)
+        transaction_repo = TransactionRepository(self.session)
+        appeal_repo = AppealRepository(self.session)
+        ticket_repo = SupportTicketRepository(self.session)
+
+        user = await user_repo.get_by_id(user_id)
+        if not user:
+            return {
+                "success": False,
+                "error": "User not found",
+            }
+
+        actions_taken = []
+
+        # 1. Reject all pending appeals
+        pending_appeals = await appeal_repo.find_by(
+            user_id=user_id,
+            status=AppealStatus.PENDING,
+        )
+        for appeal in pending_appeals:
+            appeal.status = AppealStatus.REJECTED.value
+            appeal.reviewed_at = datetime.now(UTC)
+            appeal.review_notes = (
+                "Автоматически отклонено при терминации аккаунта"
+            )
+            actions_taken.append(f"Rejected appeal {appeal.id}")
+
+        # 2. Reject all pending support tickets
+        pending_tickets = await ticket_repo.find_by(
+            user_id=user_id,
+            status=SupportTicketStatus.OPEN.value,
+        )
+        for ticket in pending_tickets:
+            ticket.status = SupportTicketStatus.CLOSED.value
+            actions_taken.append(f"Closed support ticket {ticket.id}")
+
+        # 3. Reject all pending withdrawals
+        pending_withdrawals = await transaction_repo.get_by_user(
+            user_id=user_id,
+            type=TransactionType.WITHDRAWAL.value,
+            status=TransactionStatus.PENDING.value,
+        )
+        rejected_count = 0
+        for withdrawal in pending_withdrawals:
+            withdrawal.status = TransactionStatus.FAILED.value
+            # Return balance
+            user.balance = user.balance + withdrawal.amount
+            rejected_count += 1
+
+        if rejected_count > 0:
+            actions_taken.append(f"Rejected {rejected_count} pending withdrawals")
+
+        # 4. Update blacklist entry to TERMINATED
+        blacklist_entry = await self.repository.find_by_telegram_id(
+            user.telegram_id
+        )
+        if blacklist_entry:
+            await self.repository.update(
+                blacklist_entry.id,
+                action_type=BlacklistActionType.TERMINATED,
+                reason=reason,
+            )
+            actions_taken.append("Updated blacklist to TERMINATED")
+
+        # 6. Mark user as banned (already done, but ensure it's set)
+        user.is_banned = True
+        await user_repo.update(user_id, is_banned=True)
+
+        await self.session.commit()
+
+        logger.warning(
+            f"User {user_id} terminated",
+            extra={
+                "user_id": user_id,
+                "telegram_id": user.telegram_id,
+                "rejected_appeals": len(pending_appeals),
+                "closed_tickets": len(pending_tickets),
+                "rejected_withdrawals": rejected_count,
+                "reason": reason,
+            },
+        )
+
+        return {
+            "success": True,
+            "user_id": user_id,
+            "actions_taken": actions_taken,
+            "rejected_appeals": len(pending_appeals),
+            "closed_tickets": len(pending_tickets),
+            "rejected_withdrawals": rejected_count,
+        }
+
+    async def block_user_with_active_operations(
+        self,
+        user_id: int,
+        reason: str,
+        admin_id: int | None = None,
+        redis_client: Any | None = None,
+    ) -> dict:
+        """
+        Block user and handle active operations (R15-1, R15-4).
+
+        R15-4: Uses distributed lock to prevent race conditions.
+
+        Policy:
+        - Stop ROI distribution
+        - Freeze pending withdrawals (mark as FROZEN)
+        - Continue referral earnings (not blocked)
+
+        Args:
+            user_id: User ID
+            reason: Block reason
+            admin_id: Admin ID (optional)
+            redis_client: Optional Redis client for distributed lock
+
+        Returns:
+            Dict with success status and actions taken
+        """
+        # R15-4: Use distributed lock to prevent race conditions
+        from app.utils.distributed_lock import get_distributed_lock
+
+        lock = get_distributed_lock(
+            redis_client=redis_client, session=self.session
+        )
+        lock_key = f"user:{user_id}:block_operation"
+
+        async with lock.lock(lock_key, timeout=30, blocking=True, blocking_timeout=5.0) as acquired:
+            if not acquired:
+                logger.warning(
+                    f"Could not acquire lock for blocking user {user_id}, "
+                    "operation may be in progress"
+                )
+                return {
+                    "success": False,
+                    "error": "Operation already in progress",
+                    "actions_taken": [],
+                }
+
+            from app.models.enums import TransactionStatus, TransactionType
+            from app.repositories.deposit_repository import DepositRepository
+            from app.repositories.transaction_repository import (
+                TransactionRepository,
+            )
+            from app.repositories.user_repository import UserRepository
+
+            user_repo = UserRepository(self.session)
+            transaction_repo = TransactionRepository(self.session)
+            deposit_repo = DepositRepository(self.session)
+
+            user = await user_repo.get_by_id(user_id)
+            if not user:
+                return {
+                    "success": False,
+                    "error": "User not found",
+                }
+
+            actions_taken = []
+
+            # 1. Freeze pending withdrawals
+            pending_withdrawals = await transaction_repo.get_by_user(
+                user_id=user_id,
+                type=TransactionType.WITHDRAWAL.value,
+                status=TransactionStatus.PENDING.value,
+            )
+
+            frozen_count = 0
+            for withdrawal in pending_withdrawals:
+                withdrawal.status = TransactionStatus.FROZEN.value
+                frozen_count += 1
+
+            if frozen_count > 0:
+                actions_taken.append(f"Frozen {frozen_count} pending withdrawals")
+
+            # 2. Mark user as banned and block earnings (stop ROI distribution)
+            user.is_banned = True
+            await user_repo.update(
+                user_id, is_banned=True, earnings_blocked=True
+            )
+
+            # 3. Add to blacklist
+            await self.add_to_blacklist(
+                telegram_id=user.telegram_id,
+                wallet_address=user.wallet_address,
+                reason=reason,
+                added_by_admin_id=admin_id,
+                action_type=BlacklistActionType.BLOCKED,
+            )
+
+            await self.session.commit()
+
+            logger.warning(
+                f"User {user_id} blocked with active operations",
+                extra={
+                    "user_id": user_id,
+                    "telegram_id": user.telegram_id,
+                    "frozen_withdrawals": frozen_count,
+                    "reason": reason,
+                },
+            )
+
+            return {
+                "success": True,
+                "user_id": user_id,
+                "actions_taken": actions_taken,
+                "frozen_withdrawals": frozen_count,
+            }

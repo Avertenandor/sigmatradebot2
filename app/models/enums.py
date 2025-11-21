@@ -11,8 +11,11 @@ class TransactionStatus(StrEnum):
     """Transaction status values."""
 
     PENDING = "pending"
+    PROCESSING = "processing"  # Sent to blockchain, waiting for confirmation
     CONFIRMED = "confirmed"
     FAILED = "failed"
+    FROZEN = "frozen"  # Frozen due to user block (R15-1)
+    PENDING_NETWORK_RECOVERY = "pending_network_recovery"  # R11-2: Deposit waiting for blockchain network recovery
 
 
 class TransactionType(StrEnum):

@@ -54,8 +54,19 @@ from jobs.tasks.admin_session_cleanup import (
 )
 from jobs.tasks.daily_rewards import process_daily_rewards
 from jobs.tasks.deposit_monitoring import monitor_deposits
+from jobs.tasks.financial_reconciliation import (
+    perform_financial_reconciliation,
+)
+from jobs.tasks.metrics_monitor import monitor_metrics
+from jobs.tasks.node_health_monitor import monitor_node_health
 from jobs.tasks.notification_retry import process_notification_retries
 from jobs.tasks.payment_retry import process_payment_retries
+from jobs.tasks.stuck_transaction_monitor import monitor_stuck_transactions
+from jobs.tasks.mark_immutable_audit_logs import mark_immutable_audit_logs
+from jobs.tasks.notification_fallback_processor import (
+    process_notification_fallback,
+)
+from jobs.tasks.warmup_redis_cache import warmup_redis_cache
 
 
 def create_scheduler() -> AsyncIOScheduler:
@@ -85,6 +96,15 @@ def create_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
+    # R11-3: Notification fallback processor - every 5 seconds
+    scheduler.add_job(
+        process_notification_fallback.send,
+        trigger=IntervalTrigger(seconds=5),
+        id="notification_fallback",
+        name="Notification Fallback Processing",
+        replace_existing=True,
+    )
+
     # Deposit monitoring - every 1 minute
     scheduler.add_job(
         monitor_deposits.send,
@@ -103,6 +123,15 @@ def create_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
+    # R10-2: Financial reconciliation - every day at 01:00 UTC
+    scheduler.add_job(
+        perform_financial_reconciliation.send,
+        trigger=CronTrigger(hour=1, minute=0),
+        id="financial_reconciliation",
+        name="Financial Reconciliation",
+        replace_existing=True,
+    )
+
     # Admin session cleanup - every 5 minutes
     scheduler.add_job(
         cleanup_expired_admin_sessions.send,
@@ -112,7 +141,52 @@ def create_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
-    logger.info("Task scheduler configured with 5 jobs")
+    # R7-6: Stuck transaction monitor - every 5 minutes
+    scheduler.add_job(
+        monitor_stuck_transactions.send,
+        trigger=IntervalTrigger(minutes=5),
+        id="stuck_transaction_monitor",
+        name="Stuck Transaction Monitor",
+        replace_existing=True,
+    )
+
+    # R7-5: Node health monitor - every 30 seconds
+    scheduler.add_job(
+        monitor_node_health.send,
+        trigger=IntervalTrigger(seconds=30),
+        id="node_health_monitor",
+        name="Node Health Monitor",
+        replace_existing=True,
+    )
+
+    # R14-1: Metrics monitor - every 5 minutes
+    scheduler.add_job(
+        monitor_metrics.send,
+        trigger=IntervalTrigger(minutes=5),
+        id="metrics_monitor",
+        name="Metrics Monitor",
+        replace_existing=True,
+    )
+
+    # R18-4: Mark immutable audit logs - daily at 02:00 UTC
+    scheduler.add_job(
+        mark_immutable_audit_logs.send,
+        trigger=CronTrigger(hour=2, minute=0),
+        id="mark_immutable_audit_logs",
+        name="Mark Immutable Audit Logs",
+        replace_existing=True,
+    )
+
+    # R11-3: Warmup Redis cache - every 1 minute (when Redis is healthy)
+    scheduler.add_job(
+        warmup_redis_cache.send,
+        trigger=IntervalTrigger(minutes=1),
+        id="warmup_redis_cache",
+        name="Warmup Redis Cache",
+        replace_existing=True,
+    )
+
+    logger.info("Task scheduler configured with 13 jobs")
 
     return scheduler
 

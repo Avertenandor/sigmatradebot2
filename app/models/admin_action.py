@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Optional
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -77,6 +78,13 @@ class AdminAction(Base):
     ip_address: Mapped[str | None] = mapped_column(
         INET, nullable=True
     )
+
+    # R18-4: Immutable audit log flag
+    is_immutable: Mapped[bool] = mapped_column(
+        default=False,
+        nullable=False,
+        server_default="false",
+    )  # Set to True after N days to prevent modifications
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(

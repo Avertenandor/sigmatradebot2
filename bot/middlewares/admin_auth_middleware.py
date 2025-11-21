@@ -13,8 +13,6 @@ from aiogram.types import CallbackQuery, Message, TelegramObject
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.admin import Admin
-from app.models.admin_session import AdminSession
 from app.services.admin_service import AdminService
 from bot.states.admin_states import AdminStates
 
@@ -88,6 +86,26 @@ class AdminAuthMiddleware(BaseMiddleware):
             )
             return await handler(event, data)
 
+        # R10-3: Check if admin is blocked
+        if admin.is_blocked:
+            logger.warning(
+                f"R10-3: Blocked admin {admin.id} (telegram_id={telegram_user.id}) "
+                f"attempted to access admin panel"
+            )
+            if isinstance(event, Message):
+                await event.answer(
+                    "🚫 **Доступ запрещен**\n\n"
+                    "Ваш админ-аккаунт заблокирован из соображений безопасности.\n\n"
+                    "Обратитесь к супер-администратору для выяснения причин.",
+                    parse_mode="Markdown",
+                )
+            elif isinstance(event, CallbackQuery):
+                await event.answer(
+                    "🚫 Доступ запрещен. Ваш админ-аккаунт заблокирован.",
+                    show_alert=True,
+                )
+            return
+
         # Get current FSM state
         current_state = await state.get_state()
 
@@ -150,4 +168,3 @@ class AdminAuthMiddleware(BaseMiddleware):
 
         # Call next handler
         return await handler(event, data)
-

@@ -335,6 +335,20 @@ class AdminService:
         # Load admin
         admin = await self.admin_repo.get_by_id(session.admin_id)
 
+        if not admin:
+            return None, None, "Admin not found"
+
+        # R10-3: Check if admin is blocked
+        if admin.is_blocked:
+            logger.warning(
+                f"R10-3: Blocked admin {admin.id} attempted to use session "
+                f"{session_token[:8]}..."
+            )
+            # Invalidate session
+            await self.session_repo.delete(session.id)
+            await self.session.commit()
+            return None, None, "Admin account is blocked"
+
         await self.session.commit()
 
         return admin, session, None
@@ -455,7 +469,11 @@ class AdminService:
                 await self._block_telegram_id_for_failed_logins(telegram_id)
                 
         except Exception as e:
-            logger.error(f"Error tracking failed login: {e}")
+            # R11-2: Redis failed, continue without rate limiting
+            logger.warning(
+                f"R11-2: Redis error tracking failed login for {telegram_id}: {e}. "
+                "Continuing without rate limiting (degraded mode)."
+            )
 
     async def _clear_failed_login_attempts(self, telegram_id: int) -> None:
         """
@@ -471,7 +489,11 @@ class AdminService:
             key = f"admin_login_attempts:{telegram_id}"
             await self.redis_client.delete(key)
         except Exception as e:
-            logger.error(f"Error clearing failed login attempts: {e}")
+            # R11-2: Redis failed, continue without clearing
+            logger.warning(
+                f"R11-2: Redis error clearing failed login attempts for {telegram_id}: {e}. "
+                "Continuing without clearing (degraded mode)."
+            )
 
     async def _block_telegram_id_for_failed_logins(
         self, telegram_id: int

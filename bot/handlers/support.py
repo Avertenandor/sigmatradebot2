@@ -37,15 +37,18 @@ async def handle_create_ticket(
     state: FSMContext,
     **data: Any,
 ) -> None:
-    """Start ticket creation."""
-    user: User | None = data.get("user")
+    """
+    Start ticket creation.
 
-    # Проверка: гости не могут создавать тикеты
-    if user is None:
+    R1-7: Supports guest tickets (user_id=None, telegram_id required).
+    """
+    user: User | None = data.get("user")
+    telegram_id = message.from_user.id if message.from_user else None
+
+    # R1-7: Разрешаем гостевые тикеты
+    if not telegram_id:
         await message.answer(
-            "❌ Для создания обращения сначала пройдите регистрацию "
-            "через /start или кнопку '📝 Регистрация'.\n\n"
-            "После регистрации вы сможете создавать обращения в поддержку.",
+            "❌ Системная ошибка. Отправьте /start или попробуйте позже.",
             reply_markup=support_keyboard(),
         )
         return
@@ -239,8 +242,16 @@ async def handle_my_tickets(
                     tickets = await support_service.get_guest_tickets(telegram_id)
         # Transaction closed here
 
+    # R1-8: Просмотр обращений у гостя
     if not tickets:
-        text = "📋 У вас пока нет обращений"
+        if user is None:
+            text = (
+                "📋 *Мои обращения*\n\n"
+                "У вас пока нет обращений.\n\n"
+                "Для создания обращения используйте кнопку '✉️ Создать обращение'."
+            )
+        else:
+            text = "📋 У вас пока нет обращений"
     else:
         text = "📋 *Ваши обращения:*\n\n"
 

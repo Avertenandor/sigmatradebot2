@@ -239,3 +239,20 @@ class ProviderManager:
             "current_block": current_block,
             "chain_id": self.chain_id,
         }
+
+    async def check_node_health(self) -> bool:
+        """
+        Check if blockchain node is healthy (R7-5).
+
+        Returns:
+            True if node is healthy
+        """
+        try:
+            if self._http_web3:
+                # Try to get block number
+                await self._http_web3.eth.block_number
+                return True
+        except Exception:
+            pass
+
+        return False

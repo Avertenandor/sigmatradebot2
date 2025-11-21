@@ -53,6 +53,11 @@ def extract_level_from_button(text: str) -> int:
             "💰 Пополнить Level 3 (100 USDT)",
             "💰 Пополнить Level 4 (150 USDT)",
             "💰 Пополнить Level 5 (300 USDT)",
+            "✅ Level 1 (10 USDT) - Активен",
+            "✅ Level 2 (50 USDT) - Активен",
+            "✅ Level 3 (100 USDT) - Активен",
+            "✅ Level 4 (150 USDT) - Активен",
+            "✅ Level 5 (300 USDT) - Активен",
         ]
     )
 )
@@ -78,7 +83,10 @@ async def select_deposit_level(
     
     # Extract level from button text
     level = extract_level_from_button(message.text or "")
-
+    
+    # R3-3: Check if level is already active (button text contains "Активен")
+    is_active_level = "Активен" in (message.text or "")
+    
     # Validate purchase eligibility with SHORT transaction
     from app.services.deposit_validation_service import (
         DepositValidationService,
@@ -96,6 +104,8 @@ async def select_deposit_level(
         can_purchase, error_msg = await validation_service.can_purchase_level(
             user.id, level
         )
+        # Get level statuses for active check
+        levels_status = await validation_service.get_available_levels(user.id)
     else:
         # NEW pattern: short read transaction
         async with session_factory() as session:
@@ -104,20 +114,55 @@ async def select_deposit_level(
                 can_purchase, error_msg = await validation_service.can_purchase_level(
                     user.id, level
                 )
+                # Get level statuses for active check
+                levels_status = await validation_service.get_available_levels(user.id)
         # Transaction closed here
 
+    # R3-3: Handle active level - prohibit duplicate purchase
+    if is_active_level or (levels_status and levels_status.get(level, {}).get("status") == "active"):
+        await message.answer(
+            f"ℹ️ **Уровень {level} уже активен**\n\n"
+            f"У вас уже есть активный депозит уровня {level}.\n"
+            f"Повторная покупка того же уровня не разрешена.\n\n"
+            f"Выберите другой уровень депозита или проверьте свои активные депозиты в разделе '📦 Мои депозиты'.",
+            parse_mode="Markdown",
+            reply_markup=deposit_keyboard(levels_status=levels_status),
+        )
+        return
+
     if not can_purchase:
-        # Get level statuses to show in keyboard
-        session_for_status = data.get("session")
-        if session_for_status:
-            validation_service_status = DepositValidationService(session_for_status)
-            levels_status = await validation_service_status.get_available_levels(user.id)
+        # R3-4: Improved error messages with specific recommendations
+        error_text = "❌ **Нельзя купить этот уровень депозита**\n\n"
+        
+        if error_msg:
+            error_text += f"{error_msg}\n\n"
+            
+            # Add specific recommendations based on error type
+            if "необходимо сначала купить" in error_msg:
+                # Extract previous level from error message
+                prev_level = level - 1
+                error_text += (
+                    f"💡 **Рекомендация:**\n"
+                    f"Сначала купите уровень {prev_level}, чтобы разблокировать уровень {level}.\n"
+                    f"Порядок покупки обязателен: 1 → 2 → 3 → 4 → 5"
+                )
+            elif "необходимо минимум" in error_msg:
+                # Extract required partners count
+                from app.services.deposit_validation_service import PARTNER_REQUIREMENTS
+                required = PARTNER_REQUIREMENTS.get(level, 1)
+                error_text += (
+                    f"💡 **Рекомендация:**\n"
+                    f"Пригласите минимум {required} реферала, который создаст активный депозит уровня 1.\n"
+                    f"Используйте раздел '👥 Рефералы' для приглашения партнёров."
+                )
+            else:
+                error_text += "Попробуйте выбрать другой уровень депозита."
         else:
-            levels_status = None
+            error_text += "Попробуйте выбрать другой уровень депозита."
         
         await message.answer(
-            f"❌ {error_msg or 'Нельзя купить этот уровень депозита'}\n\n"
-            "Попробуйте выбрать другой уровень депозита.",
+            error_text,
+            parse_mode="Markdown",
             reply_markup=deposit_keyboard(levels_status=levels_status),
         )
         return

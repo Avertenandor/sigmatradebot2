@@ -61,16 +61,16 @@ class AuthMiddleware(BaseMiddleware):
             f"AuthMiddleware: Checking for telegram_user. Event type: {type(event).__name__}, "
             f"data keys: {list(data.keys())}"
         )
-        
+
         telegram_user = data.get("event_from_user")
         logger.debug(
             f"AuthMiddleware: event_from_user from data: {telegram_user}, "
             f"type: {type(telegram_user).__name__ if telegram_user else 'None'}"
         )
-        
+
         if not telegram_user:
             # Fallback: try to get from event directly
-            logger.debug(f"AuthMiddleware: Trying to get from event directly")
+            logger.debug("AuthMiddleware: Trying to get from event directly")
             if isinstance(event, Message):
                 telegram_user = event.from_user
                 logger.debug(f"AuthMiddleware: Message.from_user: {telegram_user}")
@@ -122,11 +122,20 @@ class AuthMiddleware(BaseMiddleware):
         admin_repo = AdminRepository(session)
         admin = await admin_repo.get_by_telegram_id(telegram_user.id)
         if admin is not None:
-            is_admin = True
-            logger.info(
-                f"User {telegram_user.id} (@{telegram_user.username}) "
-                f"identified as admin from Admin table (role: {admin.role if admin else 'unknown'})"
-            )
+            # R10-3: Check if admin is blocked
+            if admin.is_blocked:
+                logger.warning(
+                    f"R10-3: Blocked admin {admin.id} (telegram_id={telegram_user.id}) "
+                    f"attempted to access system"
+                )
+                is_admin = False
+                admin = None  # Don't expose blocked admin
+            else:
+                is_admin = True
+                logger.info(
+                    f"User {telegram_user.id} (@{telegram_user.username}) "
+                    f"identified as admin from Admin table (role: {admin.role if admin else 'unknown'})"
+                )
         else:
             logger.debug(
                 f"User {telegram_user.id} is not an admin "

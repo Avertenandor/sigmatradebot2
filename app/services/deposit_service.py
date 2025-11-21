@@ -9,6 +9,13 @@ from decimal import Decimal
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from typing import Any
+
+from decimal import Decimal
+
+from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.config.settings import settings
 from app.models.deposit import Deposit
 from app.models.enums import TransactionStatus
@@ -31,15 +38,19 @@ class DepositService:
         level: int,
         amount: Decimal,
         tx_hash: str | None = None,
+        redis_client: Any | None = None,
     ) -> Deposit:
         """
         Create new deposit with proper error handling.
+
+        R15-5: Uses distributed lock to prevent race conditions.
 
         Args:
             user_id: User ID
             level: Deposit level (1-5)
             amount: Deposit amount
             tx_hash: Blockchain transaction hash
+            redis_client: Optional Redis client for distributed lock
 
         Returns:
             Created deposit
@@ -47,37 +58,116 @@ class DepositService:
         Raises:
             ValueError: If level or amount is invalid
         """
-        # Validate level
-        if not 1 <= level <= 5:
-            raise ValueError("Level must be 1-5")
+        # R15-5: Use distributed lock to prevent race conditions
+        from app.utils.distributed_lock import get_distributed_lock
 
-        # Validate amount
-        if amount <= 0:
-            raise ValueError("Amount must be positive")
+        lock = get_distributed_lock(
+            redis_client=redis_client, session=self.session
+        )
+        lock_key = f"user:{user_id}:create_deposit"
 
-        try:
-            # Calculate ROI cap from settings
-            roi_multiplier = Decimal(str(settings.roi_cap_multiplier))
-            roi_cap = amount * roi_multiplier
+        async with lock.lock(lock_key, timeout=30, blocking=True, blocking_timeout=5.0) as acquired:
+            if not acquired:
+                logger.warning(
+                    f"Could not acquire lock for creating deposit for user {user_id}"
+                )
+                raise ValueError(
+                    "Операция уже выполняется. Пожалуйста, подождите."
+                )
 
-            deposit = await self.deposit_repo.create(
-                user_id=user_id,
-                level=level,
-                amount=amount,
-                tx_hash=tx_hash,
-                roi_cap_amount=roi_cap,
-                status=TransactionStatus.PENDING.value,
+            # R17-3: Check emergency stop
+            if settings.emergency_stop_deposits:
+                logger.warning(
+                    f"Deposit blocked by emergency stop for user {user_id}, level {level}"
+                )
+                raise ValueError(
+                    "⚠️ Временная приостановка депозитов из-за технических работ.\n\n"
+                    "Депозиты будут доступны после восстановления.\n\n"
+                    "Следите за обновлениями в нашем канале."
+                )
+
+            # R11-2: Check blockchain maintenance mode
+            # If blockchain is down, create deposit with PENDING_NETWORK_RECOVERY status
+            deposit_status = TransactionStatus.PENDING.value
+            if settings.blockchain_maintenance_mode:
+                deposit_status = TransactionStatus.PENDING_NETWORK_RECOVERY.value
+                logger.info(
+                    f"R11-2: Creating deposit with PENDING_NETWORK_RECOVERY status "
+                    f"due to blockchain maintenance mode for user {user_id}, level {level}"
+                )
+
+            # R17-1, R17-2: Get current deposit level version
+            from app.repositories.deposit_level_version_repository import (
+                DepositLevelVersionRepository,
             )
 
-            await self.session.commit()
-            logger.info("Deposit created", extra={"deposit_id": deposit.id})
+            version_repo = DepositLevelVersionRepository(self.session)
+            level_version = await version_repo.get_current_version(level)
 
-            return deposit
+            if not level_version:
+                raise ValueError(
+                    f"Level {level} is not available. "
+                    "This level has been temporarily disabled."
+                )
 
-        except Exception as e:
-            await self.session.rollback()
-            logger.error(f"Failed to create deposit: {e}")
-            raise
+            # R17-2: Check if level is active
+            if not level_version.is_active:
+                raise ValueError(
+                    f"Level {level} is temporarily unavailable. "
+                    "Please try again later or contact support."
+                )
+
+            # R18-1: Dust attack protection - check minimum deposit amount
+            min_deposit = Decimal(str(settings.minimum_deposit_amount))
+            if amount < min_deposit:
+                logger.warning(
+                    f"Dust attack attempt blocked: user {user_id}, "
+                    f"amount {amount} < minimum {min_deposit}"
+                )
+                raise ValueError(
+                    f"Минимальная сумма депозита: {min_deposit} USDT. "
+                    f"Попытка депозита {amount} USDT отклонена."
+                )
+
+            # Validate amount matches level version
+            if amount < level_version.amount:
+                raise ValueError(
+                    f"Amount {amount} is less than required "
+                    f"{level_version.amount} for level {level}"
+                )
+
+            # Validate level
+            if not 1 <= level <= 5:
+                raise ValueError("Level must be 1-5")
+
+            # Validate amount
+            if amount <= 0:
+                raise ValueError("Amount must be positive")
+
+            try:
+                # R17-1: Calculate ROI cap from version (not settings)
+                roi_cap_percent = Decimal(str(level_version.roi_cap_percent))
+                roi_cap = amount * (roi_cap_percent / 100)
+
+                deposit = await self.deposit_repo.create(
+                    user_id=user_id,
+                    level=level,
+                    amount=amount,
+                    tx_hash=tx_hash,
+                    deposit_version_id=level_version.id,  # R17-1: Link to version
+                    roi_cap_amount=roi_cap,
+                    status=deposit_status,  # R11-2: PENDING or PENDING_NETWORK_RECOVERY
+                )
+
+                await self.session.commit()
+                logger.info("Deposit created", extra={"deposit_id": deposit.id})
+
+                return deposit
+
+            except Exception as e:
+                await self.session.rollback()
+                logger.error(f"Failed to create deposit: {e}")
+                raise
 
     async def confirm_deposit(
         self, deposit_id: int, block_number: int

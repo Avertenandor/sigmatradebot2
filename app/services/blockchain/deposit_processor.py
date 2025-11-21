@@ -129,9 +129,28 @@ class DepositProcessor:
                     "confirmations": confirmations,
                 }
 
+            # R18-1: Dust attack protection - check minimum deposit amount
+            from app.config.settings import settings
+            actual_amount = transfer_data["amount"]
+            min_deposit = Decimal(str(settings.minimum_deposit_amount))
+            
+            if actual_amount < min_deposit:
+                logger.warning(
+                    f"Dust attack detected in transaction {tx_hash}: "
+                    f"amount {actual_amount} < minimum {min_deposit}"
+                )
+                return {
+                    "valid": False,
+                    "error": (
+                        f"Dust attack: amount {actual_amount} is below "
+                        f"minimum {min_deposit} USDT"
+                    ),
+                    "confirmations": confirmations,
+                    "amount": float(actual_amount),
+                }
+
             # Verify amount (if provided)
             if expected_amount is not None:
-                actual_amount = transfer_data["amount"]
                 min_amount = expected_amount * Decimal(1 - tolerance_percent)
                 max_amount = expected_amount * Decimal(1 + tolerance_percent)
 

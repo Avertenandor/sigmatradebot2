@@ -87,6 +87,58 @@ class Settings(BaseSettings):
         default=5.0, gt=0, le=10.0, description="ROI cap multiplier"
     )
 
+    # Blockchain maintenance mode (R7-5)
+    blockchain_maintenance_mode: bool = Field(
+        default=False,
+        description="Blockchain maintenance mode flag"
+    )
+
+    # R17-3: Emergency stop flags
+    emergency_stop_withdrawals: bool = Field(
+        default=False,
+        description="Emergency stop for all withdrawals"
+    )
+
+    # R18-4: Dual control settings
+    dual_control_withdrawal_threshold: float = Field(
+        default=1000.0,
+        gt=0,
+        description="Withdrawal amount threshold requiring dual control (USDT)"
+    )
+    dual_control_escrow_expiry_hours: int = Field(
+        default=24,
+        gt=0,
+        description="Escrow expiry time in hours"
+    )
+
+    # R18-4: Admin operation limits
+    admin_max_withdrawals_per_day: int = Field(
+        default=50,
+        gt=0,
+        description="Maximum withdrawals per day per admin"
+    )
+    admin_max_withdrawal_amount_per_day: float = Field(
+        default=50000.0,
+        gt=0,
+        description="Maximum total withdrawal amount per day per admin (USDT)"
+    )
+    admin_max_balance_adjustments_per_week: int = Field(
+        default=20,
+        gt=0,
+        description="Maximum balance adjustments per week per admin"
+    )
+    emergency_stop_deposits: bool = Field(
+        default=False,
+        description="Emergency stop for all new deposits"
+    )
+
+    # R18-1: Dust attack protection
+    minimum_deposit_amount: float = Field(
+        default=10.0,
+        gt=0,
+        description="Minimum deposit amount to prevent dust attacks (USDT)"
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

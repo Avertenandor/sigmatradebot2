@@ -3,14 +3,25 @@ Database middleware.
 
 Provides database session factory to handlers for proper transaction management.
 Session lifecycle is controlled by handlers, not middleware.
+
+R11-1: Handles PostgreSQL failures with graceful degradation.
 """
 
 from collections.abc import Awaitable, Callable
 from typing import Any
 
 from aiogram import BaseMiddleware
-from aiogram.types import TelegramObject
+from aiogram.types import Message, TelegramObject
+from loguru import logger
+from sqlalchemy.exc import (
+    DatabaseError,
+    InterfaceError,
+    OperationalError,
+)
 from sqlalchemy.ext.asyncio import async_sessionmaker
+
+from bot.i18n.loader import get_translator, get_user_language
+from bot.i18n.locales import DEFAULT_LANGUAGE
 
 
 class DatabaseMiddleware(BaseMiddleware):
@@ -56,17 +67,180 @@ class DatabaseMiddleware(BaseMiddleware):
         Returns:
             Handler result
         """
+        # R11-1: Check circuit breaker before proceeding
+        circuit_breaker = get_db_circuit_breaker()
+        
+        # Determine operation type (read/write/admin)
+        operation_type = "read"  # Default to read
+        # TODO: Determine operation type from handler/event if possible
+        
+        can_proceed, reason = circuit_breaker.can_proceed(operation_type)
+        if not can_proceed:
+            logger.warning(f"R11-1: Circuit breaker blocked operation: {reason}")
+            if isinstance(event, Message):
+                try:
+                    user_language = DEFAULT_LANGUAGE
+                    if hasattr(event, "from_user") and event.from_user:
+                        try:
+                            async with self.session_pool() as lang_session:
+                                user_language = await get_user_language(
+                                    lang_session, event.from_user.id
+                                )
+                        except Exception:
+                            pass
+                    _ = get_translator(user_language)
+                    await event.answer(_("errors.database_unavailable"))
+                except Exception:
+                    pass
+            return None
+        
         # Provide session factory, not live session
         data["session_factory"] = self.session_pool
         
         # For backward compatibility during migration, also provide session
         # TODO: Remove after full migration to session_factory pattern
-        async with self.session_pool() as session:
-            data["session"] = session
+        try:
+            async with self.session_pool() as session:
+                data["session"] = session
+                try:
+                    result = await handler(event, data)
+                    await session.commit()
+                    # R11-1: Record success
+                    circuit_breaker.record_success()
+                    return result
+                except (OperationalError, InterfaceError, DatabaseError) as e:
+                    # R11-1: Handle database failures gracefully
+                    await session.rollback()
+                    # R11-1: Record failure in circuit breaker
+                    circuit_breaker.record_failure()
+                    logger.error(
+                        f"Database error in handler: {e}",
+                        extra={"error_type": type(e).__name__},
+                    )
+                    
+                    # R14-3: Record error for aggregation
+                    try:
+                        async with self.session_pool() as agg_session:
+                            from app.services.log_aggregation_service import (
+                                LogAggregationService,
+                            )
+                            agg_service = LogAggregationService(agg_session)
+                            user_id = None
+                            if isinstance(event, Message) and hasattr(event, "from_user"):
+                                user_id = event.from_user.id if event.from_user else None
+                            await agg_service.record_error(
+                                error_type=type(e).__name__,
+                                error_message=str(e)[:500],
+                                user_id=user_id,
+                                context={"handler": handler.__name__ if hasattr(handler, "__name__") else "unknown"},
+                            )
+                    except Exception as agg_error:
+                        # Don't fail if aggregation fails
+                        logger.debug(f"Failed to record error in aggregation: {agg_error}")
+                    
+                    # Send graceful error message to user if it's a Message event
+                    if isinstance(event, Message):
+                        try:
+                            # R11-1: Get user language for i18n error message
+                            user_language = DEFAULT_LANGUAGE
+                            if hasattr(event, "from_user") and event.from_user:
+                                try:
+                                    # Try to get user language from DB
+                                    async with self.session_pool() as lang_session:
+                                        user_language = await get_user_language(
+                                            lang_session, event.from_user.id
+                                        )
+                                except Exception:
+                                    # If we can't get language, use default
+                                    pass
+                            
+                            _ = get_translator(user_language)
+                            
+                            # R11-1: More specific error messages based on error type
+                            if isinstance(e, OperationalError):
+                                error_message = _("errors.database_operational_error")
+                            elif isinstance(e, InterfaceError):
+                                error_message = _("errors.database_interface_error")
+                            elif isinstance(e, DatabaseError):
+                                error_message = _("errors.database_general_error")
+                            else:
+                                error_message = _("errors.database_unavailable")
+                            
+                            await event.answer(error_message)
+                        except Exception as msg_error:
+                            # If we can't send message, log and continue
+                            logger.warning(
+                                f"Failed to send error message to user: {msg_error}"
+                            )
+                    
+                    # Don't re-raise - graceful degradation
+                    return None
+                except Exception:
+                    await session.rollback()
+                    raise
+        except (OperationalError, InterfaceError, DatabaseError) as e:
+            # R11-1: Database connection failure at middleware level
+            # R11-1: Record failure in circuit breaker
+            circuit_breaker.record_failure()
+            logger.critical(
+                f"Database connection failure in middleware: {e}",
+                extra={"error_type": type(e).__name__},
+            )
+            
+            # R14-3: Record error for aggregation (use separate session)
             try:
-                result = await handler(event, data)
-                await session.commit()
-                return result
-            except Exception:
-                await session.rollback()
-                raise
+                async with self.session_pool() as agg_session:
+                    from app.services.log_aggregation_service import (
+                        LogAggregationService,
+                    )
+                    agg_service = LogAggregationService(agg_session)
+                    user_id = None
+                    if isinstance(event, Message) and hasattr(event, "from_user"):
+                        user_id = event.from_user.id if event.from_user else None
+                    await agg_service.record_error(
+                        error_type=type(e).__name__,
+                        error_message=str(e)[:500],
+                        user_id=user_id,
+                        context={"middleware": "DatabaseMiddleware"},
+                    )
+            except Exception as agg_error:
+                # Don't fail if aggregation fails
+                logger.debug(f"Failed to record error in aggregation: {agg_error}")
+            
+            # Send graceful error message to user if it's a Message event
+            if isinstance(event, Message):
+                try:
+                    # R11-1: Get user language for i18n error message
+                    user_language = DEFAULT_LANGUAGE
+                    if hasattr(event, "from_user") and event.from_user:
+                        try:
+                            # Try to get user language from DB (if DB is still accessible)
+                            # If not, use default language
+                            async with self.session_pool() as lang_session:
+                                user_language = await get_user_language(
+                                    lang_session, event.from_user.id
+                                )
+                        except Exception:
+                            # If we can't get language (DB might be down), use default
+                            pass
+                    
+                    _ = get_translator(user_language)
+                    
+                    # R11-1: More specific error messages based on error type
+                    if isinstance(e, OperationalError):
+                        error_message = _("errors.database_operational_error")
+                    elif isinstance(e, InterfaceError):
+                        error_message = _("errors.database_interface_error")
+                    elif isinstance(e, DatabaseError):
+                        error_message = _("errors.database_general_error")
+                    else:
+                        error_message = _("errors.database_connection_failed")
+                    
+                    await event.answer(error_message)
+                except Exception as msg_error:
+                    logger.warning(
+                        f"Failed to send error message to user: {msg_error}"
+                    )
+            
+            # Don't re-raise - graceful degradation
+            return None

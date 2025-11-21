@@ -6,7 +6,7 @@ Represents bot administrators with role-based permissions.
 
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import BigInteger, ForeignKey, Integer, String
+from sqlalchemy import BigInteger, Boolean, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -54,6 +54,11 @@ class Admin(Base):
     # Role & Permissions
     role: Mapped[str] = mapped_column(
         String(20), nullable=False, default="admin"
+    )
+
+    # R10-3: Block status for compromised admins
+    is_blocked: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, index=True
     )
 
     # Authentication

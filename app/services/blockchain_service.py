@@ -653,6 +653,136 @@ class BlockchainService:
             logger.error(f"Failed to estimate gas fee: {e}")
             return None
 
+    async def search_blockchain_for_deposit(
+        self,
+        user_wallet: str,
+        expected_amount: Decimal,
+        from_block: int = 0,
+        to_block: int | str = "latest",
+        tolerance_percent: float = 0.05,
+    ) -> dict[str, Any] | None:
+        """
+        Search blockchain history for USDT transfer matching deposit criteria.
+
+        R3-6: Last attempt to find transaction before marking deposit as failed.
+
+        Args:
+            user_wallet: User's wallet address (from)
+            expected_amount: Expected USDT amount
+            from_block: Starting block number (default: 0)
+            to_block: Ending block number or 'latest' (default: 'latest')
+            tolerance_percent: Amount tolerance (default: 5%)
+
+        Returns:
+            Dict with tx_hash, block_number, amount, confirmations or None if not found
+        """
+        try:
+            # Validate address
+            if not await self.validate_wallet_address(user_wallet):
+                logger.warning(f"Invalid user wallet address: {user_wallet}")
+                return None
+
+            # Convert to checksum addresses
+            user_wallet_checksum = to_checksum_address(user_wallet)
+            system_wallet_checksum = to_checksum_address(
+                self.system_wallet_address
+            )
+
+            # Calculate tolerance
+            tolerance = expected_amount * Decimal(tolerance_percent)
+            min_amount = expected_amount - tolerance
+            max_amount = expected_amount + tolerance
+
+            # Convert amounts to wei for comparison
+            min_amount_wei = int(min_amount * Decimal(10**USDT_DECIMALS))
+            max_amount_wei = int(max_amount * Decimal(10**USDT_DECIMALS))
+
+            # Get current block if 'latest'
+            loop = asyncio.get_event_loop()
+            if to_block == "latest":
+                async with self.rpc_limiter:
+                    to_block = await loop.run_in_executor(
+                        self._executor, lambda: self.web3.eth.block_number
+                    )
+
+            # Limit search to last 100k blocks (about 3 days on BSC)
+            # to avoid excessive RPC calls
+            max_search_blocks = 100000
+            if from_block < to_block - max_search_blocks:
+                from_block = to_block - max_search_blocks
+                logger.info(
+                    f"Limiting search to last {max_search_blocks} blocks "
+                    f"(from_block={from_block}, to_block={to_block})"
+                )
+
+            # Create filter for Transfer events
+            # Filter: from=user_wallet, to=system_wallet
+            async with self.rpc_limiter:
+                event_filter = await loop.run_in_executor(
+                    self._executor,
+                    lambda: self.usdt_contract.events.Transfer.create_filter(
+                        fromBlock=from_block,
+                        toBlock=to_block,
+                        argument_filters={
+                            "from": user_wallet_checksum,
+                            "to": system_wallet_checksum,
+                        },
+                    ),
+                )
+
+            # Get all matching events
+            async with self.rpc_limiter:
+                events = await loop.run_in_executor(
+                    self._executor, lambda: event_filter.get_all_entries()
+                )
+
+            # Find matching event by amount
+            for event in events:
+                value_wei = event.args["value"]
+                amount_usdt = Decimal(value_wei) / Decimal(10**USDT_DECIMALS)
+
+                # Check if amount matches (within tolerance)
+                if min_amount_wei <= value_wei <= max_amount_wei:
+                    # Get transaction details
+                    tx_hash = (
+                        event.transactionHash.hex()
+                        if hasattr(event.transactionHash, "hex")
+                        else str(event.transactionHash)
+                    )
+                    block_number = event.blockNumber
+
+                    # Get current block for confirmations
+                    async with self.rpc_limiter:
+                        current_block = await loop.run_in_executor(
+                            self._executor, lambda: self.web3.eth.block_number
+                        )
+                    confirmations = current_block - block_number
+
+                    logger.info(
+                        f"Found matching deposit transaction: "
+                        f"tx_hash={tx_hash}, amount={amount_usdt}, "
+                        f"block={block_number}, confirmations={confirmations}"
+                    )
+
+                    return {
+                        "tx_hash": tx_hash,
+                        "block_number": block_number,
+                        "amount": amount_usdt,
+                        "confirmations": confirmations,
+                    }
+
+            logger.debug(
+                f"No matching deposit found for {user_wallet} "
+                f"amount {expected_amount} in blocks {from_block}-{to_block}"
+            )
+            return None
+
+        except Exception as e:
+            logger.error(
+                f"Error searching blockchain for deposit from {user_wallet}: {e}"
+            )
+            return None
+
     async def monitor_incoming_deposits(
         self, wallet_address: str, from_block: int
     ) -> list[dict[str, Any]]:

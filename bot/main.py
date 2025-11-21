@@ -134,11 +134,11 @@ async def main() -> None:  # noqa: C901
     except Exception as e:
         logger.error(f"Failed to initialize Redis storage: {e}")
         logger.warning(
-            "Falling back to MemoryStorage (states will not persist)"
+            "R11-3: Falling back to PostgreSQL FSM storage (states will persist)"
         )
-        from aiogram.fsm.storage.memory import MemoryStorage
+        from bot.storage.postgresql_fsm_storage import PostgreSQLFSMStorage
 
-        storage = MemoryStorage()
+        storage = PostgreSQLFSMStorage()
         redis_client = None
 
     # Initialize bot
@@ -159,23 +159,33 @@ async def main() -> None:  # noqa: C901
     
     # Rate limiting (optional, requires Redis) - BEFORE Database
     # This prevents spam requests from hitting the database
-    if redis_client:
-        try:
-            dp.update.middleware(
-                RateLimitMiddleware(
-                    redis_client=redis_client,
-                    user_limit=30,  # requests per window
-                    user_window=60,  # seconds
-                )
+    # R11-2: RateLimitMiddleware now supports fallback to in-memory counters
+    try:
+        dp.update.middleware(
+            RateLimitMiddleware(
+                redis_client=redis_client,  # Can be None for in-memory fallback
+                user_limit=30,  # requests per window
+                user_window=60,  # seconds
             )
-            logger.info("Rate limiting enabled (before Database)")
-        except Exception as e:
-            logger.warning(f"Rate limiting disabled: {e}")
+        )
+        if redis_client:
+            logger.info("Rate limiting enabled with Redis (before Database)")
+        else:
+            logger.info("Rate limiting enabled with in-memory fallback (before Database)")
+    except Exception as e:
+        logger.warning(f"Rate limiting disabled: {e}")
     
     dp.update.middleware(DatabaseMiddleware(session_pool=async_session_maker))
     # Add Redis client to data for handlers that need it
     if redis_client:
         dp.update.middleware(RedisMiddleware(redis_client=redis_client))
+        # R13-2: Button spam protection (requires Redis)
+        from bot.middlewares.button_spam_protection import (
+            ButtonSpamProtectionMiddleware,
+        )
+        dp.update.middleware(
+            ButtonSpamProtectionMiddleware(redis_client=redis_client)
+        )
     # Menu state clear must be after DatabaseMiddleware (needs session)
     # but before AuthMiddleware to clear state early
     dp.update.middleware(MenuStateClearMiddleware())
@@ -206,10 +216,12 @@ async def main() -> None:  # noqa: C901
 
     # Register handlers
     from bot.handlers import (
+        account_recovery,
         appeal,
         deposit,
         finpass_recovery,
         instructions,
+        language,
         menu,
         profile,
         referral,
@@ -248,6 +260,8 @@ async def main() -> None:  # noqa: C901
     dp.include_router(support.router)
     dp.include_router(verification.router)
     dp.include_router(finpass_recovery.router)
+    dp.include_router(account_recovery.router)  # R16-3: Account recovery
+    dp.include_router(language.router)  # R13-3: Language selection
     dp.include_router(instructions.router)
     dp.include_router(appeal.router)
 

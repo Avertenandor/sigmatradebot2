@@ -23,6 +23,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
 if TYPE_CHECKING:
+    from app.models.deposit_level_version import DepositLevelVersion
     from app.models.user import User
 
 
@@ -84,7 +85,12 @@ class Deposit(Base):
     # Status
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, default="pending", index=True
-    )  # pending, confirmed, failed
+    )  # pending, confirmed, failed, pending_network_recovery (R11-2)
+
+    # R17-1: Deposit version reference
+    deposit_version_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("deposit_level_versions.id"), nullable=True, index=True
+    )
 
     # ROI tracking
     roi_cap_amount: Mapped[Decimal] = mapped_column(
@@ -95,6 +101,10 @@ class Deposit(Base):
     )
     is_roi_completed: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
+    )
+    # R12-1: Timestamp when ROI was completed
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
     # Timestamps
@@ -114,6 +124,10 @@ class Deposit(Base):
     # Relationships
     user: Mapped["User"] = relationship(
         "User",
+        back_populates="deposits",
+    )
+    deposit_version: Mapped["DepositLevelVersion | None"] = relationship(
+        "DepositLevelVersion",
         back_populates="deposits",
     )
 

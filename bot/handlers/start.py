@@ -14,10 +14,12 @@ from aiogram.types import (
     ReplyKeyboardRemove,
 )
 from loguru import logger
+from sqlalchemy.exc import OperationalError, InterfaceError, DatabaseError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from app.services.user_service import UserService
+from bot.i18n.loader import get_translator, get_user_language
 from bot.keyboards.reply import main_menu_reply_keyboard
 from bot.states.registration import RegistrationStates
 
@@ -91,16 +93,35 @@ async def cmd_start(
         )
         # КРИТИЧНО: очистим любое FSM состояние, чтобы /start всегда работал
         await state.clear()
+        
+        # R8-2: Reset bot_blocked flag if user successfully sent /start
+        # (means user unblocked the bot)
+        try:
+            if hasattr(user, 'bot_blocked') and user.bot_blocked:
+                from app.repositories.user_repository import UserRepository
+                user_repo = UserRepository(session)
+                await user_repo.update(user.id, bot_blocked=False)
+                await session.commit()
+                logger.info(
+                    f"User {user.telegram_id} unblocked bot, flag reset in /start"
+                )
+        except Exception as reset_error:
+            # Don't fail /start if flag reset fails
+            logger.warning(f"Failed to reset bot_blocked flag: {reset_error}")
 
+        # R13-3: Get user language for i18n
+        user_language = await get_user_language(session, user.id)
+        _ = get_translator(user_language)
+        
         # Format balance properly (avoid scientific notation)
         balance_str = f"{user.balance:.8f}".rstrip('0').rstrip('.')
         if balance_str == '':
             balance_str = '0'
 
         welcome_text = (
-            f"Добро пожаловать обратно, {user.username or 'пользователь'}!\n\n"
-            f"Ваш баланс: {balance_str} USDT\n"
-            f"Используйте меню ниже для навигации."
+            f"{_('common.welcome_back', username=user.username or _('common.user'))}\n\n"
+            f"{_('common.your_balance', balance=balance_str)}\n"
+            f"{_('common.use_menu')}"
         )
         logger.debug("cmd_start: sending welcome with ReplyKeyboardRemove")
         # 1) Очистим старую клавиатуру
@@ -120,19 +141,30 @@ async def cmd_start(
         )
         # Get blacklist status if needed (try to get from middleware first)
         blacklist_entry = data.get("blacklist_entry")
-        if blacklist_entry is None:
-            from app.repositories.blacklist_repository import BlacklistRepository
-            blacklist_repo = BlacklistRepository(session)
-            blacklist_entry = await blacklist_repo.find_by_telegram_id(
-                user.telegram_id
+        try:
+            if blacklist_entry is None:
+                from app.repositories.blacklist_repository import BlacklistRepository
+                blacklist_repo = BlacklistRepository(session)
+                blacklist_entry = await blacklist_repo.find_by_telegram_id(
+                    user.telegram_id
+                )
+        except (OperationalError, InterfaceError, DatabaseError) as e:
+            logger.error(
+                f"Database error in /start while checking blacklist for user {user.telegram_id}: {e}",
+                exc_info=True,
             )
+            await message.answer(
+                "⚠️ Системная ошибка. Попробуйте позже или обратитесь в поддержку."
+            )
+            return
         logger.info(
             f"[START] Creating keyboard for user {user.telegram_id} with "
             f"is_admin={is_admin}, "
             f"blacklist_entry={blacklist_entry is not None}"
         )
+        # R13-3: Use i18n (already loaded above)
         await message.answer(
-            "Выберите действие ниже:",
+            _("common.choose_action"),
             reply_markup=main_menu_reply_keyboard(
                 user=user,
                 blacklist_entry=blacklist_entry,
@@ -142,6 +174,40 @@ async def cmd_start(
         logger.info(
             f"[START] Main menu keyboard sent successfully to user "
             f"{user.telegram_id}"
+        )
+        return
+
+    # R1-3: Check blacklist for non-registered users (REGISTRATION_DENIED)
+    # This check must happen BEFORE showing welcome message and setting FSM state
+    blacklist_entry = data.get("blacklist_entry")
+    try:
+        if blacklist_entry is None:
+            from app.repositories.blacklist_repository import BlacklistRepository
+            blacklist_repo = BlacklistRepository(session)
+            blacklist_entry = await blacklist_repo.find_by_telegram_id(
+                message.from_user.id
+            )
+        
+        if blacklist_entry and blacklist_entry.is_active:
+            from app.models.blacklist import BlacklistActionType
+            
+            if blacklist_entry.action_type == BlacklistActionType.REGISTRATION_DENIED:
+                logger.info(
+                    f"[START] Registration denied for telegram_id {message.from_user.id}"
+                )
+                await message.answer(
+                    "❌ Регистрация недоступна.\n\n"
+                    "Обратитесь в поддержку для получения дополнительной информации."
+                )
+                await state.clear()
+                return
+    except (OperationalError, InterfaceError, DatabaseError) as e:
+        logger.error(
+            f"Database error in /start while checking blacklist for non-registered user {message.from_user.id}: {e}",
+            exc_info=True,
+        )
+        await message.answer(
+            "⚠️ Системная ошибка. Попробуйте позже или обратитесь в поддержку."
         )
         return
 
@@ -177,10 +243,19 @@ async def cmd_start(
         reply_markup=ReplyKeyboardRemove(),
     )
     # 2) Добавим большое главное меню отдельно
+    # R13-3: Get user language for i18n (if user exists)
+    user_language = "ru"  # Default
+    if user:
+        try:
+            user_language = await get_user_language(session, user.id)
+        except Exception:
+            pass
+    _ = get_translator(user_language)
+    
     # For unregistered users, is_admin will be False
     is_admin = data.get("is_admin", False)
     await message.answer(
-        "Выберите действие ниже:",
+        _("common.choose_action"),
         reply_markup=main_menu_reply_keyboard(
             user=user, blacklist_entry=None, is_admin=is_admin
         ),
@@ -234,12 +309,21 @@ async def process_wallet(
                     f"Failed to get blacklist entry for user {user.telegram_id}: {e}"
                 )
                 blacklist_entry = None
+        # R13-3: Get user language for i18n
+        user_language = "ru"  # Default
+        if user:
+            try:
+                user_language = await get_user_language(session, user.id)
+            except Exception:
+                pass
+        _ = get_translator(user_language)
+        
         await message.answer(
-            "👋 Добро пожаловать обратно!",
+            _("common.welcome"),
             reply_markup=ReplyKeyboardRemove(),
         )
         await message.answer(
-            "Выберите действие ниже:",
+            _("common.choose_action"),
             reply_markup=main_menu_reply_keyboard(
                 user=user,
                 blacklist_entry=blacklist_entry,
@@ -315,8 +399,32 @@ async def process_wallet(
         )
         return
 
-    # SHORT transaction scope - check wallet and close BEFORE FSM state change
+    # R1-13: Check wallet blacklist
     session_factory = data.get("session_factory")
+    if session_factory:
+        try:
+            async with session_factory() as session:
+                async with session.begin():
+                    from app.services.blacklist_service import BlacklistService
+                    blacklist_service = BlacklistService(session)
+                    if await blacklist_service.is_blacklisted(
+                        wallet_address=wallet_address.lower()
+                    ):
+                        await message.answer(
+                            "❌ Регистрация запрещена. Обращайтесь в поддержку."
+                        )
+                        await state.clear()
+                        return
+        except (OperationalError, InterfaceError, DatabaseError) as e:
+            logger.error(
+                f"Database error checking wallet blacklist: {e}", exc_info=True
+            )
+            await message.answer(
+                "⚠️ Системная ошибка. Попробуйте позже или обратитесь в поддержку."
+            )
+            return
+
+    # SHORT transaction scope - check wallet and close BEFORE FSM state change
     if not session_factory:
         # Fallback to old session for backward compatibility
         session = data.get("session")
@@ -336,11 +444,24 @@ async def process_wallet(
                 existing = await user_service.get_by_wallet(wallet_address)
         # Transaction closed here, before FSM state change
 
+    # R1-12: Кошелёк уже привязан к существующему пользователю
     if existing:
-        await message.answer(
-            "❌ Этот кошелек уже зарегистрирован!\n\nИспользуйте другой адрес:"
-        )
-        return
+        telegram_id = message.from_user.id if message.from_user else None
+        # Если это тот же telegram_id — предлагаем /start и используем старый аккаунт
+        if telegram_id and existing.telegram_id == telegram_id:
+            await message.answer(
+                "ℹ️ Этот кошелек уже привязан к вашему аккаунту.\n\n"
+                "Используйте команду /start для входа в систему."
+            )
+            await state.clear()
+            return
+        # Если другой telegram_id — выводим сообщение, что кошелёк занят
+        else:
+            await message.answer(
+                "❌ Этот кошелек уже зарегистрирован другим пользователем!\n\n"
+                "Используйте другой адрес:"
+            )
+            return
 
     # Save wallet to state
     await state.update_data(wallet_address=wallet_address)
@@ -632,6 +753,21 @@ async def process_password_confirmation(
         },
     )
 
+    # R1-19: Сохраняем plain password в Redis на 1 час для повторного показа
+    redis_client = data.get("redis_client")
+    if redis_client and password:
+        try:
+            password_key = f"password:plain:{user.id}"
+            # Сохраняем пароль на 1 час (3600 секунд)
+            await redis_client.setex(password_key, 3600, password)
+            logger.info(
+                f"Plain password stored in Redis for user {user.id} (1 hour TTL)"
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to store plain password in Redis for user {user.id}: {e}"
+            )
+
     # Get is_admin from middleware data
     is_admin = data.get("is_admin", False)
     # Получаем session из data для получения blacklist_entry
@@ -643,11 +779,33 @@ async def process_password_confirmation(
         blacklist_entry = await blacklist_repo.find_by_telegram_id(
             user.telegram_id
         )
+    
+    # R1-19: Добавляем кнопку для повторного показа пароля
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+    
+    show_password_button = InlineKeyboardButton(
+        text="🔑 Показать пароль ещё раз",
+        callback_data=f"show_password_{user.id}"
+    )
+    password_keyboard = InlineKeyboardMarkup(inline_keyboard=[[show_password_button]])
+    
     await message.answer(
         "🎉 Регистрация завершена!\n\n"
         f"Ваш ID: {user.id}\n"
         f"Кошелек: {user.masked_wallet}\n\n"
-        "Добро пожаловать в SigmaTrade! 🚀",
+        "Добро пожаловать в SigmaTrade! 🚀\n\n"
+        "⚠️ **Важно:** Сохраните ваш финансовый пароль в безопасном месте!\n"
+        "Он понадобится для подтверждения финансовых операций.",
+        reply_markup=password_keyboard,
+    )
+    
+    # R13-3: Get user language for i18n
+    user_language = await get_user_language(session, user.id)
+    _ = get_translator(user_language)
+    
+    # Отправляем главное меню отдельным сообщением
+    await message.answer(
+        _("common.choose_action"),
         reply_markup=main_menu_reply_keyboard(
             user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
         ),
@@ -859,3 +1017,75 @@ async def process_email(
         ),
     )
     await state.clear()
+
+
+@router.callback_query(F.data.startswith("show_password_"))
+async def handle_show_password_again(
+    callback: CallbackQuery,
+    **data: Any,
+) -> None:
+    """
+    R1-19: Показать финансовый пароль ещё раз (в течение часа после регистрации).
+    
+    Args:
+        callback: Callback query
+        data: Handler data
+    """
+    # Извлекаем user_id из callback_data
+    user_id_str = callback.data.replace("show_password_", "")
+    try:
+        user_id = int(user_id_str)
+    except ValueError:
+        await callback.answer("❌ Ошибка: неверный формат запроса", show_alert=True)
+        return
+    
+    # Проверяем, что пользователь существует и это его запрос
+    user: User | None = data.get("user")
+    if not user or user.id != user_id:
+        await callback.answer(
+            "❌ Ошибка: доступ запрещен",
+            show_alert=True
+        )
+        return
+    
+    # Получаем пароль из Redis
+    redis_client = data.get("redis_client")
+    if not redis_client:
+        await callback.answer(
+            "⚠️ Пароль больше недоступен (прошло более 1 часа с момента регистрации).\n\n"
+            "Используйте функцию восстановления пароля в настройках.",
+            show_alert=True
+        )
+        return
+    
+    try:
+        password_key = f"password:plain:{user.id}"
+        plain_password = await redis_client.get(password_key)
+        
+        if not plain_password:
+            await callback.answer(
+                "⚠️ Пароль больше недоступен (прошло более 1 часа с момента регистрации).\n\n"
+                "Используйте функцию восстановления пароля в настройках.",
+                show_alert=True
+            )
+            return
+        
+        # Показываем пароль в alert
+        await callback.answer(
+            f"🔑 Ваш финансовый пароль:\n\n{plain_password}\n\n"
+            "⚠️ Сохраните его сейчас! Он больше не будет показан.",
+            show_alert=True
+        )
+        
+        logger.info(
+            f"User {user.id} requested to show password again (within 1 hour window)"
+        )
+    except Exception as e:
+        logger.error(
+            f"Error retrieving plain password from Redis for user {user.id}: {e}",
+            exc_info=True
+        )
+        await callback.answer(
+            "❌ Ошибка при получении пароля. Обратитесь в поддержку.",
+            show_alert=True
+        )

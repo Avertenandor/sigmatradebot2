@@ -92,18 +92,26 @@ class FailedNotificationRepository(
         """
         Get failed notifications ready for retry.
 
+        R8-3: Sorted by priority (critical first, then by creation time).
+
         Args:
             max_attempts: Maximum retry attempts
             limit: Maximum number of results
 
         Returns:
-            List of pending notifications
+            List of pending notifications (sorted by priority)
         """
+        from sqlalchemy import desc
+
         stmt = (
             select(FailedNotification)
             .where(not FailedNotification.resolved)
             .where(FailedNotification.attempt_count < max_attempts)
-            .order_by(FailedNotification.created_at.asc())
+            # R8-3: Sort by priority (critical first), then by creation time
+            .order_by(
+                desc(FailedNotification.critical),  # Critical first (True before False)
+                FailedNotification.created_at.asc()  # Then by age (oldest first)
+            )
             .limit(limit)
         )
         result = await self.session.execute(stmt)

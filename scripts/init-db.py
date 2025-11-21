@@ -32,6 +32,7 @@ from app.models.system_setting import SystemSetting  # noqa: E402, F401
 from app.models.transaction import Transaction  # noqa: E402, F401
 from app.models.user import User  # noqa: E402, F401
 from app.models.user_action import UserAction  # noqa: E402, F401
+from app.models.user_fsm_state import UserFsmState  # noqa: E402, F401
 from app.models.wallet_change_request import (  # noqa: E402, F401
     WalletChangeRequest,
 )
