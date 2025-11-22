@@ -72,8 +72,17 @@ class DatabaseMiddleware(BaseMiddleware):
         circuit_breaker = get_db_circuit_breaker()
         
         # Determine operation type (read/write/admin)
+        # Try to determine from handler name or event type
         operation_type = "read"  # Default to read
-        # TODO: Determine operation type from handler/event if possible
+        
+        # Detect write operations from handler name patterns
+        handler_name = getattr(handler, "__name__", "")
+        if any(pattern in handler_name.lower() for pattern in [
+            "create", "update", "delete", "save", "store", "set", "add", "remove"
+        ]):
+            operation_type = "write"
+        elif "admin" in handler_name.lower():
+            operation_type = "admin"
         
         can_proceed, reason = circuit_breaker.can_proceed(operation_type)
         if not can_proceed:
@@ -176,8 +185,14 @@ class DatabaseMiddleware(BaseMiddleware):
                     
                     # Don't re-raise - graceful degradation
                     return None
-                except Exception:
+                except Exception as e:
                     await session.rollback()
+                    # R11-1: Record non-database exceptions as failures too
+                    circuit_breaker.record_failure()
+                    logger.error(
+                        f"Unexpected error in handler: {e}",
+                        extra={"error_type": type(e).__name__},
+                    )
                     raise
         except (OperationalError, InterfaceError, DatabaseError) as e:
             # R11-1: Database connection failure at middleware level

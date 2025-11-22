@@ -27,8 +27,8 @@ class LoggerMiddleware(BaseMiddleware):
         # Get request ID (set by RequestIDMiddleware)
         request_id = data.get("request_id", "unknown")
 
-        # Get user info
-        user: User = data.get("event_from_user")
+        # Get user info (Telegram User, not DB User model)
+        user: User | None = data.get("event_from_user")
         user_id = user.id if user else None
         username = user.username if user else None
 
