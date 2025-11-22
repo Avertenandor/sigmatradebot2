@@ -26,6 +26,7 @@ from app.models.base import Base
 from app.models import (
     Admin,
     Deposit,
+    DepositLevelVersion,
     SupportTicket,
     Transaction,
     User,
@@ -36,6 +37,7 @@ from app.repositories import (
     AdminRepository,
     AppealRepository,
     BlacklistRepository,
+    DepositLevelVersionRepository,
     DepositRepository,
     ReferralEarningRepository,
     ReferralRepository,
@@ -47,12 +49,14 @@ from app.services import (
     AdminService,
     BlacklistService,
     DepositService,
+    DepositValidationService,
     NotificationService,
     ReferralService,
     RewardService,
     SupportService,
     TransactionService,
     UserService,
+    UserNotificationService,
     WithdrawalService,
 )
 # Helper function for hashing passwords in tests
@@ -480,6 +484,14 @@ def deposit_service(
 
 
 @pytest.fixture
+def deposit_validation_service(
+    db_session: AsyncSession,  # pylint: disable=redefined-outer-name
+) -> DepositValidationService:
+    """Deposit validation service instance."""
+    return DepositValidationService(db_session)
+
+
+@pytest.fixture
 def withdrawal_service(
     db_session: AsyncSession,  # pylint: disable=redefined-outer-name
 ) -> WithdrawalService:
@@ -525,6 +537,14 @@ def support_service(
 ) -> SupportService:
     """Support service instance."""
     return SupportService(db_session)
+
+
+@pytest.fixture
+def user_notification_service(
+    db_session: AsyncSession,  # pylint: disable=redefined-outer-name
+) -> UserNotificationService:
+    """User notification service instance."""
+    return UserNotificationService(db_session)
 
 
 @pytest.fixture
@@ -738,6 +758,80 @@ def mock_notification_service() -> MockNotificationService:
     Mock notification service for testing without real Telegram calls.
     """
     return MockNotificationService()
+
+
+# ==================== DEPOSIT LEVEL VERSION FIXTURES ====================
+
+
+@pytest_asyncio.fixture
+async def deposit_level_versions(
+    db_session: AsyncSession,  # pylint: disable=redefined-outer-name
+) -> AsyncGenerator[dict[int, DepositLevelVersion], None]:
+    """
+    Create deposit level versions for all 5 levels.
+
+    Yields:
+        Dict mapping level number to DepositLevelVersion
+    """
+    from app.repositories.deposit_level_version_repository import (
+        DepositLevelVersionRepository,
+    )
+
+    version_repo = DepositLevelVersionRepository(db_session)
+    versions = {}
+
+    # Default deposit conditions
+    default_conditions = {
+        1: {
+            "amount": Decimal("10"),
+            "roi_percent": Decimal("2"),
+            "roi_cap_percent": 500,
+        },
+        2: {
+            "amount": Decimal("50"),
+            "roi_percent": Decimal("2"),
+            "roi_cap_percent": 500,
+        },
+        3: {
+            "amount": Decimal("100"),
+            "roi_percent": Decimal("2"),
+            "roi_cap_percent": 500,
+        },
+        4: {
+            "amount": Decimal("150"),
+            "roi_percent": Decimal("2"),
+            "roi_cap_percent": 500,
+        },
+        5: {
+            "amount": Decimal("300"),
+            "roi_percent": Decimal("2"),
+            "roi_cap_percent": 500,
+        },
+    }
+
+    for level in range(1, 6):
+        # Check if version already exists
+        existing = await version_repo.get_current_version(level)
+        if existing:
+            versions[level] = existing
+        else:
+            # Create new version
+            conditions = default_conditions[level]
+            version = await version_repo.create(
+                level_number=level,
+                amount=conditions["amount"],
+                roi_percent=conditions["roi_percent"],
+                roi_cap_percent=conditions["roi_cap_percent"],
+                version=1,
+                effective_from=datetime.now(UTC),
+                is_active=True,
+                created_by_admin_id=None,
+            )
+            await db_session.commit()
+            await db_session.refresh(version)
+            versions[level] = version
+
+    yield versions
 
 
 # ==================== CONSTANTS ====================

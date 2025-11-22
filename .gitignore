@@ -75,6 +75,11 @@ temp/
 *.bak
 *.swp
 fix_*.py
+# Temporary planning documents in root (should not be committed)
+# Note: docs/ folder may contain legitimate planning documents
+/FIX_*.md
+/*_PLAN.md
+/PLAN_*.md
 
 # PM2
 .pm2/

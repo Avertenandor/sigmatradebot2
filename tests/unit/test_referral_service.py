@@ -12,32 +12,39 @@ from app.services.referral_service import ReferralService, REFERRAL_RATES
 
 
 @pytest.mark.asyncio
-async def test_create_referral_relationships(session: AsyncSession):
+async def test_create_referral_relationships(
+    db_session: AsyncSession,  # pylint: disable=redefined-outer-name
+    create_user_helper,  # pylint: disable=redefined-outer-name
+):
     """Test creating referral relationships."""
-    service = ReferralService(session)
-    
-    # This test requires existing users in database
-    # Should be set up in fixtures
+    service = ReferralService(db_session)
+
+    # Create test users
+    referrer = await create_user_helper(telegram_id=600000001)
+    referred = await create_user_helper(telegram_id=600000002)
+
     success, error = await service.create_referral_relationships(
-        new_user_id=2,
-        direct_referrer_id=1,
+        new_user_id=referred.id,
+        direct_referrer_id=referrer.id,
     )
-    
-    # Test will pass if users exist, fail gracefully if not
-    # In real test, use fixtures to create test users
-    assert isinstance(success, bool)
-    assert error is None or isinstance(error, str)
+
+    assert success is True
+    assert error is None
 
 
 @pytest.mark.asyncio
-async def test_self_referral_prevented(session: AsyncSession):
+async def test_self_referral_prevented(
+    db_session: AsyncSession,  # pylint: disable=redefined-outer-name
+    test_user,  # pylint: disable=redefined-outer-name
+):
     """Test that self-referral is prevented."""
-    service = ReferralService(session)
+    service = ReferralService(db_session)
     success, error = await service.create_referral_relationships(
-        new_user_id=1,
-        direct_referrer_id=1,
+        new_user_id=test_user.id,
+        direct_referrer_id=test_user.id,
     )
     assert success is False
+    assert error is not None
     assert "самого себя" in error or "self" in error.lower()
 
 
@@ -50,11 +57,14 @@ async def test_referral_rates_configured():
 
 
 @pytest.mark.asyncio
-async def test_get_referral_stats(session: AsyncSession):
+async def test_get_referral_stats(
+    db_session: AsyncSession,  # pylint: disable=redefined-outer-name
+    test_user,  # pylint: disable=redefined-outer-name
+):
     """Test getting referral statistics."""
-    service = ReferralService(session)
-    stats = await service.get_referral_stats(user_id=1)
-    
+    service = ReferralService(db_session)
+    stats = await service.get_referral_stats(user_id=test_user.id)
+
     assert isinstance(stats, dict)
     assert "direct_referrals" in stats
     assert "level2_referrals" in stats

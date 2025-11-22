@@ -34,6 +34,7 @@ from app.services.reward_service import RewardService
 from app.services.support_service import SupportService
 from app.services.transaction_service import TransactionService
 from app.services.user_service import UserService
+from app.services.user_notification_service import UserNotificationService
 
 from app.services.settings_service import SettingsService
 from app.services.wallet_admin_service import WalletAdminService
@@ -48,6 +49,7 @@ __all__ = [
     "RewardService",
     "TransactionService",
     "UserService",
+    "UserNotificationService",
     "WithdrawalService",
     # PART5 Critical
     "NotificationRetryService",

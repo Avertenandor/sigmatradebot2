@@ -5,6 +5,7 @@ Manages user blacklist for pre-registration and ban prevention.
 """
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
