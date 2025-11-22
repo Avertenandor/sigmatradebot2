@@ -20,6 +20,7 @@ from sqlalchemy.exc import (
 )
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from app.utils.circuit_breaker import get_db_circuit_breaker
 from bot.i18n.loader import get_translator, get_user_language
 from bot.i18n.locales import DEFAULT_LANGUAGE
 
