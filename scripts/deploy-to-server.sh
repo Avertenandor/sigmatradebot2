@@ -22,8 +22,8 @@ info() { echo -e "${BLUE}[$(date +'%H:%M:%S')] INFO:${NC} $1"; }
 SERVER_HOST="34.88.234.78"
 SERVER_USER="konfu"
 SERVER_PATH="/opt/sigmatradebot"
-GIT_BRANCH="claude/sigmatradebot-python-migration-01UUhWd7yPartmZdGxtPAFLo"
-GIT_REPO="https://github.com/Avertenandor/sigmatradebot.git"
+GIT_BRANCH="main"
+GIT_REPO="https://github.com/Avertenandor/sigmatradebot2.git"
 
 # Banner
 echo -e "${BLUE}"
