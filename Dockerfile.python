@@ -52,6 +52,9 @@ RUN mkdir -p logs
 # Set Python path
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONIOENCODING=utf-8
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
 
 # Expose port (for future API/webhooks)
 EXPOSE 8000
