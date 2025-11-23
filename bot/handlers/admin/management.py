@@ -69,7 +69,7 @@ async def show_admin_management(
         )
 
         text += (
-            f"{role_emoji} `{adm.telegram_id}` - {adm.username or 'N/A'}\n"
+            f"{role_emoji} {adm.telegram_id} - {adm.username or 'N/A'}\n"
             f"   Роль: {adm.role}\n"
             f"   Активен: {'✅' if has_active_session else '❌'}\n\n"
         )
@@ -300,7 +300,7 @@ async def show_admin_list(
         )
 
         text += (
-            f"{role_emoji} `{adm.telegram_id}` - {adm.username or 'N/A'}\n"
+            f"{role_emoji} {adm.telegram_id} - {adm.username or 'N/A'}\n"
             f"   Роль: {adm.role}\n"
             f"   Активен: {'✅' if has_active_session else '❌'}\n\n"
         )
