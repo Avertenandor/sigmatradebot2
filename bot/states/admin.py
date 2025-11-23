@@ -42,3 +42,10 @@ class AdminUserMessagesStates(StatesGroup):
     """States for viewing user messages."""
 
     waiting_for_user_id = State()
+    viewing_messages = State()  # Viewing paginated messages (stores telegram_id and page)
+
+
+class AdminMasterKeyStates(StatesGroup):
+    """States for master key management."""
+
+    awaiting_confirmation = State()  # Waiting for confirmation to regenerate key

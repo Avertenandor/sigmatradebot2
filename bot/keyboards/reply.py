@@ -794,3 +794,54 @@ def withdrawal_history_keyboard(
     )
 
     return builder.as_markup(resize_keyboard=True)
+
+def master_key_management_reply_keyboard() -> ReplyKeyboardMarkup:
+    """"
+    Master key management keyboard (reply).
+    
+    Returns:
+        ReplyKeyboardMarkup with master key management options
+    """"
+    builder = ReplyKeyboardBuilder()
+    builder.row(KeyboardButton(text=" Показать текущий ключ"))
+    builder.row(KeyboardButton(text=" Сгенерировать новый ключ"))
+    builder.row(KeyboardButton(text=" Главное меню"))
+    return builder.as_markup(resize_keyboard=True)
+
+
+def user_messages_navigation_keyboard(
+    has_prev: bool,
+    has_next: bool,
+    is_super_admin: bool = False,
+) -> ReplyKeyboardMarkup:
+    """"
+    User messages navigation keyboard (reply).
+    
+    Args:
+        has_prev: Whether there is a previous page
+        has_next: Whether there is a next page
+        is_super_admin: Whether user is super admin (shows delete button)
+        
+    Returns:
+        ReplyKeyboardMarkup with navigation buttons
+    """"
+    builder = ReplyKeyboardBuilder()
+    
+    # Navigation row
+    nav_buttons = []
+    if has_prev:
+        nav_buttons.append(KeyboardButton(text=" Предыдущая страница"))
+    if has_next:
+        nav_buttons.append(KeyboardButton(text=" Следующая страница"))
+    
+    if nav_buttons:
+        builder.row(*nav_buttons)
+    
+    # Delete button (only for super admin)
+    if is_super_admin:
+        builder.row(KeyboardButton(text=" Удалить все сообщения"))
+    
+    # Back button
+    builder.row(KeyboardButton(text=" Назад в админ-панель"))
+    
+    return builder.as_markup(resize_keyboard=True)

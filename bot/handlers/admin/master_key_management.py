@@ -4,7 +4,7 @@ Master key management handler.
 Allows super admin (telegram_id: 1040687384) to get and regenerate master key.
 Similar to @BotFather token management.
 
-FULL FUNCTIONALITY:
+FULL FUNCTIONALITY (with REPLY keyboards):
 - Show master key menu with current status
 - Generate new master key (with confirmation)
 - Show current key status (hashed, cannot be recovered)
@@ -17,12 +17,14 @@ from typing import Any
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import Message
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.admin_service import AdminService
 from app.services.admin_log_service import AdminLogService
+from bot.keyboards.reply import master_key_management_reply_keyboard, main_menu_reply_keyboard
+from bot.states.admin import AdminMasterKeyStates
 
 # SUPER_ADMIN_TELEGRAM_ID - only this user can manage master keys
 SUPER_ADMIN_TELEGRAM_ID = 1040687384
@@ -41,43 +43,6 @@ def is_super_admin(telegram_id: int | None) -> bool:
         True if user is super admin
     """
     return telegram_id == SUPER_ADMIN_TELEGRAM_ID
-
-
-def master_key_keyboard(has_key: bool = False) -> InlineKeyboardMarkup:
-    """
-    Build master key management keyboard.
-    
-    Args:
-        has_key: Whether admin has master key set
-        
-    Returns:
-        InlineKeyboardMarkup with options
-    """
-    buttons = []
-    
-    if has_key:
-        buttons.append([
-            InlineKeyboardButton(
-                text="📋 Статус текущего ключа",
-                callback_data="master_key_status"
-            )
-        ])
-    
-    buttons.append([
-        InlineKeyboardButton(
-            text="🔄 Сгенерировать новый ключ" if has_key else "✨ Создать мастер-ключ",
-            callback_data="master_key_confirm_regenerate" if has_key else "master_key_regenerate"
-        )
-    ])
-    
-    buttons.append([
-        InlineKeyboardButton(
-            text="◀️ Назад в главное меню",
-            callback_data="master_key_cancel"
-        )
-    ])
-    
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 @router.message(F.text == "🔑 Управление мастер-ключом")
@@ -174,7 +139,7 @@ async def show_master_key_menu(
             "• Восстановление невозможно",
             "• При потере - создайте новый",
             "",
-            "Выберите действие:"
+            "Выберите действие из меню ниже:"
         ])
     else:
         text_lines.extend([
@@ -201,14 +166,14 @@ async def show_master_key_menu(
     
     await message.answer(
         text,
-        reply_markup=master_key_keyboard(has_key=has_master_key),
+        reply_markup=master_key_management_reply_keyboard(),
         parse_mode="Markdown"
     )
 
 
-@router.callback_query(F.data == "master_key_status")
+@router.message(F.text == "🔍 Показать текущий ключ")
 async def show_master_key_status(
-    callback: CallbackQuery,
+    message: Message,
     session: AsyncSession,
     **data: Any,
 ) -> None:
@@ -217,26 +182,23 @@ async def show_master_key_status(
     
     Cannot show actual key (it's hashed), but shows:
     - Key exists
-    - When it was last changed (if tracked)
     - Security information
     """
-    telegram_id = callback.from_user.id if callback.from_user else None
+    telegram_id = message.from_user.id if message.from_user else None
     
     if not is_super_admin(telegram_id):
-        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        await message.answer("❌ Доступ запрещен")
         return
-    
-    await callback.answer()
     
     admin_service = AdminService(session)
     admin = await admin_service.get_admin_by_telegram_id(telegram_id)
     
     if not admin or not admin.master_key:
-        await callback.message.edit_text(
+        await message.answer(
             "⚠️ **Мастер-ключ не установлен**\n\n"
-            "Используйте кнопку 'Создать мастер-ключ' для генерации.",
+            "Используйте кнопку '🔄 Сгенерировать новый ключ' для создания.",
             parse_mode="Markdown",
-            reply_markup=master_key_keyboard(has_key=False)
+            reply_markup=master_key_management_reply_keyboard()
         )
         return
     
@@ -262,16 +224,18 @@ async def show_master_key_status(
     
     logger.info(f"[MASTER_KEY] Super admin {telegram_id} viewed key status")
     
-    await callback.message.edit_text(
+    await message.answer(
         text,
         parse_mode="Markdown",
-        reply_markup=master_key_keyboard(has_key=True)
+        reply_markup=master_key_management_reply_keyboard()
     )
 
 
-@router.callback_query(F.data == "master_key_confirm_regenerate")
+@router.message(F.text == "🔄 Сгенерировать новый ключ")
 async def confirm_regenerate_master_key(
-    callback: CallbackQuery,
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
     **data: Any,
 ) -> None:
     """
@@ -279,50 +243,69 @@ async def confirm_regenerate_master_key(
     
     This is a critical operation that will invalidate the old key.
     """
-    telegram_id = callback.from_user.id if callback.from_user else None
+    telegram_id = message.from_user.id if message.from_user else None
     
     if not is_super_admin(telegram_id):
-        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        await message.answer("❌ Доступ запрещен")
         return
     
-    await callback.answer()
+    # Check if admin has existing key
+    admin_service = AdminService(session)
+    admin = await admin_service.get_admin_by_telegram_id(telegram_id)
     
-    text = (
-        "⚠️ **ВНИМАНИЕ: Критическая операция**\n\n"
-        "Вы собираетесь сгенерировать новый мастер-ключ.\n\n"
-        "**Последствия:**\n"
-        "• Старый ключ перестанет работать\n"
-        "• Потребуется использовать новый ключ\n"
-        "• Новый ключ будет показан только один раз\n\n"
-        "**Вы уверены?**"
-    )
+    has_existing_key = admin and admin.master_key is not None and admin.master_key != ""
     
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(
-                text="✅ Да, сгенерировать новый ключ",
-                callback_data="master_key_regenerate"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text="❌ Отмена",
-                callback_data="master_key_cancel_regenerate"
-            )
-        ]
-    ])
-    
-    await callback.message.edit_text(
-        text,
-        parse_mode="Markdown",
-        reply_markup=keyboard
-    )
+    if has_existing_key:
+        # Ask for confirmation
+        text = (
+            "⚠️ **ВНИМАНИЕ: Критическая операция**\n\n"
+            "Вы собираетесь сгенерировать новый мастер-ключ.\n\n"
+            "**Последствия:**\n"
+            "• Старый ключ перестанет работать\n"
+            "• Потребуется использовать новый ключ\n"
+            "• Новый ключ будет показан только один раз\n\n"
+            "**Подтвердите действие:**\n"
+            "Введите слово **ПОДТВЕРЖДАЮ** для продолжения\n"
+            "или нажмите '◀️ Главное меню' для отмены."
+        )
+        
+        await state.set_state(AdminMasterKeyStates.awaiting_confirmation)
+        await message.answer(text, parse_mode="Markdown", reply_markup=master_key_management_reply_keyboard())
+    else:
+        # First time - generate immediately
+        await regenerate_master_key(message, session, state, **data)
 
 
-@router.callback_query(F.data == "master_key_regenerate")
-async def regenerate_master_key(
-    callback: CallbackQuery,
+@router.message(AdminMasterKeyStates.awaiting_confirmation)
+async def process_confirmation(
+    message: Message,
     session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """Process confirmation for master key regeneration."""
+    telegram_id = message.from_user.id if message.from_user else None
+    
+    if not is_super_admin(telegram_id):
+        await message.answer("❌ Доступ запрещен")
+        await state.clear()
+        return
+    
+    if message.text and message.text.strip().upper() == "ПОДТВЕРЖДАЮ":
+        await regenerate_master_key(message, session, state, **data)
+    else:
+        await state.clear()
+        await message.answer(
+            "❌ Генерация нового ключа отменена.\n\n"
+            "Ваш текущий ключ остался без изменений.",
+            reply_markup=master_key_management_reply_keyboard()
+        )
+
+
+async def regenerate_master_key(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
     **data: Any,
 ) -> None:
     """
@@ -335,19 +318,20 @@ async def regenerate_master_key(
     - Shows key to user (ONLY ONCE)
     - Logs action for security audit
     """
-    telegram_id = callback.from_user.id if callback.from_user else None
+    telegram_id = message.from_user.id if message.from_user else None
     
     if not is_super_admin(telegram_id):
-        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        await message.answer("❌ Доступ запрещен")
+        await state.clear()
         return
     
-    await callback.answer("Генерация нового ключа...")
+    await state.clear()
     
     admin_service = AdminService(session)
     admin = await admin_service.get_admin_by_telegram_id(telegram_id)
     
     if not admin:
-        await callback.message.edit_text("❌ Администратор не найден")
+        await message.answer("❌ Администратор не найден")
         return
     
     # Check if this is first key or regeneration
@@ -399,81 +383,58 @@ async def regenerate_master_key(
         "• Сохраните в менеджере паролей",
         "• Не храните в открытом виде",
         "• Не передавайте третьим лицам",
-        "",
-        "Используйте этот ключ для входа в админ-панель."
     ]
     
     text = "\n".join(text_lines)
     
-    await callback.message.edit_text(text, parse_mode="Markdown")
+    await message.answer(text, parse_mode="Markdown")
     
     # Send key in separate message for easy copying
-    await callback.message.answer(
+    await message.answer(
         f"📋 **Мастер-ключ для копирования:**\n\n`{plain_master_key}`",
         parse_mode="Markdown"
     )
     
-    # Send instructions
-    await callback.message.answer(
+    # Send instructions with main menu keyboard
+    user = data.get("user")
+    blacklist_entry = data.get("blacklist_entry")
+    is_admin = data.get("is_admin", False)
+    
+    await message.answer(
         "ℹ️ **Как использовать:**\n\n"
         "1. Нажмите кнопку '👑 Админ-панель' в главном меню\n"
         "2. Введите мастер-ключ когда система попросит\n"
         "3. Получите доступ к админ-функциям\n\n"
         "Для возврата в главное меню используйте кнопку ниже.",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="◀️ Главное меню", callback_data="master_key_cancel")]
-        ])
+        reply_markup=main_menu_reply_keyboard(user=user, blacklist_entry=blacklist_entry, is_admin=is_admin)
     )
 
 
-@router.callback_query(F.data == "master_key_cancel_regenerate")
-async def cancel_regenerate(
-    callback: CallbackQuery,
-    session: AsyncSession,
-    **data: Any,
-) -> None:
-    """Cancel master key regeneration and return to menu."""
-    telegram_id = callback.from_user.id if callback.from_user else None
-    
-    if not is_super_admin(telegram_id):
-        await callback.answer("❌ Доступ запрещен", show_alert=True)
-        return
-    
-    await callback.answer("Отменено")
-    
-    admin_service = AdminService(session)
-    admin = await admin_service.get_admin_by_telegram_id(telegram_id)
-    
-    has_key = admin and admin.master_key is not None and admin.master_key != ""
-    
-    await callback.message.edit_text(
-        "❌ Генерация нового ключа отменена.\n\n"
-        "Ваш текущий ключ остался без изменений.",
-        reply_markup=master_key_keyboard(has_key=has_key)
-    )
-
-
-@router.callback_query(F.data == "master_key_cancel")
-async def cancel_master_key_management(
-    callback: CallbackQuery,
+@router.message(F.text == "◀️ Главное меню")
+async def back_to_main_menu(
+    message: Message,
     state: FSMContext,
     **data: Any,
 ) -> None:
     """
-    Cancel master key management and return to main menu.
+    Return to main menu from master key management.
     """
-    telegram_id = callback.from_user.id if callback.from_user else None
+    telegram_id = message.from_user.id if message.from_user else None
     
     if not is_super_admin(telegram_id):
-        await callback.answer("❌ Доступ запрещен", show_alert=True)
-        return
+        return  # Let other handlers process this
     
-    await callback.answer()
     await state.clear()
     
-    await callback.message.edit_text(
-        "◀️ Возврат в главное меню.\n\n"
-        "Используйте кнопки ниже для навигации."
+    user = data.get("user")
+    blacklist_entry = data.get("blacklist_entry")
+    is_admin = data.get("is_admin", False)
+    
+    await message.answer(
+        "📊 **Главное меню**\n\n"
+        "Выберите действие:",
+        parse_mode="Markdown",
+        reply_markup=main_menu_reply_keyboard(user=user, blacklist_entry=blacklist_entry, is_admin=is_admin)
     )
     
-    logger.info(f"[MASTER_KEY] Super admin {telegram_id} closed master key menu")
+    logger.info(f"[MASTER_KEY] Super admin {telegram_id} returned to main menu")

@@ -1,23 +1,23 @@
 """
 Admin handler for viewing user messages.
 
-Allows admins to view text messages sent by users.
+Allows admins to view text messages sent by users (with REPLY keyboards).
 """
 
 from typing import Any
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import Message
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.admin import Admin
 from app.services.user_message_log_service import UserMessageLogService
 from app.services.user_service import UserService
-from bot.keyboards.inline import (
-    back_to_admin_panel_keyboard,
-    paginated_user_messages_keyboard,
+from bot.keyboards.reply import (
+    admin_keyboard,
+    user_messages_navigation_keyboard,
 )
 from bot.states.admin import AdminUserMessagesStates
 
@@ -55,10 +55,13 @@ async def show_user_messages_menu(
 _Например: 1040687384_
     """.strip()
 
+    # Get admin status for keyboard
+    is_super_admin = data.get("is_super_admin", False)
+
     await message.answer(
         text,
         parse_mode="Markdown",
-        reply_markup=back_to_admin_panel_keyboard(),
+        reply_markup=admin_keyboard(is_super_admin=is_super_admin),
     )
     await state.set_state(AdminUserMessagesStates.waiting_for_user_id)
     logger.info(f"Admin {admin.id} opened user messages menu")
@@ -95,29 +98,33 @@ async def process_user_id_for_messages(
     user = await user_service.get_user_by_telegram_id(telegram_id)
 
     if not user:
+        is_super_admin = data.get("is_super_admin", False)
         await message.answer(
             f"⚠️ Пользователь с ID `{telegram_id}` не найден в базе.\n\n"
             f"Попробуйте другой ID или вернитесь назад.",
             parse_mode="Markdown",
-            reply_markup=back_to_admin_panel_keyboard(),
+            reply_markup=admin_keyboard(is_super_admin=is_super_admin),
         )
         return
 
     # Get messages
     msg_service = UserMessageLogService(session)
+    page = 0
+    page_size = 50
     messages, total = await msg_service.get_user_messages(
         telegram_id=telegram_id,
-        limit=50,
-        offset=0,
+        limit=page_size,
+        offset=page * page_size,
     )
 
     if not messages:
+        is_super_admin = data.get("is_super_admin", False)
         await message.answer(
             f"📝 **Сообщения пользователя {user.username or telegram_id}**\n\n"
             f"Пользователь еще не отправлял текстовых сообщений боту.\n\n"
             f"_Логируются только текстовые сообщения, не кнопки._",
             parse_mode="Markdown",
-            reply_markup=back_to_admin_panel_keyboard(),
+            reply_markup=admin_keyboard(is_super_admin=is_super_admin),
         )
         await state.clear()
         return
@@ -127,7 +134,7 @@ async def process_user_id_for_messages(
         f"📝 **Сообщения пользователя {user.username or telegram_id}**",
         f"Telegram ID: `{telegram_id}`",
         f"Всего сообщений: {total}",
-        f"Показано: {len(messages)}",
+        f"Показано: {min(len(messages), 20)}",
         "",
         "---",
         "",
@@ -146,64 +153,130 @@ async def process_user_id_for_messages(
     text = "\n".join(text_lines)
 
     # Save state for pagination
+    await state.set_state(AdminUserMessagesStates.viewing_messages)
     await state.update_data(
         telegram_id=telegram_id,
-        page=0,
+        page=page,
         total=total,
+        page_size=page_size,
     )
+
+    # Check if there are more pages
+    total_pages = (total + page_size - 1) // page_size
+    has_prev = page > 0
+    has_next = page < total_pages - 1
+    is_super_admin = data.get("is_super_admin", False)
 
     await message.answer(
         text,
         parse_mode="Markdown",
-        reply_markup=paginated_user_messages_keyboard(
-            telegram_id=telegram_id,
-            page=0,
-            total=total,
-            page_size=50,
+        reply_markup=user_messages_navigation_keyboard(
+            has_prev=has_prev,
+            has_next=has_next,
+            is_super_admin=is_super_admin,
         ),
     )
-    await state.clear()
     logger.info(
         f"Admin {admin.id} viewed messages for user {telegram_id} "
-        f"(total: {total})"
+        f"(total: {total}, page: {page})"
     )
 
 
-@router.callback_query(F.data.startswith("user_messages_page:"))
-async def paginate_user_messages(
-    callback: CallbackQuery,
+@router.message(
+    AdminUserMessagesStates.viewing_messages,
+    F.text == "⬅️ Предыдущая страница"
+)
+async def prev_page_user_messages(
+    message: Message,
     session: AsyncSession,
+    state: FSMContext,
     **data: Any,
 ) -> None:
-    """Paginate user messages."""
+    """Show previous page of user messages."""
     is_admin = data.get("is_admin", False)
     admin: Admin | None = data.get("admin")
 
     if not is_admin or not admin:
-        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        await message.answer("❌ Доступ запрещен")
         return
 
-    # Parse callback data: user_messages_page:telegram_id:page
-    parts = callback.data.split(":")
-    if len(parts) != 3:
-        await callback.answer("❌ Неверный формат", show_alert=True)
+    # Get state data
+    state_data = await state.get_data()
+    telegram_id = state_data.get("telegram_id")
+    current_page = state_data.get("page", 0)
+    total = state_data.get("total", 0)
+    page_size = state_data.get("page_size", 50)
+
+    if current_page <= 0:
+        await message.answer("📝 Вы уже на первой странице")
         return
 
-    telegram_id = int(parts[1])
-    page = int(parts[2])
-    page_size = 50
+    new_page = current_page - 1
+    await show_messages_page(
+        message, session, state, telegram_id, new_page, page_size, total, admin, **data
+    )
+
+
+@router.message(
+    AdminUserMessagesStates.viewing_messages,
+    F.text == "➡️ Следующая страница"
+)
+async def next_page_user_messages(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """Show next page of user messages."""
+    is_admin = data.get("is_admin", False)
+    admin: Admin | None = data.get("admin")
+
+    if not is_admin or not admin:
+        await message.answer("❌ Доступ запрещен")
+        return
+
+    # Get state data
+    state_data = await state.get_data()
+    telegram_id = state_data.get("telegram_id")
+    current_page = state_data.get("page", 0)
+    total = state_data.get("total", 0)
+    page_size = state_data.get("page_size", 50)
+
+    total_pages = (total + page_size - 1) // page_size
+    if current_page >= total_pages - 1:
+        await message.answer("📝 Вы уже на последней странице")
+        return
+
+    new_page = current_page + 1
+    await show_messages_page(
+        message, session, state, telegram_id, new_page, page_size, total, admin, **data
+    )
+
+
+async def show_messages_page(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    telegram_id: int,
+    page: int,
+    page_size: int,
+    total: int,
+    admin: Admin,
+    **data: Any,
+) -> None:
+    """Show specific page of messages."""
     offset = page * page_size
 
     # Get messages
     msg_service = UserMessageLogService(session)
-    messages, total = await msg_service.get_user_messages(
+    messages, _ = await msg_service.get_user_messages(
         telegram_id=telegram_id,
         limit=page_size,
         offset=offset,
     )
 
     if not messages:
-        await callback.answer("📝 Нет сообщений на этой странице")
+        await message.answer("📝 Нет сообщений на этой странице")
         return
 
     # Get user info
@@ -211,11 +284,12 @@ async def paginate_user_messages(
     user = await user_service.get_user_by_telegram_id(telegram_id)
 
     # Format messages
+    total_pages = (total + page_size - 1) // page_size
     text_lines = [
         f"📝 **Сообщения пользователя {user.username if user else telegram_id}**",
         f"Telegram ID: `{telegram_id}`",
         f"Всего сообщений: {total}",
-        f"Страница: {page + 1}/{(total + page_size - 1) // page_size}",
+        f"Страница: {page + 1}/{total_pages}",
         "",
         "---",
         "",
@@ -232,27 +306,37 @@ async def paginate_user_messages(
 
     text = "\n".join(text_lines)
 
-    await callback.message.edit_text(
+    # Update state
+    await state.update_data(page=page)
+
+    # Check pagination
+    has_prev = page > 0
+    has_next = page < total_pages - 1
+    is_super_admin = data.get("is_super_admin", False)
+
+    await message.answer(
         text,
         parse_mode="Markdown",
-        reply_markup=paginated_user_messages_keyboard(
-            telegram_id=telegram_id,
-            page=page,
-            total=total,
-            page_size=page_size,
+        reply_markup=user_messages_navigation_keyboard(
+            has_prev=has_prev,
+            has_next=has_next,
+            is_super_admin=is_super_admin,
         ),
     )
-    await callback.answer()
     logger.info(
         f"Admin {admin.id} viewed page {page} of messages "
         f"for user {telegram_id}"
     )
 
 
-@router.callback_query(F.data.startswith("delete_user_messages:"))
+@router.message(
+    AdminUserMessagesStates.viewing_messages,
+    F.text == "🗑 Удалить все сообщения"
+)
 async def delete_user_messages(
-    callback: CallbackQuery,
+    message: Message,
     session: AsyncSession,
+    state: FSMContext,
     **data: Any,
 ) -> None:
     """Delete all messages for user."""
@@ -261,36 +345,57 @@ async def delete_user_messages(
     is_super_admin = data.get("is_super_admin", False)
 
     if not is_admin or not admin:
-        await callback.answer("❌ Доступ запрещен", show_alert=True)
+        await message.answer("❌ Доступ запрещен")
         return
 
     # Only super admin can delete
     if not is_super_admin:
-        await callback.answer(
-            "❌ Только супер-администратор может удалять сообщения",
-            show_alert=True,
-        )
+        await message.answer("❌ Только супер-администратор может удалять сообщения")
         return
 
-    # Parse telegram_id
-    telegram_id = int(callback.data.split(":")[1])
+    # Get telegram_id from state
+    state_data = await state.get_data()
+    telegram_id = state_data.get("telegram_id")
+
+    if not telegram_id:
+        await message.answer("❌ Ошибка: не найден ID пользователя")
+        return
 
     # Delete messages
     msg_service = UserMessageLogService(session)
     count = await msg_service.delete_all_messages(telegram_id)
     await session.commit()
 
-    await callback.answer(
-        f"✅ Удалено {count} сообщений пользователя {telegram_id}",
-        show_alert=True,
-    )
-    await callback.message.edit_text(
+    await state.clear()
+
+    await message.answer(
         f"✅ Все сообщения пользователя `{telegram_id}` удалены.\n\n"
         f"Удалено: {count} сообщений",
         parse_mode="Markdown",
-        reply_markup=back_to_admin_panel_keyboard(),
+        reply_markup=admin_keyboard(is_super_admin=is_super_admin),
     )
     logger.warning(
         f"Admin {admin.id} deleted {count} messages for user {telegram_id}"
     )
 
+
+@router.message(
+    AdminUserMessagesStates.viewing_messages,
+    F.text == "◀️ Назад в админ-панель"
+)
+async def back_to_admin_panel_from_messages(
+    message: Message,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """Return to admin panel from message viewing."""
+    await state.clear()
+
+    is_super_admin = data.get("is_super_admin", False)
+
+    await message.answer(
+        "👑 **Панель администратора**\n\n"
+        "Выберите действие:",
+        parse_mode="Markdown",
+        reply_markup=admin_keyboard(is_super_admin=is_super_admin),
+    )
