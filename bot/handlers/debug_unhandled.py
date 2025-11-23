@@ -19,9 +19,11 @@ async def debug_unhandled(message: Message):
     
     This should be registered LAST to catch messages that don't match any other handler.
     """
+    text_bytes = message.text.encode('utf-8') if message.text else b''
     logger.warning(
         f"UNHANDLED MESSAGE: user={message.from_user.id if message.from_user else None} "
         f"text={message.text!r} "
+        f"bytes={text_bytes.hex()} "
         f"chat_id={message.chat.id}"
     )
     
