@@ -1,4 +1,4 @@
-"""
+п»ї"""
 Reply keyboards.
 
 Reply keyboard builders for main navigation.
@@ -795,17 +795,19 @@ def withdrawal_history_keyboard(
 
     return builder.as_markup(resize_keyboard=True)
 
+
+
 def master_key_management_reply_keyboard() -> ReplyKeyboardMarkup:
-    """"
+    """
     Master key management keyboard (reply).
     
     Returns:
         ReplyKeyboardMarkup with master key management options
-    """"
+    """
     builder = ReplyKeyboardBuilder()
-    builder.row(KeyboardButton(text=" Показать текущий ключ"))
-    builder.row(KeyboardButton(text=" Сгенерировать новый ключ"))
-    builder.row(KeyboardButton(text=" Главное меню"))
+    builder.row(KeyboardButton(text=" РџРѕРєР°Р·Р°С‚СЊ С‚РµРєСѓС‰РёР№ РєР»СЋС‡"))
+    builder.row(KeyboardButton(text=" РЎРіРµРЅРµСЂРёСЂРѕРІР°С‚СЊ РЅРѕРІС‹Р№ РєР»СЋС‡"))
+    builder.row(KeyboardButton(text=" Р“Р»Р°РІРЅРѕРµ РјРµРЅСЋ"))
     return builder.as_markup(resize_keyboard=True)
 
 
@@ -814,7 +816,7 @@ def user_messages_navigation_keyboard(
     has_next: bool,
     is_super_admin: bool = False,
 ) -> ReplyKeyboardMarkup:
-    """"
+    """
     User messages navigation keyboard (reply).
     
     Args:
@@ -824,24 +826,24 @@ def user_messages_navigation_keyboard(
         
     Returns:
         ReplyKeyboardMarkup with navigation buttons
-    """"
+    """
     builder = ReplyKeyboardBuilder()
     
     # Navigation row
     nav_buttons = []
     if has_prev:
-        nav_buttons.append(KeyboardButton(text=" Предыдущая страница"))
+        nav_buttons.append(KeyboardButton(text=" РџСЂРµРґС‹РґСѓС‰Р°СЏ СЃС‚СЂР°РЅРёС†Р°"))
     if has_next:
-        nav_buttons.append(KeyboardButton(text=" Следующая страница"))
+        nav_buttons.append(KeyboardButton(text=" РЎР»РµРґСѓСЋС‰Р°СЏ СЃС‚СЂР°РЅРёС†Р°"))
     
     if nav_buttons:
         builder.row(*nav_buttons)
     
     # Delete button (only for super admin)
     if is_super_admin:
-        builder.row(KeyboardButton(text=" Удалить все сообщения"))
+        builder.row(KeyboardButton(text=" РЈРґР°Р»РёС‚СЊ РІСЃРµ СЃРѕРѕР±С‰РµРЅРёСЏ"))
     
     # Back button
-    builder.row(KeyboardButton(text=" Назад в админ-панель"))
+    builder.row(KeyboardButton(text=" РќР°Р·Р°Рґ РІ Р°РґРјРёРЅ-РїР°РЅРµР»СЊ"))
     
     return builder.as_markup(resize_keyboard=True)
