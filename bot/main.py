@@ -251,6 +251,14 @@ async def main() -> None:  # noqa: C901
         withdrawals,
     )
 
+    # Master key management (only for super admin telegram_id: 1040687384)
+    # NOTE: This router does NOT use AdminAuthMiddleware because it's used
+    # to GET the master key, so it can't require master key authentication
+    # MUST be registered BEFORE menu.router to have priority
+    from bot.handlers.admin import master_key_management
+    # Security check is done inside the handler by checking telegram_id
+    dp.include_router(master_key_management.router)
+    
     # Core handlers (menu must be registered BEFORE deposit/withdrawal
     # to have priority over FSM state handlers)
     dp.include_router(start.router)
@@ -317,14 +325,6 @@ async def main() -> None:  # noqa: C901
     dp.include_router(wallets.router)
     dp.include_router(admins.router)
     dp.include_router(user_messages.router)
-    
-    # Master key management (only for super admin telegram_id: 1040687384)
-    # NOTE: This router does NOT use AdminAuthMiddleware because it's used
-    # to GET the master key, so it can't require master key authentication
-    from bot.handlers.admin import master_key_management
-    # Security check is done inside the handler by checking telegram_id
-    dp.include_router(master_key_management.router)
-
     # Test bot connection
     try:
         bot_info = await bot.get_me()
