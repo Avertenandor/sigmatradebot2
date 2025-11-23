@@ -338,6 +338,9 @@ def admin_keyboard(is_super_admin: bool = False) -> ReplyKeyboardMarkup:
     builder.row(
         KeyboardButton(text="⚙️ Настроить уровни депозитов"),
     )
+    builder.row(
+        KeyboardButton(text="📝 Просмотр сообщений пользователей"),
+    )
     
     # Add admin management button only for super_admin
     if is_super_admin:

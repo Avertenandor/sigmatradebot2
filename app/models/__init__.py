@@ -53,6 +53,7 @@ from app.models.transaction import Transaction
 from app.models.user import User
 from app.models.user_action import UserAction
 from app.models.user_fsm_state import UserFsmState
+from app.models.user_message_log import UserMessageLog
 from app.models.user_notification_settings import UserNotificationSettings
 from app.models.wallet_change_request import WalletChangeRequest
 
@@ -61,6 +62,7 @@ __all__ = [
     "Base",
     # Enums
     "TransactionStatus",
+    "UserMessageLog",
     "TransactionType",
     "WalletChangeStatus",
     "WalletChangeType",

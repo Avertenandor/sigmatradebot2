@@ -36,3 +36,9 @@ class BlacklistStates(StatesGroup):
     waiting_for_identifier = State()
     waiting_for_reason = State()
     waiting_for_removal_identifier = State()
+
+
+class AdminUserMessagesStates(StatesGroup):
+    """States for viewing user messages."""
+
+    waiting_for_user_id = State()

@@ -59,6 +59,9 @@ from bot.middlewares.logger_middleware import LoggerMiddleware  # noqa: E402
 from bot.middlewares.menu_state_clear import (
     MenuStateClearMiddleware,  # noqa: E402
 )
+from bot.middlewares.message_log_middleware import (
+    MessageLogMiddleware,  # noqa: E402
+)
 from bot.middlewares.rate_limit_middleware import (
     RateLimitMiddleware,  # noqa: E402
 )
@@ -191,6 +194,8 @@ async def main() -> None:  # noqa: C901
     dp.update.middleware(MenuStateClearMiddleware())
     dp.update.middleware(AuthMiddleware())
     dp.update.middleware(BanMiddleware())
+    # Message logging must be after Auth (to get user_id) and Ban (to not log banned users)
+    dp.update.middleware(MessageLogMiddleware())
 
     # Register error handler (MUST BE FIRST)
     @dp.error()
@@ -239,6 +244,7 @@ async def main() -> None:  # noqa: C901
         finpass_recovery as admin_finpass,
         management,
         panel,
+        user_messages,
         users,
         wallet_key_setup,
         wallets,
@@ -296,6 +302,8 @@ async def main() -> None:  # noqa: C901
     wallets.router.callback_query.middleware(admin_auth_middleware)
     admins.router.message.middleware(admin_auth_middleware)
     admins.router.callback_query.middleware(admin_auth_middleware)
+    user_messages.router.message.middleware(admin_auth_middleware)
+    user_messages.router.callback_query.middleware(admin_auth_middleware)
     
     dp.include_router(wallet_key_setup.router)
     dp.include_router(panel.router)
@@ -308,6 +316,7 @@ async def main() -> None:  # noqa: C901
     dp.include_router(management.router)
     dp.include_router(wallets.router)
     dp.include_router(admins.router)
+    dp.include_router(user_messages.router)
     
     # Master key management (only for super admin telegram_id: 1040687384)
     # NOTE: This router does NOT use AdminAuthMiddleware because it's used
