@@ -126,3 +126,10 @@ SERVER_ACCESS.md
 # Corrupted paths / encoding issues
 **/PEICHAYCHMO/**
 **/инструкции.instructions.md
+
+# Media files (images and audio)
+# Ignore contents but keep folders
+изображения/*
+!изображения/.gitkeep
+аудиозаписи/*
+!аудиозаписи/.gitkeep
