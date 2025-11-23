@@ -102,11 +102,14 @@ def main_menu_reply_keyboard(
             )
             # Add master key management button for super admin (telegram_id: 1040687384)
             # This button is accessible WITHOUT master key authentication
+            logger.debug(f"[KEYBOARD] Checking master key button: telegram_id={telegram_id}, type={type(telegram_id)}, equals={telegram_id == 1040687384}")
             if telegram_id == 1040687384:
                 logger.info(f"[KEYBOARD] Adding master key management button for super admin {telegram_id}")
                 builder.row(
                     KeyboardButton(text="🔑 Управление мастер-ключом"),
                 )
+            else:
+                logger.debug(f"[KEYBOARD] NOT adding master key button: telegram_id={telegram_id} != 1040687384")
         else:
             logger.info(f"[KEYBOARD] NOT adding admin panel button (is_admin={is_admin}) for user {telegram_id}")
 
