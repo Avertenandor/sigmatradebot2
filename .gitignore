@@ -118,6 +118,11 @@ test_*.py
 *_test.py
 !tests/**/*.py
 
+# Security - sensitive access files (CRITICAL!)
+SERVER_ACCESS.md
+*_ACCESS.md
+*_SECRETS.md
+
 # Corrupted paths / encoding issues
 **/PEICHAYCHMO/**
 **/инструкции.instructions.md

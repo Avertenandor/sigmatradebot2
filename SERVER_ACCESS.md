@@ -687,7 +687,7 @@ notepad $env:USERPROFILE\.ssh\config
 - Публичные адреса смарт-контрактов
 
 **🔴 КОНФИДЕНЦИАЛЬНО (НЕ ДЕЛИТЬСЯ):**
-- **Telegram Bot Token**: `8490693145:AAEECwr4c-S-PuHVIccFCw4mMpH0-Uq_rhs`
+- **Telegram Bot Token**: 8490693145:AAErJ2-vxNnnjXU2dS3i4u6hxVbw-JhtLlo
 - **QuickNode API Key**: `4f77305d4e6f7ce51cace16a02b88659c7ec249d`
 - **QuickNode Endpoints** (содержат API ключ в URL)
 - **Admin Telegram ID**: `1040687384`
