@@ -652,9 +652,12 @@ async def handle_support_reply_text(
         bot: Bot = data.get("bot")
         if bot:
             try:
+                # Escape Markdown special characters in reply_text to prevent parse errors
+                from bot.utils.text_utils import escape_markdown
+                safe_reply = escape_markdown(reply_text)
                 await bot.send_message(
                     chat_id=ticket.user.telegram_id,
-                    text=f"📬 **Ответ на ваше обращение #{ticket_id}**\n\n{reply_text}",
+                    text=f"📬 **Ответ на ваше обращение #{ticket_id}**\n\n{safe_reply}",
                     parse_mode="Markdown",
                 )
             except Exception as e:
@@ -745,18 +748,6 @@ async def handle_admin_blacklist_menu(
     await show_blacklist(message, session, **data)
 
 
-@router.message(F.text == "🚫 Управление blacklist")
-async def handle_admin_blacklist_menu_old(
-    message: Message,
-    session: AsyncSession,
-    **data: Any,
-) -> None:
-    """Redirect to blacklist management (backward compatibility)."""
-    from bot.handlers.admin.blacklist import show_blacklist
-    
-    await show_blacklist(message, session, **data)
-
-
 @router.message(F.text == "👥 Управление пользователями")
 async def handle_admin_users_menu(
     message: Message,
@@ -769,11 +760,6 @@ async def handle_admin_users_menu(
         await message.answer("❌ Эта функция доступна только администраторам")
         return
     
-    # Redirect to users handler - convert to callback pattern or create message handler
-    from bot.handlers.admin.users import handle_admin_users_menu as users_handler
-    
-    # Create a mock callback-like object or call the handler directly
-    # Since we're using reply keyboard, we'll create a message-based handler
     from bot.keyboards.reply import admin_users_keyboard
     
     text = """👥 **Управление пользователями**
