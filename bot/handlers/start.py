@@ -6,10 +6,11 @@ Handles /start command and user registration.
 
 from typing import Any
 
-from aiogram import Router
+from aiogram import F, Router
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
+    CallbackQuery,
     Message,
     ReplyKeyboardRemove,
 )
