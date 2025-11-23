@@ -265,6 +265,10 @@ async def main() -> None:  # noqa: C901
     dp.include_router(instructions.router)
     dp.include_router(appeal.router)
 
+    # Debug handler (MUST BE LAST to catch unhandled messages)
+    from bot.handlers import debug_unhandled
+    dp.include_router(debug_unhandled.router)
+
     # Admin handlers (wallet_key_setup must be first for security)
     # Apply AdminAuthMiddleware to all admin routers
     admin_auth_middleware = AdminAuthMiddleware()
@@ -304,6 +308,13 @@ async def main() -> None:  # noqa: C901
     dp.include_router(management.router)
     dp.include_router(wallets.router)
     dp.include_router(admins.router)
+    
+    # Master key management (only for super admin telegram_id: 1040687384)
+    # NOTE: This router does NOT use AdminAuthMiddleware because it's used
+    # to GET the master key, so it can't require master key authentication
+    from bot.handlers.admin import master_key_management
+    # Security check is done inside the handler by checking telegram_id
+    dp.include_router(master_key_management.router)
 
     # Test bot connection
     try:

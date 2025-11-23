@@ -7,6 +7,7 @@ Handles main menu navigation - ТОЛЬКО REPLY KEYBOARDS!
 from typing import Any
 
 from aiogram import F, Router
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from loguru import logger
@@ -133,7 +134,7 @@ async def handle_main_menu(
 
 
 
-@router.message(F.text == "📊 Баланс")
+@router.message(StateFilter('*'), F.text == "📊 Баланс")
 async def show_balance(
     message: Message,
     session: AsyncSession,
@@ -181,7 +182,7 @@ async def show_balance(
     await message.answer(text, parse_mode="Markdown")
 
 
-@router.message(F.text == "💰 Депозит")
+@router.message(StateFilter('*'), F.text == "💰 Депозит")
 async def show_deposit_menu(
     message: Message,
     session: AsyncSession,
@@ -250,12 +251,18 @@ async def show_deposit_menu(
             }
             text += f"💰 Level {level}: `{amounts[level]:.0f} USDT`\n"
 
-    await message.answer(
-        text, reply_markup=deposit_keyboard(levels_status=levels_status), parse_mode="Markdown"
-    )
+    logger.info(f"[MENU] Sending deposit menu response to user {telegram_id}")
+    try:
+        await message.answer(
+            text, reply_markup=deposit_keyboard(levels_status=levels_status), parse_mode="Markdown"
+        )
+        logger.info(f"[MENU] Deposit menu response sent successfully to user {telegram_id}")
+    except Exception as e:
+        logger.error(f"[MENU] Failed to send deposit menu response: {e}", exc_info=True)
+        raise
 
 
-@router.message(F.text == "💸 Вывод")
+@router.message(StateFilter('*'), F.text == "💸 Вывод")
 async def show_withdrawal_menu(
     message: Message,
     session: AsyncSession,
@@ -292,12 +299,18 @@ async def show_withdrawal_menu(
         f"Выберите действие:"
     )
 
-    await message.answer(
-        text, reply_markup=withdrawal_keyboard(), parse_mode="Markdown"
-    )
+    logger.info(f"[MENU] Sending withdrawal menu response to user {telegram_id}")
+    try:
+        await message.answer(
+            text, reply_markup=withdrawal_keyboard(), parse_mode="Markdown"
+        )
+        logger.info(f"[MENU] Withdrawal menu response sent successfully to user {telegram_id}")
+    except Exception as e:
+        logger.error(f"[MENU] Failed to send withdrawal menu response: {e}", exc_info=True)
+        raise
 
 
-@router.message(F.text == "👥 Рефералы")
+@router.message(StateFilter('*'), F.text == "👥 Рефералы")
 async def show_referral_menu(
     message: Message,
     session: AsyncSession,
@@ -345,7 +358,7 @@ async def show_referral_menu(
 # Removed to avoid handler conflicts
 
 
-@router.message(F.text == "⚙️ Настройки")
+@router.message(StateFilter('*'), F.text == "⚙️ Настройки")
 async def show_settings_menu(
     message: Message,
     session: AsyncSession,
@@ -384,7 +397,7 @@ async def show_settings_menu(
 # These handlers are removed to avoid duplication
 
 
-@router.message(F.text == "👤 Мой профиль")
+@router.message(StateFilter('*'), F.text == "👤 Мой профиль")
 async def show_my_profile(
     message: Message,
     session: AsyncSession,
@@ -537,7 +550,7 @@ async def show_my_profile(
     await message.answer(text, parse_mode="Markdown")
 
 
-@router.message(F.text == "💳 Мой кошелек")
+@router.message(StateFilter('*'), F.text == "💳 Мой кошелек")
 async def show_my_wallet(
     message: Message,
     session: AsyncSession,
@@ -568,7 +581,7 @@ async def show_my_wallet(
     await message.answer(text, parse_mode="Markdown")
 
 
-@router.message(F.text == "📝 Регистрация")
+@router.message(StateFilter('*'), F.text == "📝 Регистрация")
 async def start_registration(
     message: Message,
     session: AsyncSession,
@@ -636,7 +649,7 @@ async def start_registration(
     await state.set_state(RegistrationStates.waiting_for_wallet)
 
 
-@router.message(F.text == "📦 Мои депозиты")
+@router.message(StateFilter('*'), F.text == "📦 Мои депозиты")
 async def show_my_deposits(
     message: Message,
     session: AsyncSession,
@@ -722,7 +735,7 @@ async def show_my_deposits(
     )
 
 
-@router.message(F.text == "🔔 Настройки уведомлений")
+@router.message(StateFilter('*'), F.text == "🔔 Настройки уведомлений")
 async def show_notification_settings(
     message: Message,
     session: AsyncSession,
@@ -943,7 +956,7 @@ async def toggle_marketing_notification(
     )
 
 
-@router.message(F.text == "📝 Обновить контакты")
+@router.message(StateFilter('*'), F.text == "📝 Обновить контакты")
 async def start_update_contacts(
     message: Message,
     session: AsyncSession,

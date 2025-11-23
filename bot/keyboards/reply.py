@@ -323,6 +323,10 @@ def admin_keyboard(is_super_admin: bool = False) -> ReplyKeyboardMarkup:
         builder.row(
             KeyboardButton(text="👥 Управление админами"),
         )
+        # Master key management - only for specific super admin (checked in handler)
+        builder.row(
+            KeyboardButton(text="🔑 Управление мастер-ключом"),
+        )
     
     builder.row(
         KeyboardButton(text="◀️ Главное меню"),
