@@ -279,10 +279,6 @@ async def main() -> None:  # noqa: C901
     dp.include_router(instructions.router)
     dp.include_router(appeal.router)
 
-    # Debug handler (MUST BE LAST to catch unhandled messages)
-    from bot.handlers import debug_unhandled
-    dp.include_router(debug_unhandled.router)
-
     # Admin handlers (wallet_key_setup must be first for security)
     # Apply AdminAuthMiddleware to all admin routers
     admin_auth_middleware = AdminAuthMiddleware()
@@ -325,6 +321,11 @@ async def main() -> None:  # noqa: C901
     dp.include_router(wallets.router)
     dp.include_router(admins.router)
     dp.include_router(user_messages.router)
+    
+    # Debug handler (MUST BE LAST to catch unhandled messages)
+    from bot.handlers import debug_unhandled
+    dp.include_router(debug_unhandled.router)
+    
     # Test bot connection
     try:
         bot_info = await bot.get_me()
