@@ -228,16 +228,26 @@ async def process_mode_selection(
         return
 
     await state.update_data(mode=mode, mode_text=mode_text)
-    await state.set_state(AdminRoiCorridorStates.selecting_applies_to)
-    await message.answer(
-        f"**Режим:** {mode_text}\n\n**Когда применить изменения?**\n\n"
-        "⚡️ **Текущая сессия** - изменения применятся к ближайшему "
-        "начислению всех пользователей (в течение периода начисления)\n\n"
-        "⏭ **Следующая сессия** - изменения применятся через одно "
-        "начисление",
-        parse_mode="Markdown",
-        reply_markup=admin_roi_applies_to_keyboard(),
-    )
+
+    # Immediately ask for values based on mode
+    if mode == "custom":
+        await state.set_state(AdminRoiCorridorStates.entering_min)
+        await message.answer(
+            f"**Режим:** {mode_text}\n\n"
+            "**Шаг 1/4: Введите минимальный процент коридора**\n\n"
+            "Например: `0.8` (для 0.8% в период)\n\n"
+            "Это нижняя граница случайного процента.",
+            parse_mode="Markdown",
+        )
+    else:
+        await state.set_state(AdminRoiCorridorStates.entering_fixed)
+        await message.answer(
+            f"**Режим:** {mode_text}\n\n"
+            "**Шаг 1/3: Введите фиксированный процент для всех**\n\n"
+            "Например: `5.5` (для 5.5% в период)\n\n"
+            "Все пользователи будут получать одинаковый процент.",
+            parse_mode="Markdown",
+        )
 
 
 @router.message(AdminRoiCorridorStates.selecting_applies_to)
@@ -275,26 +285,9 @@ async def process_applies_to(
         return
 
     await state.update_data(applies_to=applies_to, applies_text=applies_text)
-
-    state_data = await state.get_data()
-    mode = state_data["mode"]
-
-    if mode == "custom":
-        await state.set_state(AdminRoiCorridorStates.entering_min)
-        await message.answer(
-            "**Введите минимальный процент коридора**\n\n"
-            "Например: `0.8` (для 0.8% в период)\n\n"
-            "Это нижняя граница случайного процента.",
-            parse_mode="Markdown",
-        )
-    else:
-        await state.set_state(AdminRoiCorridorStates.entering_fixed)
-        await message.answer(
-            "**Введите фиксированный процент для всех**\n\n"
-            "Например: `5.5` (для 5.5% в период)\n\n"
-            "Все пользователи будут получать одинаковый процент.",
-            parse_mode="Markdown",
-        )
+    
+    # After selecting when to apply, show confirmation
+    await show_confirmation(message, state, session, data)
 
 
 @router.message(AdminRoiCorridorStates.entering_min)
@@ -370,7 +363,19 @@ async def process_max_input(
         return
 
     await state.update_data(roi_max=roi_max)
-    await show_confirmation(message, state, session, data)
+    
+    # After entering corridor, ask when to apply
+    await state.set_state(AdminRoiCorridorStates.selecting_applies_to)
+    await message.answer(
+        f"**Коридор:** {roi_min}% - {roi_max}%\n\n"
+        "**Шаг 2/4: Когда применить изменения?**\n\n"
+        "⚡️ **Текущая сессия** - изменения применятся к ближайшему "
+        "начислению всех пользователей (в течение периода начисления)\n\n"
+        "⏭ **Следующая сессия** - изменения применятся через одно "
+        "начисление",
+        parse_mode="Markdown",
+        reply_markup=admin_roi_applies_to_keyboard(),
+    )
 
 
 @router.message(AdminRoiCorridorStates.entering_fixed)
@@ -401,7 +406,19 @@ async def process_fixed_input(
         return
 
     await state.update_data(roi_fixed=roi_fixed)
-    await show_confirmation(message, state, session, data)
+    
+    # After entering fixed rate, ask when to apply
+    await state.set_state(AdminRoiCorridorStates.selecting_applies_to)
+    await message.answer(
+        f"**Фиксированный процент:** {roi_fixed}%\n\n"
+        "**Шаг 2/3: Когда применить изменения?**\n\n"
+        "⚡️ **Текущая сессия** - изменения применятся к ближайшему "
+        "начислению всех пользователей (в течение периода начисления)\n\n"
+        "⏭ **Следующая сессия** - изменения применятся через одно "
+        "начисление",
+        parse_mode="Markdown",
+        reply_markup=admin_roi_applies_to_keyboard(),
+    )
 
 
 async def show_confirmation(
