@@ -60,17 +60,16 @@ async def show_level_roi_config(
     
     # Get current ROI settings for this level
     roi_service = RoiCorridorService(session)
-    settings = await roi_service.get_current_level_settings(level)
+    settings = await roi_service.get_corridor_config(level)
+    accrual_period = await roi_service.get_accrual_period_hours()
     
     mode = settings["mode"]
     mode_text = "Custom (случайный из коридора)" if mode == "custom" else "Поровну (фиксированный)"
     
     if mode == "custom":
-        corridor_text = f"{settings['min_percent']}% - {settings['max_percent']}%"
+        corridor_text = f"{settings['roi_min']}% - {settings['roi_max']}%"
     else:
-        corridor_text = f"{settings['fixed_percent']}% (фиксированный)"
-    
-    accrual_period = settings.get("accrual_period_hours", 6)
+        corridor_text = f"{settings['roi_fixed']}% (фиксированный)"
     
     text = f"""
 💰 **Настройка коридора доходности для Уровня {level}**
