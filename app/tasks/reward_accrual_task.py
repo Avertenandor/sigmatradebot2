@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import async_session_maker
+from app.config.database import async_session_maker
 from app.services.reward_service import RewardService
 from app.services.roi_corridor_service import RoiCorridorService
 
