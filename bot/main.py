@@ -263,6 +263,10 @@ async def main() -> None:  # noqa: C901
     # Core handlers (menu must be registered BEFORE deposit/withdrawal
     # to have priority over FSM state handlers)
     dp.include_router(start.router)
+    
+    # ROI corridor router MUST be before menu.router to handle FSM states
+    dp.include_router(roi_corridor.router)
+    
     dp.include_router(menu.router)
 
     # User handlers (registered AFTER menu to ensure menu handlers
@@ -320,7 +324,7 @@ async def main() -> None:  # noqa: C901
     dp.include_router(blacklist.router)
     dp.include_router(deposit_settings.router)
     dp.include_router(deposit_management.router)
-    dp.include_router(roi_corridor.router)
+    # roi_corridor.router already registered before menu.router for FSM priority
     dp.include_router(admin_finpass.router)
     dp.include_router(wallets.router)
     dp.include_router(admins.router)
