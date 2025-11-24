@@ -53,15 +53,21 @@ async def show_level_roi_config(
         level: Deposit level number (1-5)
         data: Handler data
     """
+    logger.info(f"[ROI_CORRIDOR] show_level_roi_config called for level {level}")
+    
     is_admin = data.get("is_admin", False)
     if not is_admin:
+        logger.warning(f"[ROI_CORRIDOR] Non-admin user tried to access ROI config")
         await message.answer("❌ Эта функция доступна только администраторам")
         return
     
     # Get current ROI settings for this level
+    logger.info(f"[ROI_CORRIDOR] Getting settings for level {level}")
     roi_service = RoiCorridorService(session)
     settings = await roi_service.get_corridor_config(level)
     accrual_period = await roi_service.get_accrual_period_hours()
+    
+    logger.info(f"[ROI_CORRIDOR] Settings: {settings}, period: {accrual_period}")
     
     mode = settings["mode"]
     mode_text = "Custom (случайный из коридора)" if mode == "custom" else "Поровну (фиксированный)"
@@ -86,11 +92,15 @@ async def show_level_roi_config(
     await state.update_data(level=level)
     await state.set_state(AdminRoiCorridorStates.selecting_mode)
     
+    logger.info(f"[ROI_CORRIDOR] Sending mode selection keyboard for level {level}")
+    
     await message.answer(
         text,
         parse_mode="Markdown",
         reply_markup=admin_roi_mode_select_keyboard(),
     )
+    
+    logger.info(f"[ROI_CORRIDOR] Mode selection message sent successfully")
 
 
 @router.message(F.text == "💰 Коридоры доходности")
@@ -209,7 +219,10 @@ async def process_mode_selection(
         session: Database session
         data: Handler data
     """
+    logger.info(f"[ROI_CORRIDOR] process_mode_selection called, text: {message.text}")
+    
     if message.text == "◀️ Отмена":
+        logger.info(f"[ROI_CORRIDOR] User cancelled mode selection")
         await state.clear()
         await show_roi_corridor_menu(message, session, **data)
         return
@@ -217,10 +230,13 @@ async def process_mode_selection(
     if "Custom" in message.text:
         mode = "custom"
         mode_text = "Custom (случайный из коридора)"
+        logger.info(f"[ROI_CORRIDOR] Selected Custom mode")
     elif "Поровну" in message.text:
         mode = "equal"
         mode_text = "Поровну (фиксированный для всех)"
+        logger.info(f"[ROI_CORRIDOR] Selected Equal mode")
     else:
+        logger.warning(f"[ROI_CORRIDOR] Invalid mode selection: {message.text}")
         await message.answer(
             "❌ Неверный режим. Выберите из предложенных вариантов.",
             reply_markup=admin_roi_mode_select_keyboard(),
