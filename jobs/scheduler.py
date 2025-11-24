@@ -67,6 +67,7 @@ from jobs.tasks.notification_fallback_processor import (
     process_notification_fallback,
 )
 from jobs.tasks.warmup_redis_cache import warmup_redis_cache
+from app.tasks.reward_accrual_task import run_individual_reward_accrual
 
 
 def create_scheduler() -> AsyncIOScheduler:
@@ -186,7 +187,16 @@ def create_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
-    logger.info("Task scheduler configured with 13 jobs")
+    # Individual reward accrual - every 5 minutes
+    scheduler.add_job(
+        run_individual_reward_accrual,
+        trigger=IntervalTrigger(minutes=5),
+        id="individual_reward_accrual",
+        name="Individual Reward Accrual",
+        replace_existing=True,
+    )
+
+    logger.info("Task scheduler configured with 14 jobs")
 
     return scheduler
 
