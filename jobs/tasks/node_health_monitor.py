@@ -41,7 +41,12 @@ async def _monitor_node_health_async() -> None:
         # Check provider health
         health = await blockchain_service.health_check()
 
+        # Get connection status (default to False if missing)
         http_healthy = health.get("providers", {}).get("http_connected", False)
+        
+        # Also check general 'connected' flag as fallback
+        if not http_healthy:
+            http_healthy = health.get("connected", False)
 
         # If HTTP is healthy, we're good
         if http_healthy:
@@ -51,33 +56,17 @@ async def _monitor_node_health_async() -> None:
                 logger.info("Blockchain maintenance mode deactivated")
             return
 
-        # HTTP is down - check if we should activate maintenance mode
-        if not http_healthy:
-            # Try to reconnect
-            try:
-                await blockchain_service.provider_manager._connect_http()
-                # Reconnection successful
-                if settings.blockchain_maintenance_mode:
-                    settings.blockchain_maintenance_mode = False
-                    logger.info("Blockchain maintenance mode deactivated")
-                return
+        # HTTP is down - activate maintenance mode
+        logger.warning("Blockchain node health check failed (HTTP down)")
 
-            except Exception as reconnect_error:
-                logger.error(
-                    f"Failed to reconnect to blockchain node: {reconnect_error}"
-                )
-
-                # Activate maintenance mode
-                if not settings.blockchain_maintenance_mode:
-                    settings.blockchain_maintenance_mode = True
-                    logger.critical(
-                        "Blockchain node unavailable. "
-                        "Maintenance mode activated."
-                    )
-
-                    # Notify admins
-                    await _notify_admins_maintenance_mode()
-                return
+        if not settings.blockchain_maintenance_mode:
+            settings.blockchain_maintenance_mode = True
+            logger.critical(
+                "Blockchain node unavailable. "
+                "Maintenance mode activated."
+            )
+            # Notify admins
+            await _notify_admins_maintenance_mode()
 
     except Exception as e:
         logger.error(f"Error during node health check: {e}")

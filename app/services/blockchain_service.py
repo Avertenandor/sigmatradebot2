@@ -882,27 +882,49 @@ class BlockchainService:
             Dict with health status
         """
         try:
-            # Check if we can get latest block
-            latest_block = await self.web3.eth.get_block('latest')
+            loop = asyncio.get_event_loop()
             
-            # Check USDT contract
-            usdt_balance = await self.usdt_contract.functions.balanceOf(
-                self.system_wallet_address
-            ).call()
+            # Check if we can get latest block (synchronous call in executor)
+            async with self.rpc_limiter:
+                latest_block = await loop.run_in_executor(
+                    self._executor,
+                    lambda: self.web3.eth.get_block('latest')
+                )
+            
+            # Check USDT contract (synchronous call in executor)
+            # Don't check system wallet balance if address not set
+            usdt_balance = 0.0
+            if hasattr(self, 'system_wallet_address') and self.system_wallet_address:
+                async with self.rpc_limiter:
+                    balance_wei = await loop.run_in_executor(
+                        self._executor,
+                        lambda: self.usdt_contract.functions.balanceOf(
+                            self.system_wallet_address
+                        ).call()
+                    )
+                usdt_balance = float(Decimal(balance_wei) / Decimal(10 ** USDT_DECIMALS))
+            
+            connected = True
             
             return {
                 "initialized": True,
-                "connected": True,
+                "connected": connected,
+                "providers": {
+                    "http_connected": connected,
+                    "ws_connected": False # WebSocket not implemented in this service class yet
+                },
                 "latest_block": latest_block.number,
-                "usdt_balance": float(self.web3.from_wei(usdt_balance, 'ether')),
-                "system_wallet": self.system_wallet_address,
-                "payout_wallet": self.payout_wallet_address,
+                "usdt_balance": usdt_balance,
             }
         except Exception as e:
             logger.error(f"Health check failed: {e}")
             return {
                 "initialized": False,
                 "connected": False,
+                "providers": {
+                    "http_connected": False,
+                    "ws_connected": False
+                },
                 "error": str(e),
             }
 
