@@ -288,6 +288,7 @@ async def process_user_id_for_deposits(
             f"{status_emoji} **Уровень {deposit.level}** - {format_usdt(deposit.amount)}\n"
             f"   ID: `{deposit.id}`\n"
             f"   Статус: {deposit.status}{roi_progress}\n"
+            f"   Заработано: {format_usdt(deposit.roi_paid_amount)} USDT\n"
             f"   Дата: {deposit.created_at.strftime('%Y-%m-%d %H:%M')}\n\n"
         )
     

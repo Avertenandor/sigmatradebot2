@@ -875,10 +875,57 @@ async def process_period_input(
         )
         return
 
-    admin_id = data.get("admin_id")
-    if not admin_id:
+    # Save to state and show confirmation
+    await state.update_data(new_period_hours=hours)
+    await state.set_state(AdminRoiCorridorStates.confirming_period)
+
+    await message.answer(
+        f"⚠️ **Подтверждение изменений**\n\n"
+        f"Новый период начисления: **{hours} часов**\n\n"
+        "❗️ **ВНИМАНИЕ:**\n"
+        "Изменения применятся к следующему циклу начисления для всех депозитов!\n\n"
+        "Подтвердить?",
+        parse_mode="Markdown",
+        reply_markup=admin_roi_confirmation_keyboard(),
+    )
+
+
+@router.message(AdminRoiCorridorStates.confirming_period)
+async def process_period_confirmation(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """
+    Process period change confirmation.
+
+    Args:
+        message: Message object
+        state: FSM context
+        session: Database session
+        data: Handler data
+    """
+    if "Нет" in message.text or "отменить" in message.text.lower():
         await state.clear()
-        await message.answer("❌ Ошибка: admin_id не найден")
+        await message.answer("❌ Изменения отменены.")
+        await show_roi_corridor_menu(message, session, **data)
+        return
+
+    if "Да" not in message.text and "применить" not in message.text.lower():
+        await message.answer(
+            "❌ Неверный ответ. Выберите из предложенных вариантов.",
+            reply_markup=admin_roi_confirmation_keyboard(),
+        )
+        return
+
+    state_data = await state.get_data()
+    hours = state_data.get("new_period_hours")
+    admin_id = data.get("admin_id")
+
+    if not hours or not admin_id:
+        await state.clear()
+        await message.answer("❌ Ошибка: данные потеряны")
         return
 
     corridor_service = RoiCorridorService(session)
@@ -888,9 +935,9 @@ async def process_period_input(
 
     if success:
         await message.answer(
-            f"✅ **Период начисления обновлен!**\n\n"
-            f"**Новый период:** {hours} часов\n\n"
-            "Изменения применятся к новым начислениям.",
+            f"✅ **Период начисления обновлён!**\n\n"
+            f"Новый период: {hours} часов\n\n"
+            "Изменения вступят в силу при следующем автоматическом начислении.",
             parse_mode="Markdown",
         )
 
