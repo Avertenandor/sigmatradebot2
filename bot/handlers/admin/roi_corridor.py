@@ -897,7 +897,7 @@ async def _notify_other_admins(
         from app.repositories.admin_repository import AdminRepository
 
         admin_repo = AdminRepository(session)
-        all_admins = await admin_repo.get_all()
+        all_admins = await admin_repo.get_extended_admins()
 
         notification_text = (
             "🔔 **Изменены настройки коридора доходности**\n\n"
@@ -945,7 +945,7 @@ async def _notify_other_admins_period(
         from app.repositories.admin_repository import AdminRepository
 
         admin_repo = AdminRepository(session)
-        all_admins = await admin_repo.get_all()
+        all_admins = await admin_repo.get_extended_admins()
 
         notification_text = (
             "🔔 **Изменен период начисления**\n\n"
