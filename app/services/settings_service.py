@@ -208,7 +208,7 @@ class SettingsService:
             update_data = {"value": value_str}
             if description:
                 update_data["description"] = description
-            await self.repository.update(existing.id, **update_data)
+            await self.repository.update(existing.key, **update_data)
             setting = existing
         else:
             # Create
