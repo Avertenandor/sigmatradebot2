@@ -240,10 +240,11 @@ async def main() -> None:  # noqa: C901
         admins,
         blacklist,
         broadcast,
+        deposit_management,
         deposit_settings,
         finpass_recovery as admin_finpass,
-        management,
         panel,
+        roi_corridor,
         user_messages,
         users,
         wallet_key_setup,
@@ -298,10 +299,12 @@ async def main() -> None:  # noqa: C901
     blacklist.router.callback_query.middleware(admin_auth_middleware)
     deposit_settings.router.message.middleware(admin_auth_middleware)
     deposit_settings.router.callback_query.middleware(admin_auth_middleware)
+    deposit_management.router.message.middleware(admin_auth_middleware)
+    deposit_management.router.callback_query.middleware(admin_auth_middleware)
+    roi_corridor.router.message.middleware(admin_auth_middleware)
+    roi_corridor.router.callback_query.middleware(admin_auth_middleware)
     admin_finpass.router.message.middleware(admin_auth_middleware)
     admin_finpass.router.callback_query.middleware(admin_auth_middleware)
-    management.router.message.middleware(admin_auth_middleware)
-    management.router.callback_query.middleware(admin_auth_middleware)
     wallets.router.message.middleware(admin_auth_middleware)
     wallets.router.callback_query.middleware(admin_auth_middleware)
     admins.router.message.middleware(admin_auth_middleware)
@@ -316,8 +319,9 @@ async def main() -> None:  # noqa: C901
     dp.include_router(broadcast.router)
     dp.include_router(blacklist.router)
     dp.include_router(deposit_settings.router)
+    dp.include_router(deposit_management.router)
+    dp.include_router(roi_corridor.router)
     dp.include_router(admin_finpass.router)
-    dp.include_router(management.router)
     dp.include_router(wallets.router)
     dp.include_router(admins.router)
     dp.include_router(user_messages.router)

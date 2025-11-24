@@ -49,3 +49,27 @@ class AdminMasterKeyStates(StatesGroup):
     """States for master key management."""
 
     awaiting_confirmation = State()  # Waiting for confirmation to regenerate key
+
+
+class AdminDepositManagementStates(StatesGroup):
+    """States for deposit management."""
+
+    searching_user_deposits = State()  # Waiting for user Telegram ID to search deposits
+    viewing_user_deposits = State()  # Viewing user deposits
+    managing_level = State()  # Managing specific deposit level
+    viewing_pending = State()  # Viewing pending deposits
+    confirming_deposit_action = State()  # Confirming deposit action (approve/reject)
+
+
+class AdminRoiCorridorStates(StatesGroup):
+    """States for ROI corridor management."""
+
+    selecting_level = State()  # Selecting deposit level (1-5)
+    selecting_mode = State()  # Selecting mode (custom/equal)
+    selecting_applies_to = State()  # Selecting when to apply (current/next)
+    entering_min = State()  # Entering minimum percentage (custom mode)
+    entering_max = State()  # Entering maximum percentage (custom mode)
+    entering_fixed = State()  # Entering fixed percentage (equal mode)
+    confirming = State()  # Confirming settings
+    viewing_history_level = State()  # Viewing history for specific level
+    setting_period = State()  # Setting accrual period

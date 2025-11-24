@@ -832,10 +832,22 @@ async def handle_admin_deposit_settings(
     session: AsyncSession,
     **data: Any,
 ) -> None:
-    """Redirect to deposit settings management."""
+    """Redirect to deposit settings management (legacy)."""
     from bot.handlers.admin.deposit_settings import show_deposit_settings
     
     await show_deposit_settings(message, session, **data)
+
+
+@router.message(F.text == "💰 Управление депозитами")
+async def handle_admin_deposit_management(
+    message: Message,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """Redirect to deposit management."""
+    from bot.handlers.admin.deposit_management import show_deposit_management_menu
+    
+    await show_deposit_management_menu(message, session, **data)
 
 
 @router.message(F.text == "👥 Управление админами")
@@ -845,6 +857,6 @@ async def handle_admin_management(
     **data: Any,
 ) -> None:
     """Redirect to admin management."""
-    from bot.handlers.admin.management import show_admin_management
+    from bot.handlers.admin.admins import show_admin_management
     
     await show_admin_management(message, session, **data)

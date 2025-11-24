@@ -15,6 +15,7 @@ from app.models.base import Base
 # Security Models
 from app.models.blacklist import Blacklist
 from app.models.deposit import Deposit
+from app.models.deposit_corridor_history import DepositCorridorHistory
 from app.models.deposit_level_version import DepositLevelVersion
 from app.models.deposit_reward import DepositReward
 from app.models.enums import (
@@ -74,6 +75,7 @@ __all__ = [
     # Core Models
     "User",
     "Deposit",
+    "DepositCorridorHistory",
     "DepositLevelVersion",
     "Transaction",
     "Referral",

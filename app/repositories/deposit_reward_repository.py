@@ -107,3 +107,25 @@ class DepositRewardRepository(BaseRepository[DepositReward]):
         result = await self.session.execute(stmt)
         total = result.scalar()
         return total or Decimal("0")
+
+    async def get_recent_by_deposit(
+        self, deposit_id: int, limit: int = 10
+    ) -> list[DepositReward]:
+        """
+        Get recent rewards for a specific deposit.
+
+        Args:
+            deposit_id: Deposit ID
+            limit: Maximum number of rewards to return
+
+        Returns:
+            List of recent rewards, newest first
+        """
+        stmt = (
+            select(DepositReward)
+            .where(DepositReward.deposit_id == deposit_id)
+            .order_by(DepositReward.created_at.desc())
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
