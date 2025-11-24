@@ -106,6 +106,10 @@ class Deposit(Base):
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Next accrual timestamp for individual reward calculation
+    next_accrual_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
