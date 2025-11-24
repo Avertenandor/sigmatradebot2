@@ -407,8 +407,8 @@ async def show_level_actions(
 
 Сумма: {format_usdt(current_version.amount)}
 Статус: {status_text}
+ROI: {current_version.roi_percent}%
 ROI Cap: {current_version.roi_cap_percent}%
-Реферальный процент: {current_version.referral_percent}%
 
 Выберите действие:
     """.strip()
