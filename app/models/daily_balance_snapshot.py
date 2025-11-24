@@ -4,7 +4,7 @@ Daily Balance Snapshot model (R10-2).
 Stores daily balance snapshots for financial reconciliation.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
