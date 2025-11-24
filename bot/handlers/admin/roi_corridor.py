@@ -329,7 +329,8 @@ async def process_min_input(
         )
         return
 
-    await state.update_data(roi_min=roi_min)
+    # Convert Decimal to float for JSON serialization in FSM state
+    await state.update_data(roi_min=float(roi_min))
     await state.set_state(AdminRoiCorridorStates.entering_max)
     await message.answer(
         f"**Минимум:** {roi_min}%\n\n"
@@ -368,7 +369,7 @@ async def process_max_input(
         return
 
     state_data = await state.get_data()
-    roi_min = state_data["roi_min"]
+    roi_min = Decimal(str(state_data["roi_min"]))  # Convert back from float
 
     if roi_max <= roi_min:
         await message.answer(
@@ -378,7 +379,8 @@ async def process_max_input(
         )
         return
 
-    await state.update_data(roi_max=roi_max)
+    # Convert Decimal to float for JSON serialization in FSM state
+    await state.update_data(roi_max=float(roi_max))
     
     # After entering corridor, ask when to apply
     await state.set_state(AdminRoiCorridorStates.selecting_applies_to)
@@ -421,7 +423,8 @@ async def process_fixed_input(
         )
         return
 
-    await state.update_data(roi_fixed=roi_fixed)
+    # Convert Decimal to float for JSON serialization in FSM state
+    await state.update_data(roi_fixed=float(roi_fixed))
     
     # After entering fixed rate, ask when to apply
     await state.set_state(AdminRoiCorridorStates.selecting_applies_to)
@@ -472,19 +475,22 @@ async def show_confirmation(
     warning = ""
 
     if mode == "custom":
+        # Convert float back to Decimal for validation
+        roi_min_decimal = Decimal(str(state_data["roi_min"]))
+        roi_max_decimal = Decimal(str(state_data["roi_max"]))
         needs_confirm, warning_msg = (
             await corridor_service.validate_corridor_settings(
-                state_data["roi_min"], state_data["roi_max"]
+                roi_min_decimal, roi_max_decimal
             )
         )
         if needs_confirm and warning_msg:
             warning = f"\n\n{warning_msg}\n\n⚠️ **Требуется подтверждение!**"
     else:
-        roi_fixed = state_data["roi_fixed"]
-        if roi_fixed < Decimal("0.5") or roi_fixed > Decimal("20"):
+        roi_fixed_float = state_data["roi_fixed"]
+        if roi_fixed_float < 0.5 or roi_fixed_float > 20:
             warning = (
                 f"\n\n⚠️ **ПРЕДУПРЕЖДЕНИЕ:** "
-                f"Экстремальное значение: {roi_fixed}%\n"
+                f"Экстремальное значение: {roi_fixed_float}%\n"
                 "(Рекомендуется: 0.5% - 20%)\n\n"
                 "⚠️ **Требуется подтверждение!**"
             )
@@ -546,12 +552,17 @@ async def process_confirmation(
 
     corridor_service = RoiCorridorService(session)
 
+    # Convert float back to Decimal for service call
+    roi_min_val = state_data.get("roi_min")
+    roi_max_val = state_data.get("roi_max")
+    roi_fixed_val = state_data.get("roi_fixed")
+    
     success, error = await corridor_service.set_corridor(
         level=state_data["level"],
         mode=state_data["mode"],
-        roi_min=state_data.get("roi_min"),
-        roi_max=state_data.get("roi_max"),
-        roi_fixed=state_data.get("roi_fixed"),
+        roi_min=Decimal(str(roi_min_val)) if roi_min_val is not None else None,
+        roi_max=Decimal(str(roi_max_val)) if roi_max_val is not None else None,
+        roi_fixed=Decimal(str(roi_fixed_val)) if roi_fixed_val is not None else None,
         admin_id=admin_id,
         applies_to=state_data["applies_to"],
     )
