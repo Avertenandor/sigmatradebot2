@@ -35,6 +35,7 @@ class DepositCorridorHistoryRepository:
         roi_fixed: Decimal | None,
         changed_by_admin_id: int,
         applies_to: str,
+        reason: str | None = None,
     ) -> DepositCorridorHistory:
         """
         Create corridor history record.
@@ -59,6 +60,7 @@ class DepositCorridorHistoryRepository:
             roi_fixed=roi_fixed,
             changed_by_admin_id=changed_by_admin_id,
             applies_to=applies_to,
+            reason=reason,
         )
         self.session.add(history)
         await self.session.flush()

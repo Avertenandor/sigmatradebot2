@@ -20,25 +20,17 @@ from app.services.notification_service import NotificationService
 
 
 @dramatiq.actor(max_retries=3, time_limit=120_000)  # 2 min timeout
-def monitor_metrics() -> dict:
+def monitor_metrics() -> None:
     """
     Monitor financial metrics and detect anomalies (R14-1).
-
-    Returns:
-        Dict with monitoring results
     """
     logger.debug("Starting metrics monitoring...")
 
     try:
-        result = asyncio.run(_monitor_metrics_async())
-        return result
+        asyncio.run(_monitor_metrics_async())
 
     except Exception as e:
         logger.exception(f"Metrics monitoring failed: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-        }
 
 
 async def _monitor_metrics_async() -> dict:

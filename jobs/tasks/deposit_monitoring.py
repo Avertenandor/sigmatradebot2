@@ -22,15 +22,12 @@ from app.services.notification_service import NotificationService
 
 
 @dramatiq.actor(max_retries=3, time_limit=300_000)  # 5 min timeout
-def monitor_deposits() -> dict:
+def monitor_deposits() -> None:
     """
     Monitor pending deposits for blockchain confirmations.
 
     Checks all pending deposits against blockchain, confirms deposits
     with sufficient confirmations (e.g., 12 blocks on BSC).
-
-    Returns:
-        Dict with processed, confirmed, still_pending counts
     """
     logger.info("Starting deposit monitoring...")
 
@@ -44,16 +41,8 @@ def monitor_deposits() -> dict:
             f"{result['still_pending']} still pending"
         )
 
-        return result
-
     except Exception as e:
         logger.exception(f"Deposit monitoring failed: {e}")
-        return {
-            "processed": 0,
-            "confirmed": 0,
-            "still_pending": 0,
-            "error": str(e),
-        }
 
 
 async def _monitor_deposits_async() -> dict:

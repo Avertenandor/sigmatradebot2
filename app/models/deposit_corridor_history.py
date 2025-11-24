@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DECIMAL, DateTime, ForeignKey, Integer, String
+from sqlalchemy import DECIMAL, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -52,6 +52,9 @@ class DepositCorridorHistory(Base):
     roi_fixed: Mapped[Decimal | None] = mapped_column(
         DECIMAL(5, 2), nullable=True
     )
+
+    # Optional human-readable reason/comment for the change
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Admin tracking
     changed_by_admin_id: Mapped[int | None] = mapped_column(

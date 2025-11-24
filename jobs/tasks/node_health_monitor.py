@@ -18,31 +18,22 @@ from app.services.notification_service import NotificationService
 
 
 @dramatiq.actor(max_retries=3, time_limit=60_000)  # 1 min timeout
-def monitor_node_health() -> dict:
+def monitor_node_health() -> None:
     """
     Monitor blockchain node health (R7-5).
 
     Checks node availability every 30 seconds.
     If all nodes fail, activates maintenance mode and notifies admins.
-
-    Returns:
-        Dict with health status
     """
     logger.debug("Starting node health check...")
 
     try:
-        result = asyncio.run(_monitor_node_health_async())
-        return result
-
+        asyncio.run(_monitor_node_health_async())
     except Exception as e:
         logger.exception(f"Node health monitoring failed: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-        }
 
 
-async def _monitor_node_health_async() -> dict:
+async def _monitor_node_health_async() -> None:
     """Async implementation of node health monitoring."""
     blockchain_service = get_blockchain_service()
 
@@ -51,7 +42,6 @@ async def _monitor_node_health_async() -> dict:
         health = await blockchain_service.health_check()
 
         http_healthy = health.get("providers", {}).get("http_connected", False)
-        ws_healthy = health.get("providers", {}).get("ws_connected", False)
 
         # If HTTP is healthy, we're good
         if http_healthy:
@@ -59,13 +49,7 @@ async def _monitor_node_health_async() -> dict:
             if settings.blockchain_maintenance_mode:
                 settings.blockchain_maintenance_mode = False
                 logger.info("Blockchain maintenance mode deactivated")
-
-            return {
-                "success": True,
-                "http_healthy": True,
-                "ws_healthy": ws_healthy,
-                "maintenance_mode": False,
-            }
+            return
 
         # HTTP is down - check if we should activate maintenance mode
         if not http_healthy:
@@ -76,13 +60,8 @@ async def _monitor_node_health_async() -> dict:
                 if settings.blockchain_maintenance_mode:
                     settings.blockchain_maintenance_mode = False
                     logger.info("Blockchain maintenance mode deactivated")
+                return
 
-                return {
-                    "success": True,
-                    "http_healthy": True,
-                    "ws_healthy": ws_healthy,
-                    "maintenance_mode": False,
-                }
             except Exception as reconnect_error:
                 logger.error(
                     f"Failed to reconnect to blockchain node: {reconnect_error}"
@@ -98,14 +77,7 @@ async def _monitor_node_health_async() -> dict:
 
                     # Notify admins
                     await _notify_admins_maintenance_mode()
-
-                return {
-                    "success": False,
-                    "http_healthy": False,
-                    "ws_healthy": ws_healthy,
-                    "maintenance_mode": True,
-                    "error": "All blockchain nodes unavailable",
-                }
+                return
 
     except Exception as e:
         logger.error(f"Error during node health check: {e}")
@@ -116,12 +88,7 @@ async def _monitor_node_health_async() -> dict:
             logger.critical(
                 "Error checking node health. Maintenance mode activated."
             )
-
-        return {
-            "success": False,
-            "error": str(e),
-            "maintenance_mode": True,
-        }
+        return
 
 
 async def _notify_admins_maintenance_mode() -> None:

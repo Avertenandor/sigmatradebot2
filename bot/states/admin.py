@@ -57,6 +57,7 @@ class AdminDepositManagementStates(StatesGroup):
     searching_user_deposits = State()  # Waiting for user Telegram ID to search deposits
     viewing_user_deposits = State()  # Viewing user deposits
     managing_level = State()  # Managing specific deposit level
+    confirming_level_status = State()  # Confirming enable/disable for level
     viewing_pending = State()  # Viewing pending deposits
     confirming_deposit_action = State()  # Confirming deposit action (approve/reject)
 
@@ -67,6 +68,7 @@ class AdminRoiCorridorStates(StatesGroup):
     selecting_level = State()  # Selecting deposit level (1-5)
     selecting_mode = State()  # Selecting mode (custom/equal)
     selecting_applies_to = State()  # Selecting when to apply (current/next)
+    entering_reason = State()  # Entering optional human-readable reason
     entering_min = State()  # Entering minimum percentage (custom mode)
     entering_max = State()  # Entering maximum percentage (custom mode)
     entering_fixed = State()  # Entering fixed percentage (equal mode)

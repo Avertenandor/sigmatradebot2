@@ -19,7 +19,7 @@ from app.services.reconciliation_service import ReconciliationService
 
 
 @dramatiq.actor(max_retries=3, time_limit=600_000)  # 10 min timeout
-def perform_financial_reconciliation() -> dict:
+def perform_financial_reconciliation() -> None:
     """
     Perform daily financial reconciliation.
 
@@ -30,9 +30,6 @@ def perform_financial_reconciliation() -> dict:
               + SUM(pending_withdrawals.amount)
 
     Uses 5% tolerance to account for commission fluctuations.
-
-    Returns:
-        Dict with reconciliation results
     """
     logger.info("Starting financial reconciliation...")
 
@@ -53,14 +50,8 @@ def perform_financial_reconciliation() -> dict:
                     f"({result.get('discrepancy_percent', 0):.2f}%)"
                 )
 
-        return result
-
     except Exception as e:
         logger.exception(f"Financial reconciliation failed: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-        }
 
 
 async def _perform_reconciliation_async() -> dict:

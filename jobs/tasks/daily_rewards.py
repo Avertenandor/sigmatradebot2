@@ -14,8 +14,8 @@ from app.config.database import async_session_maker
 from app.services.reward_service import RewardService
 
 
-@dramatiq.actor(max_retries=3, time_limit=600_000)  # 10 min timeout
-def process_daily_rewards(session_id: int | None = None) -> dict:
+@dramatiq.actor(max_retries=3, time_limit=60_000)  # 1 min timeout
+def process_daily_rewards(session_id: int | None = None) -> None:
     """
     Process daily rewards for active session.
 
@@ -25,9 +25,6 @@ def process_daily_rewards(session_id: int | None = None) -> dict:
 
     Args:
         session_id: Specific session ID to process (optional)
-
-    Returns:
-        Dict with success, rewards_calculated, total_amount
     """
     logger.info(
         f"Starting daily rewards processing"
@@ -49,16 +46,8 @@ def process_daily_rewards(session_id: int | None = None) -> dict:
                 f"Daily rewards processing failed: {result.get('error')}"
             )
 
-        return result
-
     except Exception as e:
         logger.exception(f"Daily rewards processing failed: {e}")
-        return {
-            "success": False,
-            "rewards_calculated": 0,
-            "total_amount": 0,
-            "error": str(e),
-        }
 
 
 async def _process_daily_rewards_async(

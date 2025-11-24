@@ -19,15 +19,12 @@ from app.services.notification_retry_service import (
 
 
 @dramatiq.actor(max_retries=3, time_limit=300_000)  # 5 min timeout
-def process_notification_retries() -> dict:
+def process_notification_retries() -> None:
     """
     Process failed notification retries.
 
     PART5 critical: Ensures failed notifications are retried with
     exponential backoff (1min, 5min, 15min, 1h, 2h) up to 5 attempts.
-
-    Returns:
-        Dict with processed, successful, failed, gave_up counts
     """
     logger.info("Starting notification retry processing...")
 
@@ -42,17 +39,8 @@ def process_notification_retries() -> dict:
             f"{result['gave_up']} gave up"
         )
 
-        return result
-
     except Exception as e:
         logger.exception(f"Notification retry processing failed: {e}")
-        return {
-            "processed": 0,
-            "successful": 0,
-            "failed": 0,
-            "gave_up": 0,
-            "error": str(e),
-        }
 
 
 async def _process_notification_retries_async() -> dict:

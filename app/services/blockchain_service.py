@@ -874,6 +874,38 @@ class BlockchainService:
             logger.error(f"Failed to monitor deposits: {e}")
             return []
 
+    async def health_check(self) -> dict[str, Any]:
+        """
+        Perform health check on blockchain service.
+
+        Returns:
+            Dict with health status
+        """
+        try:
+            # Check if we can get latest block
+            latest_block = await self.web3.eth.get_block('latest')
+            
+            # Check USDT contract
+            usdt_balance = await self.usdt_contract.functions.balanceOf(
+                self.system_wallet_address
+            ).call()
+            
+            return {
+                "initialized": True,
+                "connected": True,
+                "latest_block": latest_block.number,
+                "usdt_balance": float(self.web3.from_wei(usdt_balance, 'ether')),
+                "system_wallet": self.system_wallet_address,
+                "payout_wallet": self.payout_wallet_address,
+            }
+        except Exception as e:
+            logger.error(f"Health check failed: {e}")
+            return {
+                "initialized": False,
+                "connected": False,
+                "error": str(e),
+            }
+
 
 # Singleton instance (to be initialized with config)
 _blockchain_service: BlockchainService | None = None

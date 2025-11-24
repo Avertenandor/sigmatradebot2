@@ -301,8 +301,42 @@ async def process_applies_to(
         return
 
     await state.update_data(applies_to=applies_to, applies_text=applies_text)
-    
-    # After selecting when to apply, show confirmation
+
+    # After selecting when to apply, ask for optional reason/comment
+    await state.set_state(AdminRoiCorridorStates.entering_reason)
+    await message.answer(
+        "📝 **Шаг 3: Введите причину изменения (опционально)**\n\n"
+        "Пример: `Экстренное снижение доходности` или `Плановое повышение`\n\n"
+        "Если не хотите указывать причину, отправьте `Пропустить`.",
+        parse_mode="Markdown",
+    )
+
+
+@router.message(AdminRoiCorridorStates.entering_reason)
+async def process_reason_input(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """
+    Process optional human-readable reason for corridor change.
+
+    Args:
+        message: Message object
+        state: FSM context
+        session: Database session
+        data: Handler data
+    """
+    raw_text = (message.text or "").strip()
+    if raw_text.lower() in {"пропустить", "skip"}:
+        reason = None
+    else:
+        reason = raw_text or None
+
+    await state.update_data(reason=reason)
+
+    # After capturing reason, show confirmation summary
     await show_confirmation(message, state, session, data)
 
 
@@ -470,6 +504,8 @@ async def show_confirmation(
         roi_fixed = state_data["roi_fixed"]
         config_text = f"**Фиксированный:** {roi_fixed}%"
 
+    reason = state_data.get("reason")
+
     # Validate and get warnings
     corridor_service = RoiCorridorService(session)
     warning = ""
@@ -495,12 +531,17 @@ async def show_confirmation(
                 "⚠️ **Требуется подтверждение!**"
             )
 
+    reason_block = ""
+    if reason:
+        reason_block = f"\n**Причина:** {reason}"
+
     text = (
         "📋 **Подтверждение настроек**\n\n"
         f"**Уровень:** {level}\n"
         f"**Режим:** {mode_text}\n"
         f"{config_text}\n"
         f"**Применить к:** {applies_text}"
+        f"{reason_block}"
         f"{warning}\n\n"
         "Подтвердите изменения:"
     )
@@ -556,7 +597,8 @@ async def process_confirmation(
     roi_min_val = state_data.get("roi_min")
     roi_max_val = state_data.get("roi_max")
     roi_fixed_val = state_data.get("roi_fixed")
-    
+    reason = state_data.get("reason")
+
     success, error = await corridor_service.set_corridor(
         level=state_data["level"],
         mode=state_data["mode"],
@@ -565,6 +607,7 @@ async def process_confirmation(
         roi_fixed=Decimal(str(roi_fixed_val)) if roi_fixed_val is not None else None,
         admin_id=admin_id,
         applies_to=state_data["applies_to"],
+        reason=reason,
     )
 
     if success:
@@ -724,6 +767,11 @@ async def show_level_history(
 
     text = f"📜 **История изменений - Уровень {level}**\n\n"
 
+    # Lazy import to avoid circular dependencies
+    from app.repositories.admin_repository import AdminRepository
+
+    admin_repo = AdminRepository(session)
+
     for record in history[:10]:
         mode_text = "Custom" if record.mode == "custom" else "Поровну"
         applies_text = (
@@ -735,18 +783,28 @@ async def show_level_history(
         else:
             config_text = f"{record.roi_fixed}%"
 
-        admin_info = (
-            f"Admin ID: {record.changed_by_admin_id}"
-            if record.changed_by_admin_id
-            else "Система"
-        )
+        # Build admin info: @username (ID: 123) or "Система"
+        if record.changed_by_admin_id:
+            admin = await admin_repo.get_by_id(record.changed_by_admin_id)
+            if admin and admin.username:
+                admin_label = f"@{admin.username} (ID: {admin.telegram_id})"
+            elif admin:
+                admin_label = f"Admin (ID: {admin.telegram_id})"
+            else:
+                admin_label = f"Admin ID: {record.changed_by_admin_id}"
+        else:
+            admin_label = "Система"
+
+        reason = record.reason
+        reason_block = f"   💬 Причина: {reason}\n" if reason else ""
 
         text += (
             f"📅 {record.changed_at.strftime('%d.%m.%Y %H:%M')}\n"
             f"   Режим: {mode_text}\n"
             f"   Значение: {config_text}\n"
             f"   Применено к: {applies_text}\n"
-            f"   Изменил: {admin_info}\n\n"
+            f"   Изменил: {admin_label}\n"
+            f"{reason_block}\n"
         )
 
     if len(history) > 10:

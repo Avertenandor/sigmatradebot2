@@ -72,6 +72,7 @@ class RoiCorridorService:
         roi_fixed: Decimal | None,
         admin_id: int,
         applies_to: str,
+        reason: str | None = None,
     ) -> tuple[bool, str | None]:
         """
         Set corridor configuration for a level.
@@ -113,6 +114,7 @@ class RoiCorridorService:
             roi_fixed=roi_fixed,
             changed_by_admin_id=admin_id,
             applies_to=applies_to,
+            reason=reason,
         )
 
         # Apply settings

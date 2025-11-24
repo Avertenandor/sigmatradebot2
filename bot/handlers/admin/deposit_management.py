@@ -460,7 +460,7 @@ async def process_level_action(
     # Get level from state
     state_data = await state.get_data()
     level = state_data.get("managing_level")
-    
+
     if not level:
         await state.clear()
         await message.answer(
@@ -468,10 +468,10 @@ async def process_level_action(
             reply_markup=admin_deposit_management_keyboard(),
         )
         return
-    
+
     version_repo = DepositLevelVersionRepository(session)
     current_version = await version_repo.get_current_version(level)
-    
+
     if not current_version:
         await state.clear()
         await message.answer(
@@ -479,32 +479,153 @@ async def process_level_action(
             reply_markup=admin_deposit_management_keyboard(),
         )
         return
-    
-    # Process action
-    if message.text == "✅ Включить уровень":
+
+    # Process action with explicit confirmation
+    if message.text in ("✅ Включить уровень", "❌ Отключить уровень"):
+        target_status = (
+            "enable" if message.text == "✅ Включить уровень" else "disable"
+        )
+        status_text = "ВКЛЮЧИТЬ" if target_status == "enable" else "ОТКЛЮЧИТЬ"
+
+        await state.update_data(
+            level_action=target_status,
+            level_current_active=current_version.is_active,
+        )
+        await state.set_state(
+            AdminDepositManagementStates.confirming_level_status
+        )
+
+        await message.answer(
+            "⚠️ Подтверждение\n\n"
+            f"Вы хотите {status_text} уровень {level}?\n\n"
+            "❗️ ВАЖНО:\n"
+            "• При включении пользователи смогут создавать новые депозиты "
+            "этого уровня\n"
+            "• При отключении новые депозиты этого уровня создавать нельзя, "
+            "но существующие продолжат работать\n\n"
+            "Подтвердите действие (Да/Нет).",
+            reply_markup=cancel_keyboard(),
+        )
+        return
+
+    await message.answer(
+        "❌ Неизвестное действие.",
+        reply_markup=admin_deposit_level_actions_keyboard(
+            level, current_version.is_active
+        ),
+    )
+
+
+@router.message(AdminDepositManagementStates.confirming_level_status)
+async def confirm_level_status_change(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """
+    Confirm enabling/disabling a deposit level.
+
+    Args:
+        message: Message object
+        session: Database session
+        state: FSM context
+        data: Handler data
+    """
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        return
+
+    # Handle cancellation
+    if message.text in ("❌ Отмена", "◀️ Назад", "◀️ Назад к уровням"):
+        await state.clear()
+        await show_levels_management(message, session, **data)
+        return
+
+    normalized = (message.text or "").strip().lower()
+    if normalized not in ("да", "yes", "✅ да"):
+        # Treat anything other than explicit "yes" as cancellation
+        await state.clear()
+        await message.answer(
+            "❌ Действие отменено.",
+            reply_markup=admin_deposit_levels_keyboard(),
+        )
+        return
+
+    state_data = await state.get_data()
+    level = state_data.get("managing_level")
+    action = state_data.get("level_action")
+
+    if not level or action not in ("enable", "disable"):
+        await state.clear()
+        await message.answer(
+            "❌ Ошибка: данные уровня не найдены.",
+            reply_markup=admin_deposit_management_keyboard(),
+        )
+        return
+
+    version_repo = DepositLevelVersionRepository(session)
+    current_version = await version_repo.get_current_version(level)
+
+    if not current_version:
+        await state.clear()
+        await message.answer(
+            f"❌ Уровень {level} не найден.",
+            reply_markup=admin_deposit_management_keyboard(),
+        )
+        return
+
+    # Apply status change
+    if action == "enable":
         current_version.is_active = True
-        await session.commit()
-        
-        await message.answer(
-            f"✅ Уровень {level} включён!",
-            reply_markup=admin_deposit_levels_keyboard(),
-        )
-        await state.clear()
-        
-    elif message.text == "❌ Отключить уровень":
-        current_version.is_active = False
-        await session.commit()
-        
-        await message.answer(
-            f"❌ Уровень {level} отключён!",
-            reply_markup=admin_deposit_levels_keyboard(),
-        )
-        await state.clear()
+        status_msg = "✅ Уровень {level} включён!"
+        notify_action = "включён"
     else:
-        await message.answer(
-            "❌ Неизвестное действие.",
-            reply_markup=admin_deposit_level_actions_keyboard(level, current_version.is_active),
+        current_version.is_active = False
+        status_msg = "❌ Уровень {level} отключён!"
+        notify_action = "отключён"
+
+    await session.commit()
+
+    await message.answer(
+        status_msg.format(level=level),
+        reply_markup=admin_deposit_levels_keyboard(),
+    )
+
+    # Notify other admins about level status change
+    try:
+        from app.repositories.admin_repository import AdminRepository
+        from bot.utils.notification import send_telegram_message
+
+        admin_id = data.get("admin_id")
+        admin_repo = AdminRepository(session)
+        all_admins = await admin_repo.get_extended_admins()
+
+        notification_text = (
+            "🔔 **Изменён статус уровня депозитов**\n\n"
+            f"**Уровень:** {level}\n"
+            f"**Статус:** {notify_action}\n"
         )
+        if admin_id:
+            notification_text += f"**Изменил:** Admin ID {admin_id}"
+
+        for admin in all_admins:
+            if admin_id and admin.id == admin_id:
+                continue
+            try:
+                await send_telegram_message(admin.telegram_id, notification_text)
+            except Exception as e:
+                logger.error(
+                    "Failed to notify admin about level status change",
+                    extra={"admin_id": admin.id, "error": str(e)},
+                )
+    except Exception as e:
+        logger.error(
+            "Failed to notify admins about level status change",
+            extra={"error": str(e)},
+        )
+
+    await state.clear()
 
 
 @router.message(F.text == "📋 Pending депозиты")
