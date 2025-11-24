@@ -33,6 +33,67 @@ from bot.states.admin import AdminRoiCorridorStates
 router = Router(name="admin_roi_corridor")
 
 
+async def show_level_roi_config(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    level: int,
+    **data: Any,
+) -> None:
+    """
+    Show ROI configuration for specific level and start setup.
+    
+    This function is called from deposit_management when admin clicks
+    "💰 Настроить коридор доходности" button.
+    
+    Args:
+        message: Message object
+        session: Database session
+        state: FSM context
+        level: Deposit level number (1-5)
+        data: Handler data
+    """
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        await message.answer("❌ Эта функция доступна только администраторам")
+        return
+    
+    # Get current ROI settings for this level
+    roi_service = RoiCorridorService(session)
+    settings = await roi_service.get_current_level_settings(level)
+    
+    mode = settings["mode"]
+    mode_text = "Custom (случайный из коридора)" if mode == "custom" else "Поровну (фиксированный)"
+    
+    if mode == "custom":
+        corridor_text = f"{settings['min_percent']}% - {settings['max_percent']}%"
+    else:
+        corridor_text = f"{settings['fixed_percent']}% (фиксированный)"
+    
+    accrual_period = settings.get("accrual_period_hours", 6)
+    
+    text = f"""
+💰 **Настройка коридора доходности для Уровня {level}**
+
+📊 **Текущие настройки:**
+• Режим: {mode_text}
+• Коридор: {corridor_text}
+• Период начисления: каждые {accrual_period} часов
+
+**Что вы хотите сделать?**
+    """.strip()
+    
+    # Save level to state and start configuration
+    await state.update_data(level=level)
+    await state.set_state(AdminRoiCorridorStates.selecting_mode)
+    
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=admin_roi_mode_select_keyboard(),
+    )
+
+
 @router.message(F.text == "💰 Коридоры доходности")
 async def show_roi_corridor_menu(
     message: Message,

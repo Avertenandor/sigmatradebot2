@@ -441,9 +441,20 @@ async def process_level_action(
         return
     
     # Check for back button
-    if message.text == "◀️ Назад":
+    if message.text in ["◀️ Назад", "◀️ Назад к уровням"]:
         await state.clear()
         await show_levels_management(message, session, **data)
+        return
+    
+    # Check for ROI corridor management button
+    if message.text == "💰 Настроить коридор доходности":
+        # Redirect to ROI corridor handler
+        from bot.handlers.admin.roi_corridor import show_level_roi_config
+        state_data = await state.get_data()
+        level = state_data.get("managing_level")
+        if level:
+            await state.clear()
+            await show_level_roi_config(message, session, state, level, **data)
         return
     
     # Get level from state

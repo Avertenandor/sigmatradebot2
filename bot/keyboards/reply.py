@@ -656,6 +656,12 @@ def admin_deposit_level_actions_keyboard(
     """
     builder = ReplyKeyboardBuilder()
 
+    # ROI Corridor management button (main feature)
+    builder.row(
+        KeyboardButton(text="💰 Настроить коридор доходности"),
+    )
+
+    # Enable/Disable level button
     if is_active:
         builder.row(
             KeyboardButton(text="❌ Отключить уровень"),
@@ -665,8 +671,9 @@ def admin_deposit_level_actions_keyboard(
             KeyboardButton(text="✅ Включить уровень"),
         )
 
+    # Back button
     builder.row(
-        KeyboardButton(text="◀️ Назад"),
+        KeyboardButton(text="◀️ Назад к уровням"),
     )
 
     return builder.as_markup(resize_keyboard=True)
