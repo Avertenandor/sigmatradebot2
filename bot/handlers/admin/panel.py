@@ -104,6 +104,28 @@ async def handle_master_key_input(
 
     # Save session token in FSM state
     await state.update_data(admin_session_token=session_obj.session_token)
+
+    # Restore previous state if it exists
+    state_data = await state.get_data()
+    previous_state = state_data.get("auth_previous_state")
+
+    if previous_state:
+        await state.set_state(previous_state)
+        # Clean up
+        await state.update_data(auth_previous_state=None)
+
+        logger.info(
+            f"Admin {telegram_id} authenticated successfully, "
+            f"restoring state {previous_state}"
+        )
+
+        await message.answer(
+            "✅ **Аутентификация успешна!**\n\n"
+            "Вы вернулись в предыдущее меню. Пожалуйста, повторите ваше действие.",
+            parse_mode="Markdown",
+        )
+        return
+
     await state.set_state(None)  # Clear state
 
     logger.info(

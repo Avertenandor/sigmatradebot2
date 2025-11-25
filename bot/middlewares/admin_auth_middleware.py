@@ -122,6 +122,11 @@ class AdminAuthMiddleware(BaseMiddleware):
         if not session_token:
             # Check if this is a master key input (handler will process it)
             # For now, require master key
+            
+            # Save current state to restore after auth
+            if current_state != AdminStates.awaiting_master_key_input:
+                await state.update_data(auth_previous_state=current_state)
+                
             await state.set_state(AdminStates.awaiting_master_key_input)
             if isinstance(event, Message):
                 await event.answer(
@@ -142,6 +147,11 @@ class AdminAuthMiddleware(BaseMiddleware):
 
         if error or not admin_obj or not session_obj:
             # Session invalid, require master key
+            
+            # Save current state to restore after auth
+            if current_state != AdminStates.awaiting_master_key_input:
+                await state.update_data(auth_previous_state=current_state)
+                
             await state.set_state(AdminStates.awaiting_master_key_input)
             await state.update_data(admin_session_token=None)
             if isinstance(event, Message):
