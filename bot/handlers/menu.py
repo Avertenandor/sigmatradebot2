@@ -1051,4 +1051,31 @@ async def process_language_selection(
     )
 
 
+@router.message(StateFilter('*'), F.text == "◀️ Назад")
+async def back_to_settings_from_language(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """
+    Handle back button from language menu.
+    
+    Args:
+        message: Telegram message
+        session: Database session
+        state: FSM state
+        **data: Handler data
+    """
+    # If we are in a specific state that handles "◀️ Назад" differently, 
+    # this handler might not be reached if registered after.
+    # But here we use it as a catch-all for this button in menu router.
+    
+    # Clear state just in case
+    await state.clear()
+    
+    # Redirect to settings menu
+    await show_settings_menu(message, session, state, **data)
+
+
 # Contact update handlers moved to bot/handlers/contact_update.py
