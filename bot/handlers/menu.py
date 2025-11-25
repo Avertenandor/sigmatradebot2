@@ -963,6 +963,94 @@ async def toggle_marketing_notification(
     )
 
 
+@router.message(StateFilter('*'), F.text == "🌐 Изменить язык")
+async def show_language_settings(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """
+    Show language selection menu.
+    
+    Args:
+        message: Telegram message
+        session: Database session
+        state: FSM state
+        **data: Handler data
+    """
+    user: User | None = data.get("user")
+    if not user:
+        await message.answer("❌ Ошибка: пользователь не найден")
+        return
+    
+    await state.clear()
+    
+    # Get current language
+    current_language = await get_user_language(session, user.id)
+    
+    text = (
+        f"🌐 *Настройка языка*\n\n"
+        f"Текущий язык: **{current_language.upper()}**\n\n"
+        f"Выберите язык интерфейса:"
+    )
+    
+    from aiogram.utils.keyboard import ReplyKeyboardBuilder
+    from aiogram.types import KeyboardButton
+    
+    builder = ReplyKeyboardBuilder()
+    builder.row(KeyboardButton(text="🇷🇺 Русский"))
+    builder.row(KeyboardButton(text="🇬🇧 English"))
+    builder.row(KeyboardButton(text="◀️ Назад"))
+    
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=builder.as_markup(resize_keyboard=True),
+    )
+
+
+@router.message(F.text.in_({"🇷🇺 Русский", "🇬🇧 English"}))
+async def process_language_selection(
+    message: Message,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """
+    Process language selection.
+    
+    Args:
+        message: Telegram message
+        session: Database session
+        **data: Handler data
+    """
+    user: User | None = data.get("user")
+    if not user:
+        await message.answer("❌ Ошибка: пользователь не найден")
+        return
+    
+    # Determine selected language
+    language = "ru" if message.text == "🇷🇺 Русский" else "en"
+    
+    # Update user language
+    from app.repositories.user_repository import UserRepository
+    user_repo = UserRepository(session)
+    await user_repo.update(user.id, language=language)
+    await session.commit()
+    
+    # Show confirmation
+    if language == "ru":
+        text = "✅ Язык интерфейса изменен на **Русский**"
+    else:
+        text = "✅ Interface language changed to **English**"
+    
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=settings_keyboard(language),
+    )
+
+
 @router.message(StateFilter('*'), F.text == "📝 Обновить контакты")
 async def start_update_contacts(
     message: Message,
