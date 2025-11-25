@@ -10,7 +10,7 @@ from decimal import Decimal
 from sqlalchemy import Boolean, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.config.database import Base
+from app.models.base import Base
 
 
 class GlobalSettings(Base):
