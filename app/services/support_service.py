@@ -365,3 +365,64 @@ class SupportService:
             List of guest tickets (all statuses)
         """
         return await self.ticket_repo.get_by_telegram_id(telegram_id)
+
+    async def get_tickets_by_admin(self, admin_id: int) -> list[SupportTicket]:
+        """
+        Get tickets assigned to admin.
+
+        Args:
+            admin_id: Admin ID
+
+        Returns:
+            List of tickets assigned to admin
+        """
+        stmt = (
+            select(SupportTicket)
+            .where(
+                SupportTicket.assigned_admin_id == admin_id,
+                SupportTicket.status != SupportStatus.CLOSED.value,
+            )
+            .order_by(SupportTicket.updated_at.desc())
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_support_stats(self) -> dict[str, int]:
+        """
+        Get support system statistics.
+
+        Returns:
+            Dict with statistics (total, open, closed, etc.)
+        """
+        from sqlalchemy import func
+
+        stats = {
+            "total": 0,
+            "open": 0,
+            "in_progress": 0,
+            "closed": 0,
+            "waiting_user": 0,
+        }
+
+        # Count total
+        total_stmt = select(func.count(SupportTicket.id))
+        stats["total"] = (await self.session.execute(total_stmt)).scalar() or 0
+
+        # Count by status
+        status_stmt = select(
+            SupportTicket.status, func.count(SupportTicket.id)
+        ).group_by(SupportTicket.status)
+        
+        status_results = (await self.session.execute(status_stmt)).all()
+        
+        for status, count in status_results:
+            if status == SupportStatus.OPEN.value:
+                stats["open"] = count
+            elif status == SupportStatus.IN_PROGRESS.value:
+                stats["in_progress"] = count
+            elif status == SupportStatus.CLOSED.value:
+                stats["closed"] = count
+            elif status == SupportStatus.WAITING_USER.value:
+                stats["waiting_user"] = count
+                
+        return stats

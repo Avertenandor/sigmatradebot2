@@ -116,6 +116,86 @@ async def handle_list_tickets(
     )
 
 
+@router.message(F.text == "📊 Статистика")
+async def handle_support_stats(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """Show support statistics."""
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        return
+
+    support_service = SupportService(session)
+    stats = await support_service.get_support_stats()
+    
+    text = (
+        "📊 **Статистика техподдержки**\n\n"
+        f"📝 Всего обращений: **{stats['total']}**\n\n"
+        f"🟡 Открыто: **{stats['open']}**\n"
+        f"🔵 В работе: **{stats['in_progress']}**\n"
+        f"⏳ Ждем ответа: **{stats['waiting_user']}**\n"
+        f"⚫ Закрыто: **{stats['closed']}**"
+    )
+    
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=admin_support_keyboard(),
+    )
+
+
+@router.message(F.text == "🙋‍♂️ Мои задачи")
+async def handle_my_tasks(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """Show tickets assigned to current admin."""
+    admin_id = data.get("admin_id")
+    if not admin_id:
+        return
+
+    support_service = SupportService(session)
+    my_tickets = await support_service.get_tickets_by_admin(admin_id)
+    
+    if not my_tickets:
+        await message.answer(
+            "🙋‍♂️ **Мои задачи**\n\nУ вас нет активных задач.",
+            reply_markup=admin_support_keyboard(),
+        )
+        return
+
+    text = f"🙋‍♂️ **Мои задачи ({len(my_tickets)})**\n\n"
+    
+    for ticket in my_tickets[:10]:
+        user_label = f"ID: {ticket.user_id}"
+        if hasattr(ticket, 'user') and ticket.user:
+            if ticket.user.username:
+                user_label = f"@{ticket.user.username}"
+            elif ticket.user.telegram_id:
+                user_label = f"TG: {ticket.user.telegram_id}"
+                
+        status_emoji = {
+            SupportTicketStatus.IN_PROGRESS.value: "🔵",
+            SupportTicketStatus.WAITING_USER.value: "⏳",
+        }.get(ticket.status, "⚪")
+        
+        text += (
+            f"{status_emoji} **#{ticket.id}** - {user_label}\n"
+            f"👉 `Открыть #{ticket.id}`\n\n"
+        )
+        
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=admin_support_keyboard(),
+    )
+
+
 @router.message(F.text == "◀️ Назад к списку")
 async def back_to_list(
     message: Message,
@@ -312,9 +392,6 @@ async def reopen_ticket_action(
 
 
 # Handle Reply Text (using existing AdminStates.awaiting_support_reply)
-# We need to import logic or reimplement it here. 
-# Better to reimplement to keep it self-contained and use new navigation.
-
 @router.message(AdminStates.awaiting_support_reply)
 async def process_support_reply(
     message: Message,
@@ -379,4 +456,3 @@ async def process_support_reply(
 
     await message.answer(f"✅ Ответ на обращение #{ticket_id} отправлен.")
     await show_ticket_details(message, session, state, ticket_id)
-

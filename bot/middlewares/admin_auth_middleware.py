@@ -127,6 +127,10 @@ class AdminAuthMiddleware(BaseMiddleware):
             if current_state != AdminStates.awaiting_master_key_input:
                 await state.update_data(auth_previous_state=current_state)
                 
+                # Save redirect intent if message text is a navigation button
+                if isinstance(event, Message) and event.text:
+                    await state.update_data(auth_redirect_message=event.text)
+                
             await state.set_state(AdminStates.awaiting_master_key_input)
             if isinstance(event, Message):
                 await event.answer(
@@ -151,6 +155,10 @@ class AdminAuthMiddleware(BaseMiddleware):
             # Save current state to restore after auth
             if current_state != AdminStates.awaiting_master_key_input:
                 await state.update_data(auth_previous_state=current_state)
+                
+                # Save redirect intent if message text is a navigation button
+                if isinstance(event, Message) and event.text:
+                    await state.update_data(auth_redirect_message=event.text)
                 
             await state.set_state(AdminStates.awaiting_master_key_input)
             await state.update_data(admin_session_token=None)

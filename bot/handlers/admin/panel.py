@@ -108,11 +108,12 @@ async def handle_master_key_input(
     # Restore previous state if it exists
     state_data = await state.get_data()
     previous_state = state_data.get("auth_previous_state")
+    redirect_message_text = state_data.get("auth_redirect_message")
 
     if previous_state:
         await state.set_state(previous_state)
         # Clean up
-        await state.update_data(auth_previous_state=None)
+        await state.update_data(auth_previous_state=None, auth_redirect_message=None)
 
         logger.info(
             f"Admin {telegram_id} authenticated successfully, "
@@ -125,7 +126,56 @@ async def handle_master_key_input(
             parse_mode="Markdown",
         )
         return
-
+        
+    # Attempt to redirect based on button text if no state was restored
+    if redirect_message_text:
+        logger.info(f"Attempting to redirect admin {telegram_id} to '{redirect_message_text}'")
+        # Clean up
+        await state.update_data(auth_redirect_message=None)
+        
+        # Determine handler based on text
+        # We need to simulate the button press
+        message.text = redirect_message_text
+        
+        # Route to specific handlers manually if possible
+        if redirect_message_text == "🆘 Техподдержка":
+            from bot.handlers.admin.support import handle_admin_support_menu
+            await handle_admin_support_menu(message, state, **data)
+            return
+        elif redirect_message_text == "💰 Управление депозитами":
+            from bot.handlers.admin.deposit_management import show_deposit_management_menu
+            await show_deposit_management_menu(message, session, **data)
+            return
+        elif redirect_message_text == "⚙️ Настроить уровни депозитов":
+            from bot.handlers.admin.deposit_settings import show_deposit_settings
+            await show_deposit_settings(message, session, **data)
+            return
+        elif redirect_message_text == "👥 Управление админами":
+            from bot.handlers.admin.admins import show_admin_management
+            await show_admin_management(message, session, **data)
+            return
+        elif redirect_message_text == "🚫 Управление черным списком":
+            from bot.handlers.admin.blacklist import show_blacklist
+            await show_blacklist(message, session, **data)
+            return
+        elif redirect_message_text == "🔐 Управление кошельком":
+            from bot.handlers.admin.wallet_key_setup import handle_wallet_menu
+            await handle_wallet_menu(message, **data)
+            return
+        elif redirect_message_text == "💸 Заявки на вывод":
+             await handle_admin_withdrawals(message, session, **data)
+             return
+        elif redirect_message_text == "📢 Рассылка":
+             from bot.handlers.admin.broadcast import handle_broadcast_menu
+             await handle_broadcast_menu(message, session, **data)
+             return
+        elif redirect_message_text == "👥 Управление пользователями":
+             await handle_admin_users_menu(message, session, **data)
+             return
+        elif redirect_message_text == "📊 Статистика":
+             await handle_admin_stats(message, session, **data)
+             return
+    
     await state.set_state(None)  # Clear state
 
     logger.info(

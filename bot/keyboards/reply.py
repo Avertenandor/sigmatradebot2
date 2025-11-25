@@ -506,6 +506,10 @@ def admin_support_keyboard() -> ReplyKeyboardMarkup:
         KeyboardButton(text="🔍 Найти обращение"),
     )
     builder.row(
+        KeyboardButton(text="📊 Статистика"),
+        KeyboardButton(text="🙋‍♂️ Мои задачи"),
+    )
+    builder.row(
         KeyboardButton(text="👑 Админ-панель"),
     )
 
