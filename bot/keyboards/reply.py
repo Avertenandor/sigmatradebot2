@@ -609,6 +609,7 @@ def admin_deposit_management_keyboard() -> ReplyKeyboardMarkup:
     )
     builder.row(
         KeyboardButton(text="◀️ Назад в админ-панель"),
+        KeyboardButton(text="👑 Админ-панель"),
     )
 
     return builder.as_markup(resize_keyboard=True)
@@ -639,6 +640,7 @@ def admin_deposit_levels_keyboard() -> ReplyKeyboardMarkup:
     )
     builder.row(
         KeyboardButton(text="◀️ Назад в админ-панель"),
+        KeyboardButton(text="👑 Админ-панель"),
     )
 
     return builder.as_markup(resize_keyboard=True)
@@ -677,6 +679,7 @@ def admin_deposit_level_actions_keyboard(
     # Back button
     builder.row(
         KeyboardButton(text="◀️ Назад к уровням"),
+        KeyboardButton(text="👑 Админ-панель"),
     )
 
     return builder.as_markup(resize_keyboard=True)
@@ -960,10 +963,12 @@ def admin_roi_corridor_menu_keyboard() -> ReplyKeyboardMarkup:
     """
     builder = ReplyKeyboardBuilder()
     builder.row(KeyboardButton(text="⚙️ Настроить коридоры"))
+    builder.row(KeyboardButton(text="💵 Настроить суммы уровней"))
     builder.row(KeyboardButton(text="📊 Текущие настройки"))
     builder.row(KeyboardButton(text="📜 История изменений"))
     builder.row(KeyboardButton(text="⏱ Настроить период начисления"))
     builder.row(KeyboardButton(text="◀️ Назад в управление депозитами"))
+    builder.row(KeyboardButton(text="👑 Админ-панель"))
     return builder.as_markup(resize_keyboard=True)
 
 

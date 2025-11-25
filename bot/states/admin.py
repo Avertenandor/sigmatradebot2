@@ -77,3 +77,6 @@ class AdminRoiCorridorStates(StatesGroup):
     viewing_history_level = State()  # Viewing history for specific level
     setting_period = State()  # Setting accrual period
     confirming_period = State()  # Confirming accrual period change
+    selecting_level_amount = State()  # Selecting level for amount change
+    setting_level_amount = State()  # Entering new amount for level
+    confirming_level_amount = State()  # Confirming level amount change

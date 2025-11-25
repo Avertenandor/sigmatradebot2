@@ -873,9 +873,11 @@ async def show_roi_statistics(
 
 
 @router.message(F.text == "◀️ Назад в админ-панель")
+@router.message(F.text == "👑 Админ-панель")
 async def back_to_admin_panel(
     message: Message,
     session: AsyncSession,
+    state: FSMContext,
     **data: Any,
 ) -> None:
     """
@@ -884,9 +886,11 @@ async def back_to_admin_panel(
     Args:
         message: Message object
         session: Database session
+        state: FSM context
         data: Handler data
     """
-    from bot.handlers.admin.panel import handle_admin_panel_button
+    await state.clear()
+    from bot.handlers.admin.panel import admin_panel_handler
     
-    await handle_admin_panel_button(message, session, **data)
+    await admin_panel_handler(message, state, **data)
 

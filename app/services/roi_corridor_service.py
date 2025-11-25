@@ -302,6 +302,58 @@ class RoiCorridorService:
 
         return True, None
 
+    async def set_level_amount(
+        self,
+        level: int,
+        amount: Decimal,
+        admin_id: int,
+    ) -> tuple[bool, str | None]:
+        """
+        Set deposit amount for a level (creates new version).
+
+        Args:
+            level: Deposit level (1-5)
+            amount: New amount in USDT
+            admin_id: Admin who is making the change
+
+        Returns:
+            Tuple of (success, error_message)
+        """
+        if amount <= 0:
+            return False, "Сумма должна быть положительной"
+
+        # Get current configuration to preserve settings
+        config = await self.get_corridor_config(level)
+        
+        # Create new version with updated amount but same ROI settings
+        from app.repositories.deposit_level_version_repository import (
+            DepositLevelVersionRepository,
+        )
+        version_repo = DepositLevelVersionRepository(self.session)
+        
+        await version_repo.create(
+            level=level,
+            amount=amount,
+            roi_mode=config["mode"],
+            roi_min=config["roi_min"],
+            roi_max=config["roi_max"],
+            roi_fixed=config["roi_fixed"],
+            created_by_id=admin_id,
+        )
+        
+        await self.session.commit()
+
+        logger.info(
+            "Level amount updated",
+            extra={
+                "level": level,
+                "amount": float(amount),
+                "admin_id": admin_id,
+            },
+        )
+
+        return True, None
+
     async def validate_corridor_settings(
         self, roi_min: Decimal | None, roi_max: Decimal | None
     ) -> tuple[bool, str | None]:
