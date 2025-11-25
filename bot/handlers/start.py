@@ -150,8 +150,12 @@ async def cmd_start(
         if balance_str == '':
             balance_str = '0'
 
+        # Escape username for Markdown to prevent TelegramBadRequest
+        raw_username = user.username or _('common.user')
+        safe_username = raw_username.replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")
+
         welcome_text = (
-            f"{_('common.welcome_back', username=user.username or _('common.user'))}\n\n"
+            f"{_('common.welcome_back', username=safe_username)}\n\n"
             f"{_('common.your_balance', balance=balance_str)}\n"
             f"{_('common.use_menu')}"
         )
