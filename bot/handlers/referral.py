@@ -74,6 +74,8 @@ async def _show_referral_list(
             joined_at = ref["joined_at"]
             
             username = ref_user.username or "без username"
+            # Escape Markdown chars in username
+            username = username.replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")
             date_str = joined_at.strftime("%d.%m.%Y")
             
             text += (
@@ -226,7 +228,13 @@ async def handle_referral_stats(
         if bot:
             bot_info = await bot.get_me()
             bot_username = bot_info.username
-    referral_link = user_service.generate_referral_link(user.telegram_id, bot_username)
+    
+    # Use referral code if available, otherwise fallback to telegram_id
+    referral_link = user_service.generate_referral_link(
+        user.telegram_id, 
+        bot_username,
+        referral_code=getattr(user, 'referral_code', None)
+    )
 
     # Get user position in leaderboard
     user_position = await referral_service.get_user_leaderboard_position(
