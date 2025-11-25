@@ -208,6 +208,14 @@ async def handle_user_selection(
     await show_user_profile(message, user, state, session)
 
 
+
+def escape_md(text: str | None) -> str:
+    """Escape special characters for Markdown V1"""
+    if not text:
+        return ""
+    return text.replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")
+
+
 async def show_user_profile(
     message: Message,
     user: Any,
@@ -229,15 +237,16 @@ async def show_user_profile(
     if user.referrer_id:
         referrer = await user_service.get_by_id(user.referrer_id)
         if referrer:
-            referrer_info = f"@{referrer.username}" if referrer.username else f"ID {referrer.telegram_id}"
+            r_username = escape_md(referrer.username) if referrer.username else None
+            referrer_info = f"@{r_username}" if r_username else f"ID {referrer.telegram_id}"
     
     fin_pass_status = "🔑 Установлен (Hash)" if user.financial_password else "❌ Не установлен"
     fin_pass_hash = f"`{user.financial_password[:15]}...`" if user.financial_password else ""
     
     verification_status = "✅ Да" if user.is_verified else "❌ Нет"
     
-    phone = user.phone if user.phone else "Не указан"
-    email = user.email if user.email else "Не указан"
+    phone = escape_md(user.phone) if user.phone else "Не указан"
+    email = escape_md(user.email) if user.email else "Не указан"
     wallet = f"`{user.wallet_address}`" if user.wallet_address else "Не указан"
     
     last_active = user.last_active.strftime('%d.%m.%Y %H:%M') if user.last_active else "Неизвестно"
@@ -249,13 +258,15 @@ async def show_user_profile(
     if user.withdrawal_blocked: flags.append("⛔️ Вывод заблокирован")
     if user.suspicious: flags.append("⚠️ Подозрительный")
     flags_text = ", ".join(flags) if flags else "Нет особых отметок"
+    
+    username_display = escape_md(user.username) if user.username else "Не указан"
 
     text = (
         f"👤 **Личное дело пользователя**\n"
         f"━━━━━━━━━━━━━━━━━━\n"
         f"🆔 ID: `{user.id}`\n"
         f"📱 Telegram ID: `{user.telegram_id}`\n"
-        f"👤 Username: @{user.username or 'Не указан'}\n"
+        f"👤 Username: @{username_display}\n"
         f"📅 Регистрация: {user.created_at.strftime('%d.%m.%Y %H:%M')}\n"
         f"🕒 Активность: {last_active}\n"
         f"📊 Статус: {status_emoji} **{status_text}**\n"
