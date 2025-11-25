@@ -252,6 +252,7 @@ async def main() -> None:  # noqa: C901
         wallet_key_setup,
         wallets,
         withdrawals,
+        withdrawal_settings,
     )
 
     # Master key management (only for super admin telegram_id: 1040687384)
@@ -300,6 +301,8 @@ async def main() -> None:  # noqa: C901
     users.router.callback_query.middleware(admin_auth_middleware)
     withdrawals.router.message.middleware(admin_auth_middleware)
     withdrawals.router.callback_query.middleware(admin_auth_middleware)
+    withdrawal_settings.router.message.middleware(admin_auth_middleware)
+    withdrawal_settings.router.callback_query.middleware(admin_auth_middleware)
     broadcast.router.message.middleware(admin_auth_middleware)
     broadcast.router.callback_query.middleware(admin_auth_middleware)
     blacklist.router.message.middleware(admin_auth_middleware)
@@ -325,6 +328,7 @@ async def main() -> None:  # noqa: C901
     dp.include_router(panel.router)
     dp.include_router(users.router)
     dp.include_router(withdrawals.router)
+    dp.include_router(withdrawal_settings.router)
     dp.include_router(broadcast.router)
     dp.include_router(blacklist.router)
     dp.include_router(deposit_settings.router)

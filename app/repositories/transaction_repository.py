@@ -4,7 +4,9 @@ Transaction repository.
 Data access layer for Transaction model.
 """
 
+from decimal import Decimal
 
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.enums import TransactionStatus, TransactionType
@@ -92,3 +94,68 @@ class TransactionRepository(BaseRepository[Transaction]):
             filters["type"] = type
 
         return await self.find_by(**filters)
+
+    async def get_total_withdrawn(self, user_id: int) -> Decimal:
+        """
+        Get total withdrawn amount (completed + pending + processing).
+        Excludes FAILED and REJECTED.
+
+        Args:
+            user_id: User ID
+
+        Returns:
+            Total amount
+        """
+        stmt = (
+            select(Transaction)
+            .where(Transaction.user_id == user_id)
+            .where(Transaction.type == TransactionType.WITHDRAWAL.value)
+            .where(
+                or_(
+                    Transaction.status == TransactionStatus.COMPLETED.value,
+                    Transaction.status == TransactionStatus.PENDING.value,
+                    Transaction.status == TransactionStatus.PROCESSING.value,
+                )
+            )
+        )
+        result = await self.session.execute(stmt)
+        transactions = result.scalars().all()
+        
+        if not transactions:
+            return Decimal("0")
+            
+        return sum((t.amount for t in transactions), Decimal("0"))
+
+    async def get_total_withdrawn_today(self) -> Decimal:
+        """
+        Get total withdrawn amount for today (all users).
+        Used for global daily limit check.
+
+        Returns:
+            Total amount
+        """
+        from datetime import datetime, time, UTC
+        
+        today_start = datetime.now(UTC).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        
+        stmt = (
+            select(Transaction)
+            .where(Transaction.type == TransactionType.WITHDRAWAL.value)
+            .where(Transaction.created_at >= today_start)
+            .where(
+                or_(
+                    Transaction.status == TransactionStatus.COMPLETED.value,
+                    Transaction.status == TransactionStatus.PENDING.value,
+                    Transaction.status == TransactionStatus.PROCESSING.value,
+                )
+            )
+        )
+        result = await self.session.execute(stmt)
+        transactions = result.scalars().all()
+        
+        if not transactions:
+            return Decimal("0")
+            
+        return sum((t.amount for t in transactions), Decimal("0"))

@@ -24,6 +24,7 @@ from app.models import (  # noqa: F401
     FailedNotification,
     NotificationQueueFallback,  # R11-3: PostgreSQL fallback for notifications
     FinancialPasswordRecovery,
+    GlobalSettings,  # Global dynamic settings
     PaymentRetry,
     Referral,
     ReferralEarning,

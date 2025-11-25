@@ -452,6 +452,9 @@ def admin_withdrawals_keyboard() -> ReplyKeyboardMarkup:
         KeyboardButton(text="❌ Отклоненные выводы"),
     )
     builder.row(
+        KeyboardButton(text="⚙️ Настройки выплат"),
+    )
+    builder.row(
         KeyboardButton(text="👑 Админ-панель"),
     )
 
