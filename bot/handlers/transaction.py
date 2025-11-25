@@ -226,8 +226,10 @@ async def handle_transaction_history(
         return
 
     # Reset to first page, all transactions
+    # Remove 'user' from data to avoid duplicate argument
+    safe_data = {k: v for k, v in data.items() if k not in ('user', 'state', 'session')}
     await _show_transaction_history(
-        message, session, state, user, filter_type=None, page=0, **data
+        message, session, state, user, filter_type=None, page=0, **safe_data
     )
 
 
@@ -245,8 +247,10 @@ async def handle_all_transactions(
         return
 
     # Reset to first page, all transactions
+    # Remove 'user' from data to avoid duplicate argument
+    safe_data = {k: v for k, v in data.items() if k not in ('user', 'state', 'session')}
     await _show_transaction_history(
-        message, session, state, user, filter_type=None, page=0, **data
+        message, session, state, user, filter_type=None, page=0, **safe_data
     )
 
 
@@ -276,8 +280,10 @@ async def handle_transaction_filter(
         return
 
     # Reset to first page with new filter
+    # Remove 'user' from data to avoid duplicate argument
+    safe_data = {k: v for k, v in data.items() if k not in ('user', 'state', 'session')}
     await _show_transaction_history(
-        message, session, state, user, filter_type=filter_type, page=0, **data
+        message, session, state, user, filter_type=filter_type, page=0, **safe_data
     )
 
 
@@ -313,6 +319,8 @@ async def handle_transaction_pagination(
     else:  # "➡ Следующая страница"
         new_page = current_page + 1
 
+    # Remove 'user' from data to avoid duplicate argument
+    safe_data = {k: v for k, v in data.items() if k not in ('user', 'state', 'session')}
     await _show_transaction_history(
         message,
         session,
@@ -320,5 +328,5 @@ async def handle_transaction_pagination(
         user,
         filter_type=filter_type,
         page=new_page,
-        **data,
+        **safe_data,
     )
