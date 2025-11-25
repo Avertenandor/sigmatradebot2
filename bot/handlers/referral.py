@@ -220,6 +220,7 @@ async def handle_referral_stats(
     # Get bot info for referral link
     from app.config.settings import settings
     from aiogram import Bot
+    from loguru import logger
 
     bot_username = settings.telegram_bot_username
     # Fallback: get from bot if not in settings
@@ -229,12 +230,25 @@ async def handle_referral_stats(
             bot_info = await bot.get_me()
             bot_username = bot_info.username
     
+    # Debug: Check referral code availability
+    ref_code = getattr(user, 'referral_code', None)
+    if not ref_code:
+        logger.warning(f"User {user.id} object missing referral_code, attempting refresh...")
+        fresh_user = await user_service.get_by_id(user.id)
+        if fresh_user:
+            ref_code = fresh_user.referral_code
+            logger.info(f"User {user.id} refreshed, referral_code: {ref_code}")
+        else:
+            logger.error(f"Failed to refresh user {user.id}")
+
     # Use referral code if available, otherwise fallback to telegram_id
     referral_link = user_service.generate_referral_link(
         user.telegram_id, 
         bot_username,
-        referral_code=getattr(user, 'referral_code', None)
+        referral_code=ref_code
     )
+    
+    logger.info(f"Generated referral link for user {user.id}: {referral_link}")
 
     # Get user position in leaderboard
     user_position = await referral_service.get_user_leaderboard_position(
