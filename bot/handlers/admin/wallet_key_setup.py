@@ -351,12 +351,10 @@ async def confirm_output_wallet(message: Message, state: FSMContext):
 def update_env_variable(key: str, value: str) -> None:
     """Update environment variable in .env file."""
     env_file = "/app/.env"
-    env_file_tmp = "/app/.env.tmp"
     
     if not os.path.exists(env_file):
         # Try local path if container path fails (for dev)
         env_file = ".env"
-        env_file_tmp = ".env.tmp"
 
     try:
         with open(env_file, "r") as f:
@@ -375,12 +373,13 @@ def update_env_variable(key: str, value: str) -> None:
             new_lines.append(line)
             
     if not updated:
-        new_lines.append(f"\n{key}={value}\n")
+        if new_lines and not new_lines[-1].endswith('\n'):
+            new_lines.append('\n')
+        new_lines.append(f"{key}={value}\n")
         
-    with open(env_file_tmp, "w") as f:
+    # Write directly to file to avoid "Device or resource busy" with Docker bind mounts
+    with open(env_file, "w") as f:
         f.writelines(new_lines)
-        
-    os.replace(env_file_tmp, env_file)
 
 
 @router.message(F.text == "👑 Админ-панель")
