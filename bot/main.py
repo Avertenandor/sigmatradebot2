@@ -245,6 +245,7 @@ async def main() -> None:  # noqa: C901
         finpass_recovery as admin_finpass,
         panel,
         roi_corridor,
+        support as admin_support,
         user_messages,
         users,
         wallet_key_setup,
@@ -313,6 +314,8 @@ async def main() -> None:  # noqa: C901
     wallets.router.callback_query.middleware(admin_auth_middleware)
     admins.router.message.middleware(admin_auth_middleware)
     admins.router.callback_query.middleware(admin_auth_middleware)
+    admin_support.router.message.middleware(admin_auth_middleware)
+    admin_support.router.callback_query.middleware(admin_auth_middleware)
     user_messages.router.message.middleware(admin_auth_middleware)
     user_messages.router.callback_query.middleware(admin_auth_middleware)
     
@@ -328,6 +331,7 @@ async def main() -> None:  # noqa: C901
     dp.include_router(admin_finpass.router)
     dp.include_router(wallets.router)
     dp.include_router(admins.router)
+    dp.include_router(admin_support.router)
     dp.include_router(user_messages.router)
     
     # Debug handler (MUST BE LAST to catch unhandled messages)

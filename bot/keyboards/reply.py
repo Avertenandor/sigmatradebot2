@@ -502,9 +502,28 @@ def admin_support_keyboard() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
 
     builder.row(
+        KeyboardButton(text="📋 Список обращений"),
+        KeyboardButton(text="🔍 Найти обращение"),
+    )
+    builder.row(
         KeyboardButton(text="👑 Админ-панель"),
     )
 
+    return builder.as_markup(resize_keyboard=True)
+
+
+def admin_support_ticket_keyboard() -> ReplyKeyboardMarkup:
+    """
+    Keyboard for viewing a specific ticket.
+
+    Returns:
+        ReplyKeyboardMarkup with ticket actions
+    """
+    builder = ReplyKeyboardBuilder()
+    builder.row(KeyboardButton(text="📝 Ответить"))
+    builder.row(KeyboardButton(text="🔒 Закрыть"), KeyboardButton(text="↩️ Переоткрыть"))
+    builder.row(KeyboardButton(text="✋ Взять в работу"))
+    builder.row(KeyboardButton(text="◀️ Назад к списку"), KeyboardButton(text="👑 Админ-панель"))
     return builder.as_markup(resize_keyboard=True)
 
 

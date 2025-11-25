@@ -80,3 +80,13 @@ class AdminRoiCorridorStates(StatesGroup):
     selecting_level_amount = State()  # Selecting level for amount change
     setting_level_amount = State()  # Entering new amount for level
     confirming_level_amount = State()  # Confirming level amount change
+
+
+class AdminSupportStates(StatesGroup):
+    """States for admin support."""
+
+    viewing_list = State()  # Viewing list of tickets
+    viewing_ticket = State()  # Viewing specific ticket
+    answering_ticket = State()  # Answering a ticket
+    confirming_close = State()  # Confirming ticket closure
+    confirming_reopen = State()  # Confirming ticket reopen
