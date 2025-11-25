@@ -29,7 +29,18 @@ class Settings(BaseSettings):
     wallet_private_key: str | None = None
     wallet_address: str
     usdt_contract_address: str
-    rpc_url: str  # QuickNode endpoint (with rate limits)
+    
+    # Blockchain RPC Providers
+    rpc_url: str  # Default/Legacy RPC URL (QuickNode HTTP)
+    
+    # QuickNode Endpoints
+    rpc_quicknode_http: str | None = None
+    rpc_quicknode_wss: str | None = None
+    
+    # NodeReal Endpoints
+    rpc_nodereal_http: str | None = None
+    rpc_nodereal_wss: str | None = None
+
     system_wallet_address: str  # System wallet for deposits
     # Blockchain polling settings
     blockchain_poll_interval: int = Field(
@@ -145,6 +156,13 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
+
+    @model_validator(mode='after')
+    def set_rpc_defaults(self) -> 'Settings':
+        """Set default RPC URLs if not provided."""
+        if not self.rpc_quicknode_http:
+            self.rpc_quicknode_http = self.rpc_url
+        return self
 
     @model_validator(mode='after')
     def validate_production(self) -> 'Settings':

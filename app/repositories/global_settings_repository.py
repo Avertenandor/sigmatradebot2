@@ -33,6 +33,8 @@ class GlobalSettingsRepository:
                 min_withdrawal_amount=Decimal("0.05"),
                 is_daily_limit_enabled=False,
                 auto_withdrawal_enabled=True,
+                active_rpc_provider="quicknode",
+                is_auto_switch_enabled=True,
             )
             self.session.add(settings)
             await self.session.commit()
@@ -46,6 +48,8 @@ class GlobalSettingsRepository:
         daily_withdrawal_limit: Decimal | None = None,
         is_daily_limit_enabled: bool | None = None,
         auto_withdrawal_enabled: bool | None = None,
+        active_rpc_provider: str | None = None,
+        is_auto_switch_enabled: bool | None = None,
     ) -> GlobalSettings:
         """Update settings."""
         settings = await self.get_settings()
@@ -62,7 +66,12 @@ class GlobalSettingsRepository:
         if auto_withdrawal_enabled is not None:
             settings.auto_withdrawal_enabled = auto_withdrawal_enabled
 
+        if active_rpc_provider is not None:
+            settings.active_rpc_provider = active_rpc_provider
+            
+        if is_auto_switch_enabled is not None:
+            settings.is_auto_switch_enabled = is_auto_switch_enabled
+
         await self.session.commit()
         await self.session.refresh(settings)
         return settings
-

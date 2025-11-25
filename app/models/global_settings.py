@@ -7,7 +7,7 @@ Singleton pattern (only one row expected).
 
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Integer, Numeric
+from sqlalchemy import Boolean, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.config.database import Base
@@ -33,11 +33,19 @@ class GlobalSettings(Base):
     auto_withdrawal_enabled: Mapped[bool] = mapped_column(
         Boolean, default=True, nullable=False
     )
+    
+    # Blockchain settings
+    active_rpc_provider: Mapped[str] = mapped_column(
+        String(20), default="quicknode", nullable=False
+    )  # quicknode, nodereal
+    is_auto_switch_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False
+    )
 
     def __repr__(self) -> str:
         return (
             f"<GlobalSettings(min_withdrawal={self.min_withdrawal_amount}, "
             f"daily_limit={self.daily_withdrawal_limit}, "
-            f"auto_enabled={self.auto_withdrawal_enabled})>"
+            f"auto_enabled={self.auto_withdrawal_enabled}, "
+            f"active_rpc={self.active_rpc_provider})>"
         )
-

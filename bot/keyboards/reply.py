@@ -377,6 +377,7 @@ def admin_keyboard(is_super_admin: bool = False) -> ReplyKeyboardMarkup:
     )
     builder.row(
         KeyboardButton(text="🔐 Управление кошельком"),
+        KeyboardButton(text="📡 Блокчейн Настройки"),
     )
     builder.row(
         KeyboardButton(text="🚫 Управление черным списком"),

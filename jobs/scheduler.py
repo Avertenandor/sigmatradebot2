@@ -33,14 +33,14 @@ from loguru import logger
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Initialize blockchain service for scheduler tasks
+from app.config.database import async_session_maker
 from app.config.settings import settings
 from app.services.blockchain_service import init_blockchain_service
 
 try:
     init_blockchain_service(
-        rpc_url=settings.rpc_url,
-        usdt_contract=settings.usdt_contract_address,
-        wallet_private_key=settings.wallet_private_key,
+        settings=settings,
+        session_factory=async_session_maker,
     )
     logger.info("BlockchainService initialized for scheduler")
 except Exception as e:

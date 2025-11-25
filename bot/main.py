@@ -111,9 +111,8 @@ async def main() -> None:  # noqa: C901
     # Initialize BlockchainService
     try:
         init_blockchain_service(
-            rpc_url=settings.rpc_url,
-            usdt_contract=settings.usdt_contract_address,
-            wallet_private_key=settings.wallet_private_key,
+            settings=settings,
+            session_factory=async_session_maker,
         )
         logger.info("BlockchainService initialized successfully")
     except Exception as e:
@@ -253,6 +252,7 @@ async def main() -> None:  # noqa: C901
         wallets,
         withdrawals,
         withdrawal_settings,
+        blockchain_settings,
     )
 
     # Master key management (only for super admin telegram_id: 1040687384)
@@ -303,6 +303,8 @@ async def main() -> None:  # noqa: C901
     withdrawals.router.callback_query.middleware(admin_auth_middleware)
     withdrawal_settings.router.message.middleware(admin_auth_middleware)
     withdrawal_settings.router.callback_query.middleware(admin_auth_middleware)
+    blockchain_settings.router.message.middleware(admin_auth_middleware)
+    blockchain_settings.router.callback_query.middleware(admin_auth_middleware)
     broadcast.router.message.middleware(admin_auth_middleware)
     broadcast.router.callback_query.middleware(admin_auth_middleware)
     blacklist.router.message.middleware(admin_auth_middleware)
@@ -329,6 +331,7 @@ async def main() -> None:  # noqa: C901
     dp.include_router(users.router)
     dp.include_router(withdrawals.router)
     dp.include_router(withdrawal_settings.router)
+    dp.include_router(blockchain_settings.router)
     dp.include_router(broadcast.router)
     dp.include_router(blacklist.router)
     dp.include_router(deposit_settings.router)
