@@ -325,20 +325,32 @@ class RoiCorridorService:
         # Get current configuration to preserve settings
         config = await self.get_corridor_config(level)
         
-        # Create new version with updated amount but same ROI settings
+        # Get current version for additional fields
         from app.repositories.deposit_level_version_repository import (
             DepositLevelVersionRepository,
         )
         version_repo = DepositLevelVersionRepository(self.session)
+        current_version = await version_repo.get_current_version(level)
         
+        # Determine new version number
+        new_version = (current_version.version + 1) if current_version else 1
+        
+        # Use fixed ROI if available, otherwise min or 0
+        # Note: Actual ROI calculation uses SettingsService, this is mostly for record keeping
+        roi_percent = config["roi_fixed"]
+        
+        # Use existing cap or default 500
+        roi_cap_percent = current_version.roi_cap_percent if current_version else 500
+        
+        # Create new version with updated amount
         await version_repo.create(
-            level=level,
+            level_number=level,
             amount=amount,
-            roi_mode=config["mode"],
-            roi_min=config["roi_min"],
-            roi_max=config["roi_max"],
-            roi_fixed=config["roi_fixed"],
-            created_by_id=admin_id,
+            roi_percent=roi_percent,
+            roi_cap_percent=roi_cap_percent,
+            version=new_version,
+            is_active=current_version.is_active if current_version else True,
+            created_by_admin_id=admin_id,
         )
         
         await self.session.commit()
@@ -348,6 +360,7 @@ class RoiCorridorService:
             extra={
                 "level": level,
                 "amount": float(amount),
+                "version": new_version,
                 "admin_id": admin_id,
             },
         )
