@@ -67,6 +67,54 @@ async def start_update_contacts(
 
 
 @router.message(
+    ProfileUpdateStates.choosing_contact_type, F.text == "◀️ Назад"
+)
+async def back_from_choice(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """Go back from contact choice to settings."""
+    await state.clear()
+    
+    # Check for language
+    from bot.i18n.loader import get_user_language
+    user: User | None = data.get("user")
+    language = "ru"
+    if user:
+        language = await get_user_language(session, user.id)
+        
+    await message.answer(
+        "⚙️ *Настройки*\n\nВыберите раздел:",
+        parse_mode="Markdown",
+        reply_markup=settings_keyboard(language),
+    )
+
+
+@router.message(
+    ProfileUpdateStates.choosing_contact_type, F.text == "🏠 Главное меню"
+)
+async def home_from_choice(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """Go to main menu from choice."""
+    user: User | None = data.get("user")
+    if not user:
+        await state.clear()
+        return
+
+    await state.clear()
+
+    from bot.handlers.menu import show_main_menu
+
+    await show_main_menu(message, session, user, state, **data)
+
+
+@router.message(
     ProfileUpdateStates.choosing_contact_type, F.text == "📞 Обновить телефон"
 )
 async def start_phone_update(
