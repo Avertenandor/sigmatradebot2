@@ -977,6 +977,11 @@ async def show_level_history(
         session: Database session
         data: Handler data
     """
+    if message.text == "👑 Админ-панель":
+        await state.clear()
+        await handle_admin_panel_button(message, session, **data)
+        return
+
     if message.text == "◀️ Отмена":
         await state.clear()
         await show_roi_corridor_menu(message, session, **data)
