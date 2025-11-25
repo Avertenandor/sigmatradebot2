@@ -31,7 +31,6 @@ from app.models import (  # noqa: F401
     RewardSession,
     SupportMessage,
     SupportTicket,
-    SystemSetting,
     Transaction,
     User,
     UserAction,
