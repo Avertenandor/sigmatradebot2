@@ -47,7 +47,7 @@ from app.models.support_message import SupportMessage
 from app.models.support_ticket import SupportTicket
 
 # System Models
-from app.models.system_setting import SystemSetting
+from app.models.global_settings import GlobalSettings
 from app.models.transaction import Transaction
 
 # Core Models
@@ -101,7 +101,7 @@ __all__ = [
     "SupportTicket",
     "SupportMessage",
     # System Models
-    "SystemSetting",
+    "GlobalSettings",
     "UserAction",
     "UserFsmState",
     "UserNotificationSettings",
