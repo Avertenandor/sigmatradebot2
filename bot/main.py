@@ -223,6 +223,7 @@ async def main() -> None:  # noqa: C901
     from bot.handlers import (
         account_recovery,
         appeal,
+        contact_update,
         deposit,
         finpass_recovery,
         instructions,
@@ -272,6 +273,7 @@ async def main() -> None:  # noqa: C901
 
     # User handlers (registered AFTER menu to ensure menu handlers
     # process menu buttons first, even if user is in FSM state)
+    dp.include_router(contact_update.router)  # Contact update with buttons
     dp.include_router(deposit.router)
     dp.include_router(withdrawal.router)
     dp.include_router(referral.router)

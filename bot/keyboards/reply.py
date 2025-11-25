@@ -290,6 +290,52 @@ def settings_keyboard(language: str | None = None) -> ReplyKeyboardMarkup:
     return builder.as_markup(resize_keyboard=True)
 
 
+def contact_update_menu_keyboard() -> ReplyKeyboardMarkup:
+    """
+    Contact update menu keyboard.
+    
+    Returns:
+        ReplyKeyboardMarkup with contact update options
+    """
+    builder = ReplyKeyboardBuilder()
+    
+    builder.row(
+        KeyboardButton(text="📞 Обновить телефон"),
+    )
+    builder.row(
+        KeyboardButton(text="📧 Обновить email"),
+    )
+    builder.row(
+        KeyboardButton(text="📝 Обновить оба"),
+    )
+    builder.row(
+        KeyboardButton(text="◀️ Назад"),
+        KeyboardButton(text="🏠 Главное меню"),
+    )
+    
+    return builder.as_markup(resize_keyboard=True)
+
+
+def contact_input_keyboard() -> ReplyKeyboardMarkup:
+    """
+    Contact input keyboard with skip option.
+    
+    Returns:
+        ReplyKeyboardMarkup with skip and navigation options
+    """
+    builder = ReplyKeyboardBuilder()
+    
+    builder.row(
+        KeyboardButton(text="⏭ Пропустить"),
+    )
+    builder.row(
+        KeyboardButton(text="◀️ Назад"),
+        KeyboardButton(text="🏠 Главное меню"),
+    )
+    
+    return builder.as_markup(resize_keyboard=True)
+
+
 def get_admin_keyboard_from_data(data: dict) -> ReplyKeyboardMarkup:
     """
     Get admin keyboard with correct is_super_admin flag from handler data.
