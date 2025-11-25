@@ -584,8 +584,11 @@ async def process_financial_password(
         )
         return
 
-    # Delete message with password
-    await message.delete()
+    # Delete message with password (safe delete)
+    try:
+        await message.delete()
+    except Exception:
+        pass  # Message already deleted or not available
 
     # Save password to state
     await state.update_data(financial_password=password)
@@ -658,8 +661,11 @@ async def process_password_confirmation(
 
     confirmation = message.text.strip()
 
-    # Delete message with password
-    await message.delete()
+    # Delete message with password (safe delete)
+    try:
+        await message.delete()
+    except Exception:
+        pass  # Message already deleted or not available
 
     # Get data from state
     state_data = await state.get_data()

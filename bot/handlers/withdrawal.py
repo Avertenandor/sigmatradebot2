@@ -322,8 +322,11 @@ async def process_financial_password(
     
     password = (message.text or "").strip()
 
-    # Delete message with password
-    await message.delete()
+    # Delete message with password (safe delete)
+    try:
+        await message.delete()
+    except Exception:
+        pass  # Message already deleted or not available
 
     session_factory = data.get("session_factory")
     
