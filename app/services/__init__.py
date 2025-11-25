@@ -36,7 +36,6 @@ from app.services.transaction_service import TransactionService
 from app.services.user_service import UserService
 from app.services.user_notification_service import UserNotificationService
 
-from app.services.settings_service import SettingsService
 from app.services.wallet_admin_service import WalletAdminService
 from app.services.withdrawal_service import WithdrawalService
 
@@ -64,6 +63,5 @@ __all__ = [
     "init_blockchain_service",
     # Additional
     "FinpassRecoveryService",
-    "SettingsService",
     "WalletAdminService",
 ]

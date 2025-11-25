@@ -6,8 +6,10 @@ Singleton pattern (only one row expected).
 """
 
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import Boolean, Integer, Numeric, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -42,10 +44,27 @@ class GlobalSettings(Base):
         Boolean, default=True, nullable=False
     )
 
+    # Deposit settings
+    max_open_deposit_level: Mapped[int] = mapped_column(
+        Integer, default=5, nullable=False
+    )
+    
+    # ROI Corridor settings (JSON)
+    # Structure: {
+    #   "level_1": {"mode": "custom", "min": "0.8", "max": "1.2", "fixed": "1.0"},
+    #   "level_1_next": {...},
+    #   ...
+    #   "accrual_period_hours": 6
+    # }
+    roi_settings: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict, nullable=False
+    )
+
     def __repr__(self) -> str:
         return (
             f"<GlobalSettings(min_withdrawal={self.min_withdrawal_amount}, "
             f"daily_limit={self.daily_withdrawal_limit}, "
             f"auto_enabled={self.auto_withdrawal_enabled}, "
-            f"active_rpc={self.active_rpc_provider})>"
+            f"active_rpc={self.active_rpc_provider}, "
+            f"max_level={self.max_open_deposit_level})>"
         )

@@ -12,13 +12,12 @@ from aiogram import F, Router
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.admin import Admin
 from app.repositories.deposit_level_version_repository import (
     DepositLevelVersionRepository,
 )
-from app.services.settings_service import SettingsService
+from app.repositories.global_settings_repository import GlobalSettingsRepository
 from app.services.admin_log_service import AdminLogService
-from bot.keyboards.reply import admin_deposit_settings_keyboard, admin_keyboard
+from bot.keyboards.reply import admin_deposit_settings_keyboard
 
 router = Router()
 
@@ -35,11 +34,9 @@ async def show_deposit_settings(
         await message.answer("❌ Эта функция доступна только администраторам")
         return
 
-    settings_service = SettingsService(session)
-
-    max_level = await settings_service.get_int(
-        "max_open_deposit_level", default=5
-    )
+    settings_repo = GlobalSettingsRepository(session)
+    settings = await settings_repo.get_settings()
+    max_level = settings.max_open_deposit_level
 
     # R17-2: Get level availability status
     version_repo = DepositLevelVersionRepository(session)
@@ -119,14 +116,8 @@ async def set_max_deposit_level(
         )
         return
 
-    settings_service = SettingsService(session)
-
-    await settings_service.set(
-        key="max_open_deposit_level",
-        value=level,
-        description=f"Maximum open deposit level (set by admin {admin.telegram_id})",
-    )
-
+    settings_repo = GlobalSettingsRepository(session)
+    await settings_repo.update_settings(max_open_deposit_level=level)
     await session.commit()
 
     await message.answer(

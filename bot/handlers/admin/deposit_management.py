@@ -25,8 +25,8 @@ from app.repositories.deposit_level_version_repository import (
     DepositLevelVersionRepository,
 )
 from app.repositories.deposit_repository import DepositRepository
+from app.repositories.global_settings_repository import GlobalSettingsRepository
 from app.services.deposit_service import DepositService
-from app.services.settings_service import SettingsService
 from bot.keyboards.reply import (
     admin_deposit_management_keyboard,
     admin_deposit_levels_keyboard,
@@ -322,12 +322,11 @@ async def show_levels_management(
         await message.answer("❌ Эта функция доступна только администраторам")
         return
     
-    settings_service = SettingsService(session)
+    global_settings_repo = GlobalSettingsRepository(session)
+    settings = await global_settings_repo.get_settings()
     version_repo = DepositLevelVersionRepository(session)
     
-    max_level = await settings_service.get_int(
-        "max_open_deposit_level", default=5
-    )
+    max_level = settings.max_open_deposit_level
     
     text = f"⚙️ **Управление уровнями депозитов**\n\n"
     text += f"Максимальный открытый уровень: **{max_level}**\n\n"
@@ -464,8 +463,9 @@ async def start_max_level_change(
     if not is_admin:
         return
 
-    settings_service = SettingsService(session)
-    current_max = await settings_service.get_int("max_open_deposit_level", default=5)
+    global_settings_repo = GlobalSettingsRepository(session)
+    settings = await global_settings_repo.get_settings()
+    current_max = settings.max_open_deposit_level
 
     await state.set_state(AdminDepositManagementStates.setting_max_level)
     
@@ -518,13 +518,11 @@ async def process_max_level_change(
     admin = await admin_repo.get_by_id(admin_id) if admin_id else None
     admin_info = f"admin {admin.telegram_id}" if admin else "unknown admin"
 
-    settings_service = SettingsService(session)
-    await settings_service.set(
-        key="max_open_deposit_level",
-        value=new_max,
-        description=f"Maximum open deposit level (set by {admin_info})",
-    )
+    global_settings_repo = GlobalSettingsRepository(session)
+    await global_settings_repo.update_settings(max_open_deposit_level=new_max)
     await session.commit()
+    
+    logger.info(f"Max open deposit level changed to {new_max} by {admin_info}")
 
     await message.answer(
         f"✅ Максимальный уровень успешно изменён на **{new_max}**.",
@@ -896,4 +894,3 @@ async def back_to_admin_panel(
     from bot.handlers.admin.panel import admin_panel_handler
     
     await admin_panel_handler(message, state, **data)
-
