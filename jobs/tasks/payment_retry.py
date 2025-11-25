@@ -10,65 +10,40 @@ import asyncio
 import dramatiq
 from loguru import logger
 
-from app.config.database import async_session_maker
 from app.services.blockchain_service import get_blockchain_service
 from app.services.payment_retry_service import PaymentRetryService
 
 
 @dramatiq.actor(max_retries=3, time_limit=300_000)  # 5 min timeout
-def process_payment_retries() -> dict:
+def process_payment_retries() -> None:
     """
     Process pending payment retries.
 
     PART5 critical: Ensures failed payments are retried with exponential
     backoff (1min, 2min, 4min, 8min, 16min) and moved to DLQ after 5
     attempts.
-
-    Returns:
-        Dict with processed, successful, failed, moved_to_dlq counts
     """
     logger.info("Starting payment retry processing...")
 
     try:
-        # Create a new event loop for this thread to avoid conflicts
-        # with Dramatiq's threading model
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        try:
-            result = loop.run_until_complete(_process_payment_retries_async())
-        finally:
-            loop.close()
-
-        logger.info(
-            f"Payment retry processing complete: "
-            f"{result['successful']} successful, "
-            f"{result['failed']} failed, "
-            f"{result['moved_to_dlq']} moved to DLQ"
-        )
-
-        return result
+        asyncio.run(_process_payment_retries_async())
+        logger.info("Payment retry processing complete")
 
     except Exception as e:
         logger.exception(f"Payment retry processing failed: {e}")
-        return {
-            "processed": 0,
-            "successful": 0,
-            "failed": 0,
-            "moved_to_dlq": 0,
-            "error": str(e),
-        }
 
 
-async def _process_payment_retries_async() -> dict:
+async def _process_payment_retries_async() -> None:
     """Async implementation of payment retry processing."""
     # Create a dedicated engine and sessionmaker for this run to avoid cross-loop reuse
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+    from sqlalchemy.pool import NullPool
     from app.config.settings import settings
     
     engine = create_async_engine(
         settings.database_url,
         pool_pre_ping=True,
+        poolclass=NullPool,
     )
     SessionLocal = async_sessionmaker(
         engine,
@@ -82,10 +57,9 @@ async def _process_payment_retries_async() -> dict:
 
             # Process retries
             retry_service = PaymentRetryService(session)
-            result = await retry_service.process_pending_retries(
+            await retry_service.process_pending_retries(
                 blockchain_service
             )
 
-            return result
     finally:
         await engine.dispose()

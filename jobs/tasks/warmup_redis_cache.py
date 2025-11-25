@@ -10,6 +10,8 @@ from typing import Any
 
 import dramatiq
 from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 try:
     from redis.asyncio import Redis as AsyncRedis
@@ -18,7 +20,6 @@ except ImportError:
 
     AsyncRedis = aioredis.Redis
 
-from app.config.database import async_session_maker
 from app.config.settings import settings
 from app.repositories.deposit_level_version_repository import (
     DepositLevelVersionRepository,
@@ -28,37 +29,22 @@ from app.repositories.user_repository import UserRepository
 
 
 @dramatiq.actor(max_retries=3, time_limit=300_000)  # 5 min timeout
-def warmup_redis_cache() -> dict:
+def warmup_redis_cache() -> None:
     """
     Warm up Redis cache after recovery.
 
     R11-3: Loads frequently used data into Redis cache to reduce database load.
-
-    Returns:
-        Dict with loaded counts for each data type
     """
     logger.info("R11-3: Starting Redis cache warmup...")
 
     try:
-        result = asyncio.run(_warmup_redis_cache_async())
-        logger.info(
-            f"R11-3: Redis cache warmup complete: "
-            f"{result['users_loaded']} users, "
-            f"{result['deposit_levels_loaded']} deposit levels, "
-            f"{result['settings_loaded']} settings"
-        )
-        return result
+        asyncio.run(_warmup_redis_cache_async())
+        logger.info("R11-3: Redis cache warmup complete")
     except Exception as e:
         logger.exception(f"R11-3: Redis cache warmup failed: {e}")
-        return {
-            "users_loaded": 0,
-            "deposit_levels_loaded": 0,
-            "settings_loaded": 0,
-            "error": str(e),
-        }
 
 
-async def _warmup_redis_cache_async() -> dict:
+async def _warmup_redis_cache_async() -> None:
     """Async implementation of Redis cache warmup."""
     # Initialize Redis client
     try:
@@ -72,19 +58,29 @@ async def _warmup_redis_cache_async() -> dict:
         await redis_client.ping()
     except Exception as e:
         logger.error(f"R11-3: Redis not available for warmup: {e}")
-        return {
-            "users_loaded": 0,
-            "deposit_levels_loaded": 0,
-            "settings_loaded": 0,
-            "error": "Redis not available",
-        }
+        return
 
     users_loaded = 0
     deposit_levels_loaded = 0
     settings_loaded = 0
 
+    # Create local engine to avoid event loop issues in threaded worker
+    local_engine = create_async_engine(
+        settings.database_url,
+        echo=False,
+        poolclass=NullPool,
+    )
+
+    local_session_maker = async_sessionmaker(
+        local_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autocommit=False,
+        autoflush=False,
+    )
+
     try:
-        async with async_session_maker() as session:
+        async with local_session_maker() as session:
             # 1. Load active users (batch of 1000)
             user_repo = UserRepository(session)
             users = await user_repo.find_all(limit=1000)
@@ -164,10 +160,6 @@ async def _warmup_redis_cache_async() -> dict:
         logger.error(f"R11-3: Error during cache warmup: {e}", exc_info=True)
     finally:
         await redis_client.close()
+        await local_engine.dispose()
 
-    return {
-        "users_loaded": users_loaded,
-        "deposit_levels_loaded": deposit_levels_loaded,
-        "settings_loaded": settings_loaded,
-    }
 
