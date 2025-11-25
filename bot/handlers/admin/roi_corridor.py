@@ -21,12 +21,14 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.roi_corridor_service import RoiCorridorService
+from bot.handlers.admin.panel import handle_admin_panel_button
 from bot.keyboards.reply import (
     admin_roi_applies_to_keyboard,
     admin_roi_confirmation_keyboard,
     admin_roi_corridor_menu_keyboard,
     admin_roi_level_select_keyboard,
     admin_roi_mode_select_keyboard,
+    cancel_keyboard,
 )
 from bot.states.admin import AdminRoiCorridorStates
 
@@ -179,6 +181,11 @@ async def process_level_amount_selection(
         session: Database session
         data: Handler data
     """
+    if message.text == "👑 Админ-панель":
+        await state.clear()
+        await handle_admin_panel_button(message, session, **data)
+        return
+
     if message.text == "◀️ Отмена":
         await state.clear()
         await show_roi_corridor_menu(message, session, **data)
@@ -372,6 +379,11 @@ async def process_level_selection(
         session: Database session
         data: Handler data
     """
+    if message.text == "👑 Админ-панель":
+        await state.clear()
+        await handle_admin_panel_button(message, session, **data)
+        return
+
     if message.text == "◀️ Отмена":
         await state.clear()
         await show_roi_corridor_menu(message, session, **data)
@@ -416,6 +428,11 @@ async def process_mode_selection(
     """
     logger.info(f"[ROI_CORRIDOR] process_mode_selection called, text: {message.text}")
     
+    if message.text == "👑 Админ-панель":
+        await state.clear()
+        await handle_admin_panel_button(message, session, **data)
+        return
+
     if message.text == "◀️ Отмена":
         logger.info(f"[ROI_CORRIDOR] User cancelled mode selection")
         await state.clear()
@@ -477,6 +494,11 @@ async def process_applies_to(
         session: Database session
         data: Handler data
     """
+    if message.text == "👑 Админ-панель":
+        await state.clear()
+        await handle_admin_panel_button(message, session, **data)
+        return
+
     if message.text == "◀️ Отмена":
         await state.clear()
         await show_roi_corridor_menu(message, session, **data)

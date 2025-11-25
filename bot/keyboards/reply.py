@@ -982,7 +982,10 @@ def admin_roi_level_select_keyboard() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     for i in range(1, 6):
         builder.row(KeyboardButton(text=f"Уровень {i}"))
-    builder.row(KeyboardButton(text="◀️ Отмена"))
+    builder.row(
+        KeyboardButton(text="◀️ Отмена"),
+        KeyboardButton(text="👑 Админ-панель"),
+    )
     return builder.as_markup(resize_keyboard=True)
 
 
@@ -996,7 +999,10 @@ def admin_roi_mode_select_keyboard() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     builder.row(KeyboardButton(text="🎲 Custom (случайный из коридора)"))
     builder.row(KeyboardButton(text="📊 Поровну (фиксированный для всех)"))
-    builder.row(KeyboardButton(text="◀️ Отмена"))
+    builder.row(
+        KeyboardButton(text="◀️ Отмена"),
+        KeyboardButton(text="👑 Админ-панель"),
+    )
     return builder.as_markup(resize_keyboard=True)
 
 
@@ -1010,7 +1016,10 @@ def admin_roi_applies_to_keyboard() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     builder.row(KeyboardButton(text="⚡️ Применить к текущей сессии"))
     builder.row(KeyboardButton(text="⏭ Применить к следующей сессии"))
-    builder.row(KeyboardButton(text="◀️ Отмена"))
+    builder.row(
+        KeyboardButton(text="◀️ Отмена"),
+        KeyboardButton(text="👑 Админ-панель"),
+    )
     return builder.as_markup(resize_keyboard=True)
 
 
