@@ -13,6 +13,7 @@ from aiogram.types import Message, TelegramObject
 from loguru import logger
 
 from bot.utils.menu_buttons import is_menu_button
+from bot.utils.admin_utils import clear_state_preserve_admin_token
 
 
 class MenuStateClearMiddleware(BaseMiddleware):
@@ -56,7 +57,8 @@ class MenuStateClearMiddleware(BaseMiddleware):
                                 f"Clearing FSM state {current_state} for "
                                 f"menu button: {event.text}"
                             )
-                            await state.clear()
+                            # Use helper to preserve admin token
+                            await clear_state_preserve_admin_token(state)
                             logger.debug(
                                 f"FSM state cleared for menu button: "
                                 f"{event.text}"

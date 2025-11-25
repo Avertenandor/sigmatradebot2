@@ -187,6 +187,9 @@ async def start_search_user_deposits(
     )
 
 
+from bot.utils.admin_utils import clear_state_preserve_admin_token
+
+
 @router.message(AdminDepositManagementStates.searching_user_deposits)
 async def process_user_id_for_deposits(
     message: Message,
@@ -209,7 +212,7 @@ async def process_user_id_for_deposits(
     
     # Check for cancel
     if message.text == "❌ Отмена":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer(
             "❌ Поиск отменён.",
             reply_markup=admin_deposit_management_keyboard(),
@@ -220,7 +223,7 @@ async def process_user_id_for_deposits(
     from bot.utils.menu_buttons import is_menu_button
     
     if message.text and is_menu_button(message.text):
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
     
     # Parse Telegram ID
@@ -245,7 +248,7 @@ async def process_user_id_for_deposits(
             parse_mode="Markdown",
             reply_markup=admin_deposit_management_keyboard(),
         )
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
     
     # Get user's deposits
@@ -258,7 +261,7 @@ async def process_user_id_for_deposits(
             parse_mode="Markdown",
             reply_markup=admin_deposit_management_keyboard(),
         )
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
     
     # Format deposits
@@ -297,7 +300,7 @@ async def process_user_id_for_deposits(
         parse_mode="Markdown",
         reply_markup=admin_deposit_management_keyboard(),
     )
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
 
 
 @router.message(F.text == "⚙️ Управление уровнями")
@@ -493,7 +496,7 @@ async def process_max_level_change(
         data: Handler data
     """
     if message.text == "❌ Отмена":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await show_levels_management(message, session, **data)
         return
 
@@ -528,7 +531,7 @@ async def process_max_level_change(
         parse_mode="Markdown",
     )
     
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
     await show_levels_management(message, session, **data)
 
 
@@ -554,7 +557,7 @@ async def process_level_action(
     
     # Check for back button
     if message.text in ["◀️ Назад", "◀️ Назад к уровням"]:
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await show_levels_management(message, session, **data)
         return
     
@@ -565,7 +568,7 @@ async def process_level_action(
         state_data = await state.get_data()
         level = state_data.get("managing_level")
         if level:
-            await state.clear()
+            await clear_state_preserve_admin_token(state)
             await show_level_roi_config(message, session, state, level, from_level_management=True, **data)
         return
     
@@ -574,7 +577,7 @@ async def process_level_action(
     level = state_data.get("managing_level")
 
     if not level:
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer(
             "❌ Ошибка: уровень не найден.",
             reply_markup=admin_deposit_management_keyboard(),
@@ -585,7 +588,7 @@ async def process_level_action(
     current_version = await version_repo.get_current_version(level)
 
     if not current_version:
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer(
             f"❌ Уровень {level} не найден.",
             reply_markup=admin_deposit_management_keyboard(),
@@ -650,14 +653,14 @@ async def confirm_level_status_change(
 
     # Handle cancellation
     if message.text in ("❌ Отмена", "◀️ Назад", "◀️ Назад к уровням"):
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await show_levels_management(message, session, **data)
         return
 
     normalized = (message.text or "").strip().lower()
     if normalized not in ("да", "yes", "✅ да"):
         # Treat anything other than explicit "yes" as cancellation
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer(
             "❌ Действие отменено.",
             reply_markup=admin_deposit_levels_keyboard(),
@@ -669,7 +672,7 @@ async def confirm_level_status_change(
     action = state_data.get("level_action")
 
     if not level or action not in ("enable", "disable"):
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer(
             "❌ Ошибка: данные уровня не найдены.",
             reply_markup=admin_deposit_management_keyboard(),
@@ -680,7 +683,7 @@ async def confirm_level_status_change(
     current_version = await version_repo.get_current_version(level)
 
     if not current_version:
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer(
             f"❌ Уровень {level} не найден.",
             reply_markup=admin_deposit_management_keyboard(),
@@ -737,7 +740,7 @@ async def confirm_level_status_change(
             extra={"error": str(e)},
         )
 
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
 
 
 @router.message(F.text == "📋 Pending депозиты")
@@ -889,7 +892,7 @@ async def back_to_admin_panel(
         state: FSM context
         data: Handler data
     """
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
     from bot.handlers.admin.panel import admin_panel_handler
     
     await admin_panel_handler(message, state, **data)

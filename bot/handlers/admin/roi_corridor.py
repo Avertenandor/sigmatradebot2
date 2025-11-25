@@ -165,6 +165,9 @@ async def start_amount_setup(
     )
 
 
+from bot.utils.admin_utils import clear_state_preserve_admin_token
+
+
 @router.message(AdminRoiCorridorStates.selecting_level_amount)
 async def process_level_amount_selection(
     message: Message,
@@ -182,12 +185,12 @@ async def process_level_amount_selection(
         data: Handler data
     """
     if message.text == "👑 Админ-панель":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await handle_admin_panel_button(message, session, **data)
         return
 
     if message.text == "◀️ Отмена":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await show_roi_corridor_menu(message, session, **data)
         return
 
@@ -244,7 +247,7 @@ async def process_amount_input(
         data: Handler data
     """
     if message.text == "❌ Отмена":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await show_roi_corridor_menu(message, session, **data)
         return
 
@@ -296,7 +299,7 @@ async def process_amount_confirmation(
         data: Handler data
     """
     if "Нет" in message.text or "отменить" in message.text.lower():
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer("❌ Изменения отменены.")
         await show_roi_corridor_menu(message, session, **data)
         return
@@ -314,7 +317,7 @@ async def process_amount_confirmation(
     admin_id = data.get("admin_id")
 
     if not level or not amount or not admin_id:
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer("❌ Ошибка: данные потеряны")
         return
 
@@ -340,7 +343,7 @@ async def process_amount_confirmation(
     else:
         await message.answer(f"❌ Ошибка: {error}")
 
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
     await show_roi_corridor_menu(message, session, **data)
 
 
@@ -380,12 +383,12 @@ async def process_level_selection(
         data: Handler data
     """
     if message.text == "👑 Админ-панель":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await handle_admin_panel_button(message, session, **data)
         return
 
     if message.text == "◀️ Отмена":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await show_roi_corridor_menu(message, session, **data)
         return
 
@@ -429,13 +432,13 @@ async def process_mode_selection(
     logger.info(f"[ROI_CORRIDOR] process_mode_selection called, text: {message.text}")
     
     if message.text == "👑 Админ-панель":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await handle_admin_panel_button(message, session, **data)
         return
 
     if message.text == "◀️ Отмена":
         logger.info(f"[ROI_CORRIDOR] User cancelled mode selection")
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await show_roi_corridor_menu(message, session, **data)
         return
 
@@ -495,12 +498,12 @@ async def process_applies_to(
         data: Handler data
     """
     if message.text == "👑 Админ-панель":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await handle_admin_panel_button(message, session, **data)
         return
 
     if message.text == "◀️ Отмена":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await show_roi_corridor_menu(message, session, **data)
         return
 
@@ -804,7 +807,7 @@ async def process_confirmation(
     admin_id = data.get("admin_id")
 
     if not admin_id:
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer("❌ Ошибка: admin_id не найден")
         return
 
@@ -880,17 +883,17 @@ async def process_confirmation(
             # and has managing_level if needed? No, show_level_actions sets managing_level based on message.
             # But we don't have a message with "Уровень X".
             
-            # Let's manually set state and show the actions menu.
+            # Let's manually set state and show the actions menu.            
             from bot.handlers.admin.deposit_management import show_level_actions_for_level
             
-            await state.clear()
+            await clear_state_preserve_admin_token(state)
             await show_level_actions_for_level(message, session, state, level, **data)
             return
 
     else:
         await message.answer(f"❌ Ошибка: {error}")
 
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
     await show_roi_corridor_menu(message, session, **data)
 
 
@@ -978,12 +981,12 @@ async def show_level_history(
         data: Handler data
     """
     if message.text == "👑 Админ-панель":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await handle_admin_panel_button(message, session, **data)
         return
 
     if message.text == "◀️ Отмена":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await show_roi_corridor_menu(message, session, **data)
         return
 
@@ -1009,7 +1012,7 @@ async def show_level_history(
             f"📜 История изменений для уровня {level} пуста.",
             reply_markup=admin_roi_corridor_menu_keyboard(),
         )
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
 
     text = f"📜 **История изменений - Уровень {level}**\n\n"
@@ -1062,7 +1065,7 @@ async def show_level_history(
         parse_mode="Markdown",
         reply_markup=admin_roi_corridor_menu_keyboard(),
     )
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
 
 
 @router.message(F.text == "⏱ Настроить период начисления")
@@ -1171,7 +1174,7 @@ async def process_period_confirmation(
     admin_id = data.get("admin_id")
 
     if not hours or not admin_id:
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer("❌ Ошибка: данные потеряны")
         return
 
@@ -1198,7 +1201,7 @@ async def process_period_confirmation(
     else:
         await message.answer(f"❌ Ошибка: {error}")
 
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
     await show_roi_corridor_menu(message, session, **data)
 
 
@@ -1218,7 +1221,7 @@ async def back_to_deposit_management(
         session: Database session
         data: Handler data
     """
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
     from bot.handlers.admin.deposit_management import (
         show_deposit_management_menu,
     )

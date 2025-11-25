@@ -293,6 +293,9 @@ async def handle_admin_panel_button(
     )
 
 
+from bot.utils.admin_utils import clear_state_preserve_admin_token
+
+
 @router.message(F.text == "◀️ Главное меню")
 async def handle_back_to_main_menu(
     message: Message,
@@ -306,7 +309,7 @@ async def handle_back_to_main_menu(
     user: User | None = data.get("user")
     
     if state:
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
     
     # Remove 'user' and 'state' from data to avoid duplicate arguments
     safe_data = {k: v for k, v in data.items() if k not in ('user', 'state')}

@@ -25,6 +25,9 @@ from bot.states.admin_states import AdminStates
 router = Router(name="admin_support")
 
 
+from bot.utils.admin_utils import clear_state_preserve_admin_token
+
+
 @router.message(F.text == "🆘 Техподдержка")
 async def handle_admin_support_menu(
     message: Message,
@@ -37,7 +40,7 @@ async def handle_admin_support_menu(
         await message.answer("❌ Эта функция доступна только администраторам")
         return
 
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
     
     text = (
         "🆘 **Техподдержка**\n\n"
