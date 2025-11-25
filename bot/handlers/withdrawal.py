@@ -22,7 +22,7 @@ from app.services.user_service import UserService
 from app.services.withdrawal_service import WithdrawalService
 from bot.keyboards.reply import main_menu_reply_keyboard, withdrawal_keyboard
 from bot.states.withdrawal import WithdrawalStates
-from bot.utils.menu import is_menu_button
+from bot.utils.menu_buttons import is_menu_button
 
 router = Router()
 
