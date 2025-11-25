@@ -38,6 +38,7 @@ async def show_level_roi_config(
     session: AsyncSession,
     state: FSMContext,
     level: int,
+    from_level_management: bool = False,
     **data: Any,
 ) -> None:
     """
@@ -51,6 +52,7 @@ async def show_level_roi_config(
         session: Database session
         state: FSM context
         level: Deposit level number (1-5)
+        from_level_management: Whether called from level management screen
         data: Handler data
     """
     logger.info(f"[ROI_CORRIDOR] show_level_roi_config called for level {level}")
@@ -89,7 +91,7 @@ async def show_level_roi_config(
     """.strip()
     
     # Save level to state and start configuration
-    await state.update_data(level=level)
+    await state.update_data(level=level, from_level_management=from_level_management)
     await state.set_state(AdminRoiCorridorStates.selecting_mode)
     
     logger.info(f"[ROI_CORRIDOR] Sending mode selection keyboard for level {level}")
@@ -645,6 +647,31 @@ async def process_confirmation(
                 "admin_id": admin_id,
             },
         )
+        
+        # Check if we should redirect back to level management
+        if state_data.get("from_level_management"):
+            # Import here to avoid circular dependency
+            from bot.handlers.admin.deposit_management import show_level_actions
+            
+            # We need to set the managing_level in state for show_level_actions
+            # But wait, show_level_actions expects a Message with "Уровень X"
+            # Or we can call it directly if we mock the message?
+            # Better: simulate what show_level_actions does or call a helper.
+            
+            # Actually, show_level_actions reads level from message text.
+            # Let's create a helper or set state and show menu.
+            
+            # We can just call show_level_actions, but we need to ensure state is clean
+            # and has managing_level if needed? No, show_level_actions sets managing_level based on message.
+            # But we don't have a message with "Уровень X".
+            
+            # Let's manually set state and show the actions menu.
+            from bot.handlers.admin.deposit_management import show_level_actions_for_level
+            
+            await state.clear()
+            await show_level_actions_for_level(message, session, state, level, **data)
+            return
+
     else:
         await message.answer(f"❌ Ошибка: {error}")
 

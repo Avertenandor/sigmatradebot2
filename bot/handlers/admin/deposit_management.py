@@ -352,38 +352,23 @@ async def show_levels_management(
     )
 
 
-@router.message(F.text.startswith("Уровень "))
-async def show_level_actions(
+async def show_level_actions_for_level(
     message: Message,
     session: AsyncSession,
     state: FSMContext,
+    level: int,
     **data: Any,
 ) -> None:
     """
-    Show actions for specific level.
+    Show actions for specific level (helper).
     
     Args:
         message: Message object
         session: Database session
         state: FSM context
+        level: Level number
         data: Handler data
     """
-    is_admin = data.get("is_admin", False)
-    if not is_admin:
-        return
-    
-    # Extract level number
-    try:
-        level = int(message.text.split()[1])
-        if level < 1 or level > 5:
-            raise ValueError
-    except (ValueError, IndexError):
-        await message.answer(
-            "❌ Неверный формат уровня.",
-            reply_markup=admin_deposit_levels_keyboard(),
-        )
-        return
-    
     # Get level status
     version_repo = DepositLevelVersionRepository(session)
     current_version = await version_repo.get_current_version(level)
@@ -421,6 +406,132 @@ ROI Cap: {current_version.roi_cap_percent}%
     )
 
 
+@router.message(F.text.startswith("Уровень "))
+async def show_level_actions(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """
+    Show actions for specific level.
+    
+    Args:
+        message: Message object
+        session: Database session
+        state: FSM context
+        data: Handler data
+    """
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        return
+    
+    # Extract level number
+    try:
+        level = int(message.text.split()[1])
+        if level < 1 or level > 5:
+            raise ValueError
+    except (ValueError, IndexError):
+        await message.answer(
+            "❌ Неверный формат уровня.",
+            reply_markup=admin_deposit_levels_keyboard(),
+        )
+        return
+    
+    await show_level_actions_for_level(message, session, state, level, **data)
+
+
+@router.message(F.text == "🔢 Изм. макс. уровень")
+async def start_max_level_change(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """
+    Start max level change flow.
+    
+    Args:
+        message: Message object
+        session: Database session
+        state: FSM context
+        data: Handler data
+    """
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        return
+
+    settings_service = SettingsService(session)
+    current_max = await settings_service.get_int("max_open_deposit_level", default=5)
+
+    await state.set_state(AdminDepositManagementStates.setting_max_level)
+    
+    await message.answer(
+        f"🔢 **Изменение максимального уровня**\n\n"
+        f"Текущий макс. уровень: **{current_max}**\n\n"
+        "Введите новое значение (1-5):\n"
+        "Пользователи смогут открывать депозиты только до этого уровня включительно.",
+        parse_mode="Markdown",
+        reply_markup=cancel_keyboard(),
+    )
+
+
+@router.message(AdminDepositManagementStates.setting_max_level)
+async def process_max_level_change(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """
+    Process max level input.
+    
+    Args:
+        message: Message object
+        session: Database session
+        state: FSM context
+        data: Handler data
+    """
+    if message.text == "❌ Отмена":
+        await state.clear()
+        await show_levels_management(message, session, **data)
+        return
+
+    try:
+        new_max = int(message.text.strip())
+        if new_max < 1 or new_max > 5:
+            raise ValueError
+    except ValueError:
+        await message.answer(
+            "❌ Неверный формат. Введите число от 1 до 5.",
+            reply_markup=cancel_keyboard(),
+        )
+        return
+
+    # Get admin info for logging
+    admin_id = data.get("admin_id")
+    from app.repositories.admin_repository import AdminRepository
+    admin_repo = AdminRepository(session)
+    admin = await admin_repo.get_by_id(admin_id) if admin_id else None
+    admin_info = f"admin {admin.telegram_id}" if admin else "unknown admin"
+
+    settings_service = SettingsService(session)
+    await settings_service.set(
+        key="max_open_deposit_level",
+        value=new_max,
+        description=f"Maximum open deposit level (set by {admin_info})",
+    )
+    await session.commit()
+
+    await message.answer(
+        f"✅ Максимальный уровень успешно изменён на **{new_max}**.",
+        parse_mode="Markdown",
+    )
+    
+    await state.clear()
+    await show_levels_management(message, session, **data)
+
+
 @router.message(AdminDepositManagementStates.managing_level)
 async def process_level_action(
     message: Message,
@@ -455,7 +566,7 @@ async def process_level_action(
         level = state_data.get("managing_level")
         if level:
             await state.clear()
-            await show_level_roi_config(message, session, state, level, **data)
+            await show_level_roi_config(message, session, state, level, from_level_management=True, **data)
         return
     
     # Get level from state

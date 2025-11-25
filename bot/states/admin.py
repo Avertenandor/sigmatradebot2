@@ -60,6 +60,7 @@ class AdminDepositManagementStates(StatesGroup):
     confirming_level_status = State()  # Confirming enable/disable for level
     viewing_pending = State()  # Viewing pending deposits
     confirming_deposit_action = State()  # Confirming deposit action (approve/reject)
+    setting_max_level = State()  # Setting max open deposit level
 
 
 class AdminRoiCorridorStates(StatesGroup):

@@ -635,6 +635,9 @@ def admin_deposit_levels_keyboard() -> ReplyKeyboardMarkup:
         KeyboardButton(text="Уровень 5"),
     )
     builder.row(
+        KeyboardButton(text="🔢 Изм. макс. уровень"),
+    )
+    builder.row(
         KeyboardButton(text="◀️ Назад в админ-панель"),
     )
 
