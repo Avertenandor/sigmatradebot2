@@ -457,29 +457,31 @@ class UserService:
         }
 
     def generate_referral_link(
-        self, telegram_id: int, bot_username: str | None, referral_code: str | None = None
+        self, user: User, bot_username: str | None
     ) -> str:
         """
         Generate referral link for user.
 
+        Uses user's referral_code if available, otherwise falls back to telegram_id.
+
         Args:
-            telegram_id: User's Telegram ID (fallback)
+            user: User object
             bot_username: Bot username
-            referral_code: User's unique referral code (preferred)
 
         Returns:
-            Referral link
+            Referral link in format: https://t.me/{bot}?start=ref_{code}
         """
         username = bot_username or "bot"
-        code = referral_code if referral_code else f"ref_{telegram_id}"
         
-        # Handle cases where code is just the random string vs legacy ID format
-        # If it's the new code, we don't need prefix, or can use 'ref_' prefix consistency
-        if referral_code:
-            # Use 'ref_' prefix for consistency with current parsing logic
-            return f"https://t.me/{username}?start=ref_{code}"
-            
-        return f"https://t.me/{username}?start=ref_{telegram_id}"
+        # Use referral_code if available, otherwise fallback to telegram_id
+        code = user.referral_code if user.referral_code else str(user.telegram_id)
+        
+        logger.debug(
+            f"Generating referral link for user {user.id}: "
+            f"using {'referral_code' if user.referral_code else 'telegram_id'} = {code}"
+        )
+        
+        return f"https://t.me/{username}?start=ref_{code}"
 
     async def find_by_id(self, user_id: int) -> User | None:
         """
