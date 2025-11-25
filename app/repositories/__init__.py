@@ -50,8 +50,8 @@ from app.repositories.support_ticket_repository import (
 )
 
 # System Repositories
-from app.repositories.system_setting_repository import (
-    SystemSettingRepository,
+from app.repositories.global_settings_repository import (
+    GlobalSettingsRepository,
 )
 from app.repositories.transaction_repository import (
     TransactionRepository,
@@ -96,7 +96,7 @@ __all__ = [
     "SupportTicketRepository",
     "SupportMessageRepository",
     # System
-    "SystemSettingRepository",
+    "GlobalSettingsRepository",
     "UserActionRepository",
     "WalletChangeRequestRepository",
 ]
