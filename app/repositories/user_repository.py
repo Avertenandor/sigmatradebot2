@@ -48,6 +48,20 @@ class UserRepository(BaseRepository[User]):
         """
         return await self.get_by(wallet_address=wallet_address)
 
+    async def get_by_referral_code(
+        self, referral_code: str
+    ) -> User | None:
+        """
+        Get user by referral code.
+
+        Args:
+            referral_code: Referral code
+
+        Returns:
+            User or None
+        """
+        return await self.get_by(referral_code=referral_code)
+
     async def get_with_referrals(
         self, user_id: int
     ) -> User | None:

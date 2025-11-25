@@ -59,7 +59,10 @@ class User(Base):
     username: Mapped[str | None] = mapped_column(
         String(255), nullable=True, index=True
     )
-
+    referral_code: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, unique=True, index=True
+    )
+    
     # Wallet and financial
     wallet_address: Mapped[str] = mapped_column(
         String(255), nullable=False

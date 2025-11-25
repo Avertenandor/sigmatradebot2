@@ -57,32 +57,63 @@ async def cmd_start(
 
     user: User | None = data.get("user")
     # Extract referral code from command args
-    # Format: /start ref123456 or /start ref_123456
+    # Format: /start ref123456 or /start ref_123456 or /start ref_CODE
     referrer_telegram_id = None
     if message.text and len(message.text.split()) > 1:
         ref_arg = message.text.split()[1].strip()
         # Support formats: ref123456, ref_123456, ref-123456
         if ref_arg.startswith("ref"):
             try:
-                # Extract telegram_id from ref code
-                ref_id_str = (
-                    ref_arg.replace("ref", "")
-                    .replace("_", "")
-                    .replace("-", "")
-                )
-                if ref_id_str.isdigit():
-                    referrer_telegram_id = int(ref_id_str)
+                # Extract value from ref code
+                # Note: We remove 'ref', '_', '-' prefix/separators.
+                # If the code itself contains '_' or '-', this might be an issue if we strip them globally.
+                # But legacy IDs were digits.
+                # New codes are urlsafe base64, which can contain '-' and '_'.
+                # So we should be careful about stripping.
+                
+                # Better parsing strategy:
+                # 1. Remove 'ref' prefix (case insensitive?)
+                # 2. If starts with '_' or '-', remove ONE leading separator.
+                
+                clean_arg = ref_arg[3:] # Remove 'ref'
+                if clean_arg.startswith("_") or clean_arg.startswith("-"):
+                    clean_arg = clean_arg[1:]
+                
+                if clean_arg.isdigit():
+                    # Legacy ID
+                    referrer_telegram_id = int(clean_arg)
                     logger.info(
-                        "Referral code detected",
+                        "Legacy referral ID detected",
                         extra={
-                            "ref_code": ref_arg,
+                            "ref_arg": ref_arg,
                             "referrer_telegram_id": referrer_telegram_id,
-                            "new_user_telegram_id": message.from_user.id,
                         },
                     )
-            except (ValueError, AttributeError):
+                else:
+                    # New Referral Code
+                    # We need UserService here. 
+                    # Note: Creating service inside handler is fine.
+                    user_service = UserService(session)
+                    referrer = await user_service.get_by_referral_code(clean_arg)
+                    
+                    if referrer:
+                        referrer_telegram_id = referrer.telegram_id
+                        logger.info(
+                            "Referral code detected",
+                            extra={
+                                "ref_code": clean_arg,
+                                "referrer_telegram_id": referrer_telegram_id,
+                            },
+                        )
+                    else:
+                        logger.warning(
+                            "Referral code not found",
+                            extra={"ref_code": clean_arg},
+                        )
+
+            except (ValueError, AttributeError) as e:
                 logger.warning(
-                    "Invalid referral code format",
+                    f"Invalid referral code format: {e}",
                     extra={"ref_code": ref_arg},
                 )
 

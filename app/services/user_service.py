@@ -4,6 +4,7 @@ User service.
 Business logic for user management.
 """
 
+import secrets
 from decimal import Decimal
 
 from loguru import logger
@@ -76,6 +77,22 @@ class UserService:
             telegram_id
         )
 
+    async def get_by_referral_code(
+        self, referral_code: str
+    ) -> User | None:
+        """
+        Get user by referral code.
+
+        Args:
+            referral_code: Referral code
+
+        Returns:
+            User or None
+        """
+        return await self.user_repo.get_by_referral_code(
+            referral_code
+        )
+
     async def register_user(
         self,
         telegram_id: int,
@@ -127,6 +144,14 @@ class UserService:
             if referrer:
                 referrer_id = referrer.id
 
+        # Generate unique referral code
+        while True:
+            referral_code = secrets.token_urlsafe(8)
+            # Check if exists (unlikely collision but safe to check)
+            exists = await self.user_repo.get_by_referral_code(referral_code)
+            if not exists:
+                break
+
         # Create user
         user = await self.user_repo.create(
             telegram_id=telegram_id,
@@ -134,6 +159,7 @@ class UserService:
             wallet_address=wallet_address,
             financial_password=financial_password,
             referrer_id=referrer_id,
+            referral_code=referral_code,
         )
 
         await self.session.commit()
@@ -431,19 +457,28 @@ class UserService:
         }
 
     def generate_referral_link(
-        self, telegram_id: int, bot_username: str | None
+        self, telegram_id: int, bot_username: str | None, referral_code: str | None = None
     ) -> str:
         """
         Generate referral link for user.
 
         Args:
-            telegram_id: User's Telegram ID (used in referral code)
+            telegram_id: User's Telegram ID (fallback)
             bot_username: Bot username
+            referral_code: User's unique referral code (preferred)
 
         Returns:
             Referral link
         """
         username = bot_username or "bot"
+        code = referral_code if referral_code else f"ref_{telegram_id}"
+        
+        # Handle cases where code is just the random string vs legacy ID format
+        # If it's the new code, we don't need prefix, or can use 'ref_' prefix consistency
+        if referral_code:
+            # Use 'ref_' prefix for consistency with current parsing logic
+            return f"https://t.me/{username}?start=ref_{code}"
+            
         return f"https://t.me/{username}?start=ref_{telegram_id}"
 
     async def find_by_id(self, user_id: int) -> User | None:
