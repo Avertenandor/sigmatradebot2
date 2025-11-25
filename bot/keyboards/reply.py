@@ -455,16 +455,13 @@ def admin_wallet_keyboard() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
 
     builder.row(
-        KeyboardButton(text="📊 Статус кошелька"),
+        KeyboardButton(text="📊 Статус кошельков"),
     )
     builder.row(
-        KeyboardButton(text="➕ Добавить/обновить ключ"),
+        KeyboardButton(text="📥 Настроить кошелек для входа"),
     )
     builder.row(
-        KeyboardButton(text="🌱 Добавить seed фразу"),
-    )
-    builder.row(
-        KeyboardButton(text="🗑️ Удалить ключ"),
+        KeyboardButton(text="📤 Настроить кошелек для выдачи"),
     )
     builder.row(
         KeyboardButton(text="👑 Админ-панель"),
