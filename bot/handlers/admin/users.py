@@ -10,16 +10,21 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, desc
 
 from app.models.admin import Admin
+from app.models.user import User
+from app.models.transaction import Transaction
 from app.services.admin_log_service import AdminLogService
 from app.services.blacklist_service import BlacklistService, BlacklistActionType
 from app.services.user_service import UserService
+from app.services.referral_service import ReferralService
 from bot.keyboards.reply import (
     admin_users_keyboard,
     cancel_keyboard,
     admin_user_list_keyboard,
     admin_user_profile_keyboard,
+    main_menu_reply_keyboard,
 )
 from bot.states.admin_states import AdminStates
 from bot.utils.admin_utils import clear_state_preserve_admin_token
@@ -130,7 +135,6 @@ async def handle_list_users(
         return
 
     user_service = UserService(session)
-    # Get users paginated (10 per page)
     limit = 10
     offset = (page - 1) * limit
     
@@ -140,7 +144,7 @@ async def handle_list_users(
     users = result.scalars().all()
     
     total_users = await user_service.get_total_users()
-    total_pages = (total_users + limit - 1) // limit
+    total_pages = (total_users + limit - 1) // limit if total_users > 0 else 1
 
     await state.update_data(current_user_list_page=page)
     
@@ -206,19 +210,17 @@ async def handle_user_selection(
 
 async def show_user_profile(
     message: Message,
-    user: Any, # User model
+    user: Any,
     state: FSMContext,
     session: AsyncSession,
 ) -> None:
     """Show user profile and actions"""
     await clear_state_preserve_admin_token(state)
-    # Save user ID in state for context actions
     await state.update_data(selected_user_id=user.id)
     
     user_service = UserService(session)
     balance_data = await user_service.get_user_balance(user.id)
     
-    # Basic info
     status_emoji = "🚫" if user.is_banned else "✅"
     status_text = "Заблокирован" if user.is_banned else "Активен"
     
@@ -252,10 +254,6 @@ async def handle_profile_balance(
     **data: Any,
 ) -> None:
     """Start balance change flow"""
-    # Permission check: Only extended_admin or super_admin
-    from app.services.admin_service import AdminService
-    
-    # We can check admin role from data['admin'] object if available
     admin = data.get("admin")
     if not admin or admin.role not in ["extended_admin", "super_admin"]:
         await message.answer("⛔ У вас недостаточно прав для этой операции.")
@@ -288,7 +286,6 @@ async def process_balance_change(
 ) -> None:
     """Process balance change input"""
     if message.text == "❌ Отмена":
-        # Restore profile view
         state_data = await state.get_data()
         user_id = state_data.get("selected_user_id")
         if user_id:
@@ -321,7 +318,6 @@ async def process_balance_change(
         await message.answer("❌ Пользователь не найден")
         return
 
-    # Update balance
     new_balance = user.balance + amount
     if new_balance < 0:
         await message.reply(
@@ -330,26 +326,15 @@ async def process_balance_change(
         )
         return
 
-    # Update user
     await user_service.update_profile(user_id, balance=new_balance)
     
-    # Log transaction
     admin = data.get("admin")
     admin_id = admin.id if admin else None
     
-    # Security log
-    from app.utils.security_logging import log_security_event
-    log_security_event(
-        "Admin changed user balance",
-        {
-            "admin_id": admin_id,
-            "user_id": user_id,
-            "amount": float(amount),
-            "new_balance": float(new_balance)
-        }
-    )
+    # Security log (simplified usage)
+    from loguru import logger
+    logger.warning(f"Admin {admin_id} changed balance for user {user_id} by {amount}. New: {new_balance}")
     
-    # Notify admin log
     admin_log = AdminLogService(session)
     action = "Начисление" if amount > 0 else "Списание"
     await admin_log.log_action(
@@ -367,7 +352,6 @@ async def process_balance_change(
         f"Новый баланс: {new_balance} USDT"
     )
     
-    # Return to profile
     await show_user_profile(message, user, state, session)
 
 
@@ -390,14 +374,11 @@ async def handle_profile_block_toggle(
         return
 
     is_blocking = message.text == "🚫 Заблокировать"
-    
-    # Use blacklist service for blocking
     blacklist_service = BlacklistService(session)
     admin = data.get("admin")
     admin_id = admin.id if admin else None
 
     if is_blocking:
-        # Block
         await blacklist_service.add_to_blacklist(
             telegram_id=user.telegram_id,
             reason="Блокировка администратором через профиль",
@@ -407,8 +388,6 @@ async def handle_profile_block_toggle(
         user.is_banned = True
         await message.answer("✅ Пользователь заблокирован.")
     else:
-        # Unblock
-        # Need to deactivate blacklist entry
         entry = await blacklist_service.repo.find_by_telegram_id(user.telegram_id)
         if entry and entry.is_active:
             await blacklist_service.repo.update(entry.id, is_active=False)
@@ -428,7 +407,6 @@ async def handle_profile_terminate(
     **data: Any,
 ) -> None:
     """Terminate account"""
-    # Check permissions - maybe super admin only? Or extended.
     admin = data.get("admin")
     if not admin or admin.role not in ["extended_admin", "super_admin"]:
         await message.answer("⛔ У вас недостаточно прав для этой операции.")
@@ -437,14 +415,18 @@ async def handle_profile_terminate(
     state_data = await state.get_data()
     user_id = state_data.get("selected_user_id")
     if not user_id:
-        return
+        # Fallback to legacy flow check if state is not set
+        if await state.get_state() == AdminStates.awaiting_user_to_terminate:
+             # This is part of the legacy flow which we are restoring below
+             pass
+        else:
+             return
 
     user_service = UserService(session)
     user = await user_service.get_by_id(user_id)
     if not user:
         return
 
-    # Proceed with termination
     blacklist_service = BlacklistService(session)
     admin_id = admin.id if admin else None
 
@@ -473,21 +455,6 @@ async def handle_profile_history(
     if not user_id:
         return
 
-    from app.repositories.transaction_repository import TransactionRepository
-    from sqlalchemy import desc
-    
-    repo = TransactionRepository(session)
-    # Get last 10 transactions
-    txs = await repo.find_all(
-        limit=10,
-        user_id=user_id,
-        # order_by not supported in base find_all directly this way usually, need check
-    )
-    # Actually find_all takes **filters. Sorting needs custom query usually.
-    # Let's do query
-    from app.models.transaction import Transaction
-    from sqlalchemy import select
-    
     stmt = select(Transaction).where(Transaction.user_id == user_id).order_by(desc(Transaction.created_at)).limit(10)
     result = await session.execute(stmt)
     txs = result.scalars().all()
@@ -498,7 +465,13 @@ async def handle_profile_history(
         
     text = "📜 **Последние 10 транзакций:**\n\n"
     for tx in txs:
-        status = "✅" if tx.status == "confirmed" else "⏳" if tx.status == "pending" else "❌"
+        status_map = {
+            "confirmed": "✅",
+            "pending": "⏳",
+            "failed": "❌",
+            "rejected": "🚫"
+        }
+        status = status_map.get(tx.status, "❓")
         text += f"{status} `{tx.created_at.strftime('%d.%m %H:%M')}`: {tx.type} **{tx.amount} USDT**\n"
         
     await message.answer(text, parse_mode="Markdown")
@@ -516,7 +489,6 @@ async def handle_profile_referrals(
     if not user_id:
         return
 
-    from app.services.referral_service import ReferralService
     service = ReferralService(session)
     stats = await service.get_referral_stats(user_id)
     
@@ -544,14 +516,334 @@ async def handle_back_to_list(
     await handle_list_users(message, session, state, page=page, **data)
 
 
-# Re-export or keep legacy handlers if needed for direct keyboard buttons
-# But we updated the logic to use profile mainly.
-# The main menu buttons "🚫 Заблокировать пользователя" still work?
-# Yes, I should probably keep handle_start_block_user etc. if I want to support the old flow or redirect.
-# For cleanliness, I'll remove them and guide admins to use "Find" or "List".
-# But wait, `admin_users_keyboard` still has them.
-# I should update `admin_users_keyboard` to REMOVE "Block" and "Terminate" direct buttons if I want to force the new flow.
-# It's better UX to find user -> verify it's them -> block. Typing ID blindly to block is error prone.
-# So I'll remove them from `admin_users_keyboard` in `reply.py` as well!
+@router.message(F.text == "👑 Админ-панель")
+async def handle_back_to_admin_panel(
+    message: Message,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """Return to admin panel from users menu"""
+    from bot.handlers.admin.panel import handle_admin_panel_button
+    await handle_admin_panel_button(message, session, **data)
 
-# Wait, let's first update `reply.py` to simplify `admin_users_keyboard`.
+
+# =================================================================================================
+# Legacy / Direct Button Handlers (Restored)
+# =================================================================================================
+
+@router.message(F.text == "🚫 Заблокировать пользователя")
+async def handle_start_block_user(
+    message: Message,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """Start block user flow"""
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        await message.answer("❌ Эта функция доступна только администраторам")
+        return
+
+    await state.set_state(AdminStates.awaiting_user_to_block)
+
+    text = """
+🚫 **Блокировка пользователя**
+
+Отправьте username (с @) или Telegram ID пользователя для блокировки.
+
+Пользователь получит уведомление и сможет подать апелляцию "
+        "в течение 3 рабочих дней."
+
+Пример: `@username` или `123456789`
+    """.strip()
+
+    await message.answer(
+        text, parse_mode="Markdown", reply_markup=cancel_keyboard()
+    )
+
+
+@router.message(AdminStates.awaiting_user_to_block)
+async def handle_block_user_input(  # noqa: C901
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """Handle block user input"""
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        return
+
+    if message.text == "❌ Отмена":
+        await state.clear()
+        await message.answer(
+            "❌ Блокировка отменена.",
+            reply_markup=admin_users_keyboard(),
+        )
+        return
+
+    if message.text and is_menu_button(message.text):
+        await state.clear()
+        return
+
+    from loguru import logger
+    from app.services.blacklist_service import BlacklistService
+    from app.repositories.system_setting_repository import SystemSettingRepository
+    from aiogram import Bot
+    from app.config.settings import settings
+    from app.repositories.blacklist_repository import BlacklistRepository
+
+    user_service = UserService(session)
+    blacklist_service = BlacklistService(session)
+
+    identifier = message.text.strip() if message.text else ""
+
+    if not identifier:
+        await message.reply("❌ Отправьте username или ID")
+        return
+
+    user = None
+    if identifier.startswith("@"):
+        username = identifier[1:]
+        user = await user_service.find_by_username(username)
+    elif identifier.isdigit():
+        telegram_id = int(identifier)
+        user = await user_service.get_by_telegram_id(telegram_id)
+    else:
+        try:
+            telegram_id = int(identifier)
+            user = await user_service.get_by_telegram_id(telegram_id)
+        except ValueError:
+            user = None
+
+    if not user:
+        await message.reply("❌ Пользователь не найден")
+        await state.clear()
+        return
+
+    admin = data.get("admin")
+    admin_id = admin.id if admin else None
+
+    try:
+        await blacklist_service.add_to_blacklist(
+            telegram_id=user.telegram_id,
+            reason="Блокировка администратором",
+            added_by_admin_id=admin_id,
+            action_type=BlacklistActionType.BLOCKED,
+        )
+
+        user.is_banned = True
+        await session.commit()
+
+        try:
+            bot = Bot(token=settings.telegram_bot_token)
+            setting_repo = SystemSettingRepository(session)
+            notification_text = await setting_repo.get_value(
+                "blacklist_block_notification_text",
+                default=(
+                    "⚠️ Ваш аккаунт временно заблокирован в нашем сообществе. "
+                    "Вы можете подать апелляцию в течение 3 рабочих дней."
+                )
+            )
+            notification_text_with_instruction = (
+                f"{notification_text}\n\n"
+                "Чтобы подать апелляцию, нажмите кнопку "
+                "'📝 Подать апелляцию' в боте."
+            )
+            await bot.send_message(
+                chat_id=user.telegram_id,
+                text=notification_text_with_instruction,
+            )
+            
+            blacklist_repo = BlacklistRepository(session)
+            blacklist_entry = await blacklist_repo.find_by_telegram_id(
+                user.telegram_id
+            )
+            await bot.send_message(
+                chat_id=user.telegram_id,
+                text="Выберите действие:",
+                reply_markup=main_menu_reply_keyboard(
+                    user=user, blacklist_entry=blacklist_entry, is_admin=False
+                ),
+            )
+            await bot.session.close()
+        except Exception as e:
+            logger.warning(f"Failed to send notification to user {user.telegram_id}: {e}")
+
+        display_name = user.username or f"ID {user.telegram_id}"
+        await message.reply(
+            f"✅ Пользователь {display_name} заблокирован.\n"
+            f"Уведомление отправлено пользователю.",
+            reply_markup=admin_users_keyboard(),
+        )
+
+        if admin:
+            log_service = AdminLogService(session)
+            await log_service.log_user_blocked(
+                admin=admin,
+                user_id=user.id,
+                user_telegram_id=user.telegram_id,
+                reason="Блокировка администратором",
+            )
+            
+    except Exception as e:
+        logger.error(f"Error blocking user: {e}")
+        await message.reply(
+            f"❌ Ошибка: {str(e)}",
+            reply_markup=admin_users_keyboard(),
+        )
+
+    await state.clear()
+
+
+# Re-use handle_profile_terminate but support direct call with state
+@router.message(AdminStates.awaiting_user_to_terminate)
+async def handle_terminate_user_input(  # noqa: C901
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """Handle terminate user input (direct flow)"""
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        return
+
+    if message.text == "❌ Отмена":
+        await state.clear()
+        await message.answer(
+            "❌ Терминация отменена.",
+            reply_markup=admin_users_keyboard(),
+        )
+        return
+
+    if message.text and is_menu_button(message.text):
+        await state.clear()
+        return
+
+    from loguru import logger
+    from app.services.blacklist_service import BlacklistService
+    from app.repositories.system_setting_repository import SystemSettingRepository
+    from aiogram import Bot
+    from app.config.settings import settings
+
+    user_service = UserService(session)
+    blacklist_service = BlacklistService(session)
+
+    identifier = message.text.strip() if message.text else ""
+
+    if not identifier:
+        await message.reply("❌ Отправьте username или ID")
+        return
+
+    user = None
+    if identifier.startswith("@"):
+        username = identifier[1:]
+        user = await user_service.find_by_username(username)
+    elif identifier.isdigit():
+        telegram_id = int(identifier)
+        user = await user_service.get_by_telegram_id(telegram_id)
+    else:
+        try:
+            telegram_id = int(identifier)
+            user = await user_service.get_by_telegram_id(telegram_id)
+        except ValueError:
+            user = None
+
+    if not user:
+        await message.reply("❌ Пользователь не найден")
+        await state.clear()
+        return
+
+    admin = data.get("admin")
+    admin_id = admin.id if admin else None
+
+    try:
+        await blacklist_service.add_to_blacklist(
+            telegram_id=user.telegram_id,
+            reason="Терминация администратором",
+            added_by_admin_id=admin_id,
+            action_type=BlacklistActionType.TERMINATED,
+        )
+
+        user.is_banned = True
+        await session.commit()
+
+        try:
+            bot = Bot(token=settings.telegram_bot_token)
+            setting_repo = SystemSettingRepository(session)
+            notification_text = await setting_repo.get_value(
+                "blacklist_terminate_notification_text",
+                default=(
+                    "❌ Ваш аккаунт терминирован в нашем сообществе "
+                    "без возможности восстановления."
+                )
+            )
+            await bot.send_message(
+                chat_id=user.telegram_id,
+                text=notification_text,
+            )
+            await bot.session.close()
+        except Exception as e:
+            logger.warning(f"Failed to send notification to user {user.telegram_id}: {e}")
+
+        display_name = user.username or f"ID {user.telegram_id}"
+        await message.reply(
+            f"✅ Аккаунт {display_name} терминирован.\n"
+            f"Уведомление отправлено пользователю.",
+            reply_markup=admin_users_keyboard(),
+        )
+
+        if admin:
+            log_service = AdminLogService(session)
+            await log_service.log_user_terminated(
+                admin=admin,
+                user_id=user.id,
+                user_telegram_id=user.telegram_id,
+                reason="Терминация администратором",
+            )
+    except Exception as e:
+        logger.error(f"Error terminating user: {e}")
+        await message.reply(
+            f"❌ Ошибка: {str(e)}",
+            reply_markup=admin_users_keyboard(),
+        )
+
+    await state.clear()
+
+@router.message(F.text == "⚠️ Терминировать аккаунт")
+async def handle_start_terminate_user_direct(
+    message: Message,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """Start terminate user flow (direct)"""
+    # Check permissions first (this is triggered by button)
+    # Note: handle_profile_terminate also catches this text!
+    # We need to differentiate based on state or context.
+    # If we are in profile mode (selected_user_id set), handle_profile_terminate should take precedence.
+    # But handlers are registered in order.
+    # handle_profile_terminate is registered BEFORE this one.
+    # So if state has selected_user_id, handle_profile_terminate will run.
+    # If not, it will return early (if not user_id: return).
+    # So we can put this handler AFTER handle_profile_terminate and it will catch cases where profile is not active.
+    
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        await message.answer("❌ Эта функция доступна только администраторам")
+        return
+
+    await state.set_state(AdminStates.awaiting_user_to_terminate)
+
+    text = """
+⚠️ **Терминация аккаунта**
+
+Отправьте username (с @) или Telegram ID пользователя для терминации.
+
+⚠️ **ВНИМАНИЕ:** Аккаунт будет полностью заблокирован без возможности апелляции.
+
+Пример: `@username` или `123456789`
+    """.strip()
+
+    await message.answer(
+        text, parse_mode="Markdown", reply_markup=cancel_keyboard()
+    )

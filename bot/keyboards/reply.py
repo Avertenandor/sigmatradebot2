@@ -375,6 +375,12 @@ def admin_users_keyboard() -> ReplyKeyboardMarkup:
         KeyboardButton(text="👥 Список пользователей"),
     )
     builder.row(
+        KeyboardButton(text="🚫 Заблокировать пользователя"),
+    )
+    builder.row(
+        KeyboardButton(text="⚠️ Терминировать аккаунт"),
+    )
+    builder.row(
         KeyboardButton(text="👑 Админ-панель"),
     )
 
