@@ -41,5 +41,5 @@ BUTTON_LABELS = {
     "CONFIRM": "✅ Подтвердить",
 }
 
-# Admin broadcast cooldown (15 minutes)
-BROADCAST_COOLDOWN_MS = 15 * 60 * 1000
+# Admin broadcast cooldown (1 minute)
+BROADCAST_COOLDOWN_MS = 1 * 60 * 1000

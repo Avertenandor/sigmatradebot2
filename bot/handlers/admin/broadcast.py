@@ -21,9 +21,9 @@ from bot.states.admin_states import AdminStates
 
 router = Router(name="admin_broadcast")
 
-# Rate limiting for broadcasts (15 minutes cooldown)
+# Rate limiting for broadcasts (1 minute cooldown)
 broadcast_rate_limits: dict[int, datetime] = {}
-BROADCAST_COOLDOWN_MS = 15 * 60 * 1000  # 15 minutes in milliseconds
+BROADCAST_COOLDOWN_MS = 1 * 60 * 1000  # 1 minute in milliseconds
 
 
 @router.message(F.text == "📢 Рассылка")
