@@ -224,13 +224,54 @@ async def show_user_profile(
     status_emoji = "🚫" if user.is_banned else "✅"
     status_text = "Заблокирован" if user.is_banned else "Активен"
     
+    # Get additional info
+    referrer_info = "Не приглашен"
+    if user.referrer_id:
+        referrer = await user_service.get_by_id(user.referrer_id)
+        if referrer:
+            referrer_info = f"@{referrer.username}" if referrer.username else f"ID {referrer.telegram_id}"
+    
+    fin_pass_status = "🔑 Установлен (Hash)" if user.financial_password else "❌ Не установлен"
+    fin_pass_hash = f"`{user.financial_password[:15]}...`" if user.financial_password else ""
+    
+    verification_status = "✅ Да" if user.is_verified else "❌ Нет"
+    
+    phone = user.phone if user.phone else "Не указан"
+    email = user.email if user.email else "Не указан"
+    wallet = f"`{user.wallet_address}`" if user.wallet_address else "Не указан"
+    
+    last_active = user.last_active.strftime('%d.%m.%Y %H:%M') if user.last_active else "Неизвестно"
+    
+    # Flags
+    flags = []
+    if user.is_admin: flags.append("👑 Админ")
+    if user.earnings_blocked: flags.append("⛔️ Начисления заблокированы")
+    if user.withdrawal_blocked: flags.append("⛔️ Вывод заблокирован")
+    if user.suspicious: flags.append("⚠️ Подозрительный")
+    flags_text = ", ".join(flags) if flags else "Нет особых отметок"
+
     text = (
-        f"👤 **Профиль пользователя**\n\n"
+        f"👤 **Личное дело пользователя**\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
         f"🆔 ID: `{user.id}`\n"
         f"📱 Telegram ID: `{user.telegram_id}`\n"
         f"👤 Username: @{user.username or 'Не указан'}\n"
         f"📅 Регистрация: {user.created_at.strftime('%d.%m.%Y %H:%M')}\n"
-        f"📊 Статус: {status_emoji} **{status_text}**\n\n"
+        f"🕒 Активность: {last_active}\n"
+        f"📊 Статус: {status_emoji} **{status_text}**\n"
+        f"✅ Верификация: {verification_status}\n"
+        f"🏷 Язык: {user.language or 'ru'}\n"
+        f"👥 Пригласил: {referrer_info}\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"🔐 **Безопасность:**\n"
+        f"• Фин. пароль: {fin_pass_status} {fin_pass_hash}\n"
+        f"• Особые отметки: {flags_text}\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"📞 **Контакты:**\n"
+        f"• Телефон: {phone}\n"
+        f"• Email: {email}\n"
+        f"• Кошелек: {wallet}\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
         f"💰 **Финансы:**\n"
         f"• Баланс: `{balance_data['total_balance']:.2f} USDT`\n"
         f"• Депозиты: `{balance_data['total_deposits']:.2f} USDT`\n"
