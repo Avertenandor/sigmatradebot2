@@ -56,19 +56,7 @@ class SupportService:
         if user_id is None and telegram_id is None:
             return None, "Для гостевых тикетов требуется telegram_id"
 
-        # Check if user/guest already has active ticket
-        if user_id is not None:
-            existing = await self.ticket_repo.get_active_by_user(user_id)
-        else:
-            existing = await self.ticket_repo.get_active_by_telegram_id(telegram_id)
-
-        if existing:
-            return None, (
-                "У вас уже есть активное обращение. "
-                "Пожалуйста, дождитесь его закрытия."
-            )
-
-        # Check total open tickets limit
+        # Check total open tickets limit (removed single active ticket check)
         from app.config.constants import MAX_OPEN_TICKETS_PER_USER
         from app.models.enums import SupportTicketStatus
 
