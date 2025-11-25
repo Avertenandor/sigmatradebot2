@@ -79,43 +79,28 @@ async def handle_list_tickets(
         )
         return
 
-    text = f"📋 **Список обращений ({len(pending_tickets)})**\n\n"
+    # Pagination logic (basic)
+    page = 1
+    per_page = 10
+    total_tickets = len(pending_tickets)
+    import math
+    total_pages = math.ceil(total_tickets / per_page)
     
-    # Show last 10 tickets
-    for ticket in pending_tickets[:10]:
-        # Get user label
-        user_label = f"ID: {ticket.user_id}"
-        if hasattr(ticket, 'user') and ticket.user:
-            if ticket.user.username:
-                user_label = f"@{ticket.user.username}"
-            elif ticket.user.telegram_id:
-                user_label = f"TG: {ticket.user.telegram_id}"
-        
-        status_emoji = {
-            SupportTicketStatus.OPEN.value: "🟡",
-            SupportTicketStatus.IN_PROGRESS.value: "🔵",
-            SupportTicketStatus.ANSWERED.value: "🟢",
-            SupportTicketStatus.WAITING_USER.value: "⏳",
-        }.get(ticket.status, "⚪")
-        
-        created_date = ticket.created_at.strftime("%d.%m %H:%M")
-        
-        text += (
-            f"{status_emoji} **#{ticket.id}** - {user_label}\n"
-            f"📅 {created_date}\n"
-            f"👉 `Открыть #{ticket.id}`\n\n"
-        )
+    # Get tickets for current page
+    start_idx = (page - 1) * per_page
+    end_idx = start_idx + per_page
+    page_tickets = pending_tickets[start_idx:end_idx]
+
+    text = f"📋 **Список обращений ({total_tickets})**\n\nВыберите обращение:"
     
-    if len(pending_tickets) > 10:
-        text += f"\n... и еще {len(pending_tickets) - 10} обращений"
-    
-    text += "\nНажмите на команду `Открыть #ID` или введите её вручную."
+    from bot.keyboards.reply import admin_ticket_list_keyboard
+    keyboard = admin_ticket_list_keyboard(page_tickets, page, total_pages)
 
     await state.set_state(AdminSupportStates.viewing_list)
     await message.answer(
         text,
         parse_mode="Markdown",
-        reply_markup=admin_support_keyboard(),
+        reply_markup=keyboard,
     )
 
 
@@ -210,7 +195,7 @@ async def back_to_list(
     await handle_list_tickets(message, session, state, **data)
 
 
-@router.message(F.text.regexp(r'^Открыть #(\d+)$'))
+@router.message(F.text.regexp(r'^(?:Открыть |🎫 )#(\d+)'))
 async def handle_view_ticket(
     message: Message,
     session: AsyncSession,
@@ -223,7 +208,7 @@ async def handle_view_ticket(
         return
 
     import re
-    match = re.match(r'^Открыть #(\d+)$', message.text)
+    match = re.search(r'#(\d+)', message.text)
     if not match:
         return
     
