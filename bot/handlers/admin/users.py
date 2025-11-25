@@ -134,28 +134,7 @@ async def handle_list_users(
     limit = 10
     offset = (page - 1) * limit
     
-    # Need to fetch users sorted by created_at desc
-    from app.models.user import User
-    from sqlalchemy import desc
-    
-    users = await user_service.user_repo.find_all(
-        limit=limit,
-        offset=offset,
-        order_by=desc(User.created_at) # This might need custom find_all support for order_by, assuming BaseRepo supports it via **filters or we need raw query
-    )
-    
-    # BaseRepository.find_all doesn't strictly support order_by kwarg in the signature I saw earlier. 
-    # It takes **filters which are passed to filter_by.
-    # I should check if I can use a custom query or if I need to update repo. 
-    # For now, let's use a custom query here or assume I can use user_repo.session directly if needed, 
-    # or better, let's use the existing handle_list_users logic but adapted for pagination.
-    
-    # Re-checking BaseRepository:
-    # stmt = select(self.model).filter_by(**filters) ...
-    # It doesn't handle sorting.
-    
-    # I'll implement a quick query helper here or use existing one if available.
-    from sqlalchemy import select
+    # Fetch users sorted by created_at desc
     stmt = select(User).order_by(desc(User.created_at)).limit(limit).offset(offset)
     result = await session.execute(stmt)
     users = result.scalars().all()
