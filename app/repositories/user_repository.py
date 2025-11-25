@@ -92,7 +92,7 @@ class UserRepository(BaseRepository[User]):
         Returns:
             List of Telegram IDs
         """
-        stmt = select(User.telegram_id).where(not User.is_banned)
+        stmt = select(User.telegram_id).where(User.is_banned == False)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
