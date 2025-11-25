@@ -64,7 +64,7 @@ class ReferralService:
                     u.updated_at,
                     u.is_verified,
                     u.earnings_blocked,
-                    u.financial_password_hash,
+                    u.financial_password,
                     0 AS level
                 FROM users u
                 WHERE u.id = :user_id
@@ -82,7 +82,7 @@ class ReferralService:
                     u.updated_at,
                     u.is_verified,
                     u.earnings_blocked,
-                    u.financial_password_hash,
+                    u.financial_password,
                     rc.level + 1 AS level
                 FROM users u
                 INNER JOIN referral_chain rc ON u.id = rc.referrer_id
@@ -110,6 +110,7 @@ class ReferralService:
                 referrer_id=row.referrer_id,
                 is_verified=row.is_verified,
                 earnings_blocked=row.earnings_blocked,
+                financial_password=row.financial_password,
             )
             user.created_at = row.created_at
             user.updated_at = row.updated_at
