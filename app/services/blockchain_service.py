@@ -594,5 +594,3 @@ def get_blockchain_service() -> BlockchainService:
 def init_blockchain_service(settings: Settings, session_factory: Any = None) -> None:
     global _blockchain_service
     _blockchain_service = BlockchainService(settings, session_factory)
-
-"""
