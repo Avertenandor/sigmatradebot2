@@ -26,6 +26,7 @@ from bot.keyboards.reply import (
 )
 from bot.states.profile_update import ProfileUpdateStates
 from bot.states.registration import RegistrationStates
+from bot.utils.text_utils import escape_markdown
 
 router = Router()
 
@@ -74,9 +75,12 @@ async def show_main_menu(
     user_language = await get_user_language(session, user.id)
     _ = get_translator(user_language)
     
+    # Escape username for Markdown
+    safe_username = escape_markdown(user.username) if user.username else _('common.user')
+    
     text = (
         f"{_('menu.main')}\n\n"
-        f"{_('common.welcome_user', username=user.username or _('common.user'))}\n\n"
+        f"{_('common.welcome_user', username=safe_username)}\n\n"
         f"{_('common.choose_action')}"
     )
 
@@ -492,12 +496,15 @@ async def show_my_profile(
     available = format_usdt(balance.get('available_balance', 0))
     total_earned = format_usdt(balance.get('total_earned', 0))
     pending = format_usdt(balance.get('pending_earnings', 0))
+    
+    # Escape username for Markdown
+    safe_username = escape_markdown(user.username) if user.username else 'не указан'
 
     text = (
         f"👤 *Ваш профиль*\n\n"
         f"*Основная информация:*\n"
         f"🆔 ID: `{user.id}`\n"
-        f"👤 Username: @{user.username or 'не указан'}\n"
+        f"👤 Username: @{safe_username}\n"
         f"💳 Кошелек: `{wallet_display}`\n\n"
         f"*Статус:*\n"
         f"{verify_emoji} Верификация: {verify_status}\n"
