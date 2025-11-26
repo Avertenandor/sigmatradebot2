@@ -42,6 +42,9 @@ class StuckTransactionService:
             List of stuck withdrawal transactions
         """
         threshold = datetime.now(UTC) - timedelta(minutes=older_than_minutes)
+        # Convert to naive datetime (UTC) to match Transaction model's naive DateTime column
+        # This avoids "can't subtract offset-naive and offset-aware datetimes" error in asyncpg
+        threshold_naive = threshold.replace(tzinfo=None)
 
         stmt = (
             select(Transaction)
@@ -49,7 +52,7 @@ class StuckTransactionService:
                 Transaction.type == TransactionType.WITHDRAWAL.value,
                 Transaction.status == TransactionStatus.PROCESSING.value,
                 Transaction.tx_hash.isnot(None),
-                Transaction.updated_at < threshold,
+                Transaction.updated_at < threshold_naive,
             )
             .order_by(Transaction.updated_at.asc())
         )
