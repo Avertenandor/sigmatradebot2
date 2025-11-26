@@ -75,7 +75,7 @@ async def fix_user_referral():
             result = await session.execute(
                 select(Referral).where(
                     Referral.referrer_id == REFERRER_ID,
-                    Referral.referred_user_id == USER_ID
+                    Referral.referral_id == USER_ID
                 )
             )
             existing_ref = result.scalars().first()
@@ -86,25 +86,18 @@ async def fix_user_referral():
                 logger.info("➕ Creating new referral relationship...")
                 new_ref = Referral(
                     referrer_id=REFERRER_ID,
-                    referred_user_id=USER_ID,
-                    level=1,
-                    is_active=True
+                    referral_id=USER_ID,
+                    level=1
                 )
                 session.add(new_ref)
                 await session.flush() # Get ID
             
             # 3. Create Referral Earning
-            # Check if already exists for this deposit?
-            # The table structure for referral_earnings might link to 'referral_id' (from referrals table) 
-            # OR transaction/deposit. 
-            # Let's check model or inferred from previous SQL result: 
-            # id | referral_id | amount | source_transaction_id | tx_hash | paid | created_at
-            
             # We need the referral_id (from step 2)
             result = await session.execute(
                 select(Referral).where(
                     Referral.referrer_id == REFERRER_ID,
-                    Referral.referred_user_id == USER_ID
+                    Referral.referral_id == USER_ID
                 )
             )
             referral_record = result.scalars().first()
@@ -113,16 +106,9 @@ async def fix_user_referral():
                 logger.error("❌ Failed to retrieve referral record.")
                 return
 
-            # Check for existing earning
-            # We don't have a source_transaction_id linked to deposits directly usually in simple schemas, 
-            # or it might be null. 
-            # The previous SQL output showed source_transaction_id empty.
-            # But we want to avoid duplicates.
-            
             # Calculate amount
             earning_amount = DEPOSIT_AMOUNT * LEVEL_1_RATE
             
-            # Let's just add it.
             logger.info(f"💰 Creating earning: {earning_amount} USDT for Referral ID {referral_record.id}...")
             
             earning = ReferralEarning(
@@ -133,23 +119,6 @@ async def fix_user_referral():
             )
             session.add(earning)
             
-            # Update User Stats (Total Earned) for Referrer
-            referrer = await session.get(User, REFERRER_ID)
-            if referrer:
-                # Update total_earned and pending_earnings
-                # Usually stored in user profile
-                pass 
-                # Actually, let's use ReferralService helper if possible, but we are manual.
-                # Let's trust the system to calculate stats from tables, 
-                # OR update the cache columns if they exist.
-                
-                # Checking User model...
-                # It likely has 'total_earned' or 'pending_earnings'.
-                # Let's update them safely.
-                # referrer.pending_earnings += earning_amount
-                # session.add(referrer)
-                pass
-
             await session.commit()
             logger.success("✅ Fix applied successfully!")
 
@@ -160,4 +129,3 @@ async def fix_user_referral():
 
 if __name__ == "__main__":
     asyncio.run(fix_user_referral())
-
