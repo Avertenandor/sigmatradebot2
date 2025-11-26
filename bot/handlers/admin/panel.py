@@ -159,8 +159,8 @@ async def handle_master_key_input(
             await show_blacklist(message, session, **data)
             return
         elif redirect_message_text == "🔐 Управление кошельком":
-            from bot.handlers.admin.wallet_key_setup import handle_wallet_menu
-            await handle_wallet_menu(message, **data)
+            from bot.handlers.admin.wallet_management import show_wallet_dashboard
+            await show_wallet_dashboard(message, session, state, **data)
             return
         elif redirect_message_text == "💸 Заявки на вывод":
              await handle_admin_withdrawals(message, session, **data)
@@ -392,6 +392,8 @@ async def handle_admin_stats(
 @router.message(F.text == "🔐 Управление кошельком")
 async def handle_admin_wallet_menu(
     message: Message,
+    session: AsyncSession,
+    state: FSMContext,
     **data: Any,
 ) -> None:
     """Handle wallet management menu from admin panel."""
@@ -408,10 +410,10 @@ async def handle_admin_wallet_menu(
         await message.answer("❌ Доступ запрещён")
         return
     
-    # Redirect to wallet menu handler
-    from bot.handlers.admin.wallet_key_setup import handle_wallet_menu
+    # Redirect to wallet dashboard
+    from bot.handlers.admin.wallet_management import show_wallet_dashboard
     
-    await handle_wallet_menu(message, **data)
+    await show_wallet_dashboard(message, session, state, **data)
 
 
 @router.message(F.text == "🚫 Управление черным списком")
