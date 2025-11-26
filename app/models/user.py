@@ -65,7 +65,7 @@ class User(Base):
     
     # Wallet and financial
     wallet_address: Mapped[str] = mapped_column(
-        String(255), nullable=False
+        String(255), nullable=False, unique=True
     )
     financial_password: Mapped[str] = mapped_column(
         String(255), nullable=False
