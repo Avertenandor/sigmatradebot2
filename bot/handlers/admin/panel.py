@@ -369,8 +369,13 @@ async def handle_admin_stats(
     else:
         for d in detailed_deposits[:10]:  # Show top 10 recent
             next_accrual = d["next_accrual_at"].strftime("%d.%m %H:%M") if d["next_accrual_at"] else "Н/Д"
+            
+            # Escape username for Markdown
+            username = str(d['username'])
+            safe_username = username.replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")
+            
             text += (
-                f"👤 @{d['username']} (ID: {d['user_id']})\n"
+                f"👤 @{safe_username} (ID: {d['user_id']})\n"
                 f"   💵 Деп: {format_usdt(d['amount'])} | Выплачено: {format_usdt(d['roi_paid'])}\n"
                 f"   ⏳ След. нач: {next_accrual}\n\n"
             )
