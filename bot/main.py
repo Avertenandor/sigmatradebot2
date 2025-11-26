@@ -250,6 +250,7 @@ async def main() -> None:  # noqa: C901
         users,
         wallet_key_setup,
         wallets,
+        wallet_management,
         withdrawals,
         withdrawal_settings,
         blockchain_settings,
@@ -319,6 +320,8 @@ async def main() -> None:  # noqa: C901
     admin_finpass.router.callback_query.middleware(admin_auth_middleware)
     wallets.router.message.middleware(admin_auth_middleware)
     wallets.router.callback_query.middleware(admin_auth_middleware)
+    wallet_management.router.message.middleware(admin_auth_middleware)
+    wallet_management.router.callback_query.middleware(admin_auth_middleware)
     admins.router.message.middleware(admin_auth_middleware)
     admins.router.callback_query.middleware(admin_auth_middleware)
     admin_support.router.message.middleware(admin_auth_middleware)
@@ -339,6 +342,7 @@ async def main() -> None:  # noqa: C901
     # roi_corridor.router already registered before menu.router for FSM priority
     dp.include_router(admin_finpass.router)
     dp.include_router(wallets.router)
+    dp.include_router(wallet_management.router)
     dp.include_router(admins.router)
     dp.include_router(admin_support.router)
     dp.include_router(user_messages.router)

@@ -197,15 +197,11 @@ class BlockchainService:
                 self.active_provider_name = settings.active_rpc_provider
                 self.is_auto_switch_enabled = settings.is_auto_switch_enabled
                 self._last_settings_update = now
-                # logger.debug(f"Updated settings: provider={self.active_provider_name}, auto_switch={self.is_auto_switch_enabled}")
         except Exception as e:
             logger.warning(f"Failed to update blockchain settings from DB: {e}")
 
     def get_active_web3(self) -> Web3:
         """Get the currently active Web3 instance."""
-        # Note: calling async update here is tricky because this method might be called synchronously
-        # We assume _update_settings_from_db is called periodically or explicitly
-        
         provider = self.providers.get(self.active_provider_name)
         if not provider:
             # Fallback to any available
@@ -259,15 +255,12 @@ class BlockchainService:
                 
             logger.info(f"Switching to backup provider: {backup_name}")
             try:
-                # Temporary switch for this execution
-                # Ideally, we should update DB to make it permanent
                 self.active_provider_name = backup_name 
                 w3_backup = self.providers[backup_name]
                 result = func(w3_backup)
                 
                 # If successful, persist the switch asynchronously
                 if self.session_factory:
-                    # Fire and forget update
                     asyncio.create_task(self._persist_provider_switch(backup_name))
                 
                 return result
@@ -288,8 +281,6 @@ class BlockchainService:
         except Exception as e:
             logger.error(f"Failed to persist provider switch: {e}")
 
-    # ---------------- Public API (Wrapped with Logic) ----------------
-
     async def force_refresh_settings(self):
         """Force update settings from DB."""
         self._last_settings_update = 0
@@ -302,8 +293,6 @@ class BlockchainService:
         if hasattr(self, '_executor') and self._executor:
             self._executor.shutdown(wait=True)
 
-    # --- Wrapper methods to use failover ---
-
     async def get_block_number(self) -> int:
         loop = asyncio.get_event_loop()
         async with self.rpc_limiter:
@@ -313,11 +302,6 @@ class BlockchainService:
                     lambda w3: w3.eth.block_number
                 ))
             )
-            
-    # NOTE: asyncio.run inside executor is tricky because we are already in asyncio loop.
-    # But wait, run_in_executor runs in a THREAD. 
-    # _execute_with_failover is async. We cannot run async function in lambda easily inside executor without new loop.
-    # BETTER APPROACH: _execute_with_failover should manage the executor call itself.
 
     async def _run_async_failover(self, sync_func: Callable[[Web3], Any]) -> Any:
         """
@@ -331,12 +315,15 @@ class BlockchainService:
         
         # Try primary
         try:
-            # Check primary provider exists
-            if current_name not in self.providers:
-                 # fallback logic
-                 pass
+            # Check primary provider exists logic handled by get_active_web3 inside executor or here
+            # Actually better to get w3 instance here
+            if current_name not in self.providers and self.providers:
+                 current_name = next(iter(self.providers))
             
-            w3 = self.get_active_web3() # logic inside handles fallback if missing
+            if current_name not in self.providers:
+                 raise ConnectionError("No providers available")
+
+            w3 = self.providers[current_name]
             
             async with self.rpc_limiter:
                 return await loop.run_in_executor(
@@ -373,9 +360,7 @@ class BlockchainService:
                 return result
             except Exception as e2:
                 logger.error(f"Backup provider failed: {e2}")
-                raise e # Original error might be more relevant, but here we raise last
-
-    # --- Refactored Methods using _run_async_failover ---
+                raise e 
 
     async def send_payment(self, to_address: str, amount: float) -> dict[str, Any]:
         try:
@@ -420,6 +405,60 @@ class BlockchainService:
             logger.error(f"Failed to send payment: {e}")
             return {"success": False, "error": str(e)}
 
+    async def send_native_token(self, to_address: str, amount: float) -> dict[str, Any]:
+        """
+        Send native token (BNB) to address.
+        """
+        try:
+            if not self.wallet_account:
+                return {"success": False, "error": "Wallet not configured"}
+
+            if not await self.validate_wallet_address(to_address):
+                return {"success": False, "error": f"Invalid address: {to_address}"}
+
+            to_address = to_checksum_address(to_address)
+            amount_wei = Web3.to_wei(amount, 'ether')
+
+            def _send_native(w3: Web3):
+                gas_price = w3.eth.gas_price
+                gas_limit = 21000 # Standard native transfer gas
+                nonce = w3.eth.get_transaction_count(self.wallet_address)
+
+                txn = {
+                    "to": to_address,
+                    "value": amount_wei,
+                    "gas": gas_limit,
+                    "gasPrice": gas_price,
+                    "nonce": nonce,
+                    "chainId": w3.eth.chain_id
+                }
+
+                signed = self.wallet_account.sign_transaction(txn)
+                tx_hash = w3.eth.send_raw_transaction(signed.rawTransaction)
+                return tx_hash.hex()
+
+            tx_hash_str = await self._run_async_failover(_send_native)
+            
+            logger.info(f"BNB payment sent: {amount} to {to_address}, hash: {tx_hash_str}")
+            return {"success": True, "tx_hash": tx_hash_str, "error": None}
+
+        except Exception as e:
+            logger.error(f"Failed to send BNB: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def get_native_balance(self, address: str) -> Decimal | None:
+        """Get Native Token (BNB) balance."""
+        try:
+            address = to_checksum_address(address)
+            def _get_bal(w3: Web3):
+                return w3.eth.get_balance(address)
+            
+            wei = await self._run_async_failover(_get_bal)
+            return Decimal(wei) / Decimal(10 ** 18)
+        except Exception as e:
+            logger.error(f"Get BNB balance failed: {e}")
+            return None
+
     async def check_transaction_status(self, tx_hash: str) -> dict[str, Any]:
         try:
             def _check(w3: Web3):
@@ -448,81 +487,46 @@ class BlockchainService:
 
     async def get_transaction_details(self, tx_hash: str) -> dict[str, Any] | None:
         try:
-            def _get_details(w3: Web3):
-                tx = w3.eth.get_transaction(tx_hash)
-                try:
-                    receipt = w3.eth.get_transaction_receipt(tx_hash)
-                except Exception:
-                    receipt = None
-                current = w3.eth.block_number
-                return tx, receipt, current
-
-            tx, receipt, current_block = await self._run_async_failover(_get_details)
-            
-            if not tx: return None
-            
-            from_addr = to_checksum_address(tx["from"])
-            to_addr = to_checksum_address(tx["to"]) if tx["to"] else None
-            
-            value = Decimal(0)
-            if to_addr and to_addr.lower() == self.usdt_contract_address.lower():
-                # Decode logic (simplified for brevity, assume contract initialized with w3)
-                # But contract is tied to specific w3 instance...
-                # We need to recreate contract or use w3.eth.contract with correct abi
-                contract = w3_from_context.eth.contract(address=self.usdt_contract_address, abi=USDT_ABI) # Problem: w3_from_context not available here
-                # Wait, inside _get_details we have w3.
-                pass 
-                
-            # ... (Rest of logic similar to original, just using w3 passed to function)
-            # Actually, to make this clean, I should pass the logic into _run_async_failover
-            
-            # Let's keep it simple: contract decoding usually doesn't need RPC if we have input data.
-            # But we need contract object to decode.
-            # We can use self.usdt_contract property which uses active web3.
-            # But during failover, active web3 might be the broken one if we haven't switched yet?
-            # No, _run_async_failover passes the GOOD w3.
-            
+            # Just execute directly via failover helper, encapsulating logic
             return await self._run_async_failover(lambda w3: self._fetch_tx_details_sync(w3, tx_hash))
-            
         except Exception:
             return None
 
     def _fetch_tx_details_sync(self, w3: Web3, tx_hash: str):
-        tx = w3.eth.get_transaction(tx_hash)
         try:
-            receipt = w3.eth.get_transaction_receipt(tx_hash)
+            tx = w3.eth.get_transaction(tx_hash)
+            try:
+                receipt = w3.eth.get_transaction_receipt(tx_hash)
+            except Exception:
+                receipt = None
+            
+            # Parse logic...
+            contract = w3.eth.contract(address=self.usdt_contract_address, abi=USDT_ABI)
+            
+            from_address = to_checksum_address(tx["from"])
+            to_address = to_checksum_address(tx["to"]) if tx["to"] else None
+            value = Decimal(0)
+            
+            if to_address and to_address.lower() == self.usdt_contract_address.lower():
+                 try:
+                    decoded = contract.decode_function_input(tx["input"])
+                    if decoded[0].fn_name == "transfer":
+                        amount_wei = decoded[1]["_value"]
+                        value = Decimal(amount_wei) / Decimal(10 ** USDT_DECIMALS)
+                        to_address = to_checksum_address(decoded[1]["_to"])
+                 except Exception:
+                     pass
+                     
+            return {
+                "from_address": from_address,
+                "to_address": to_address,
+                "value": value,
+                "status": "confirmed" if receipt and receipt.status == 1 else "pending",
+            }
         except Exception:
-            receipt = None
-        current_block = w3.eth.block_number
-        
-        # Parse logic...
-        contract = w3.eth.contract(address=self.usdt_contract_address, abi=USDT_ABI)
-        
-        from_address = to_checksum_address(tx["from"])
-        to_address = to_checksum_address(tx["to"]) if tx["to"] else None
-        value = Decimal(0)
-        
-        if to_address and to_address.lower() == self.usdt_contract_address.lower():
-             try:
-                decoded = contract.decode_function_input(tx["input"])
-                if decoded[0].fn_name == "transfer":
-                    amount_wei = decoded[1]["_value"]
-                    value = Decimal(amount_wei) / Decimal(10 ** USDT_DECIMALS)
-                    to_address = to_checksum_address(decoded[1]["_to"])
-             except Exception:
-                 pass
-                 
-        return {
-            "from_address": from_address,
-            "to_address": to_address,
-            "value": value,
-            "status": "confirmed" if receipt and receipt.status == 1 else "pending",
-             # ... other fields
-        }
+            return None
 
     async def validate_wallet_address(self, address: str) -> bool:
-        # Validation is local (checksum), doesn't need RPC usually, unless ENS.
-        # BSC addresses are hex, so just local check.
         try:
             return is_address(address)
         except Exception:
@@ -549,24 +553,15 @@ class BlockchainService:
             def _est_gas(w3: Web3):
                 contract = w3.eth.contract(address=self.usdt_contract_address, abi=USDT_ABI)
                 func = contract.functions.transfer(to_address, amount_wei)
-                gas = func.estimate_gas({"from": self.wallet_address})
+                func_gas = func.estimate_gas({"from": self.wallet_address})
                 price = w3.eth.gas_price
-                return gas * price
+                return func_gas * price
 
             total_wei = await self._run_async_failover(_est_gas)
             return Decimal(total_wei) / Decimal(10 ** 18)
          except Exception:
              return None
-             
-    # Search deposits and Monitor deposits - same pattern.
-    
-    async def search_blockchain_for_deposit(self, user_wallet: str, expected_amount: Decimal, from_block=0, to_block="latest", tolerance_percent=0.05) -> dict | None:
-         # This is complex logic involving filters.
-         # Filters are tied to provider.
-         pass
-         
-    # ...
-    
+
     async def get_providers_status(self) -> dict[str, Any]:
         """Get status of all providers."""
         status = {}
