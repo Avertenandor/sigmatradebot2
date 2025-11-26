@@ -36,7 +36,7 @@ class WalletSetupStates(StatesGroup):
 
 
 async def handle_wallet_menu(message: Message, state: FSMContext, **data: Any) -> None:
-    """Show wallet management menu."""
+    """Show wallet management menu (Redirect to new dashboard)."""
     # Check admin permissions
     user = data.get("event_from_user")
     if not user:
@@ -47,18 +47,10 @@ async def handle_wallet_menu(message: Message, state: FSMContext, **data: Any) -
         await message.answer("❌ Команда доступна только главному администратору")
         return
 
-    await clear_state_preserve_admin_token(state)
-    
-    from bot.keyboards.reply import admin_wallet_keyboard
-    
-    await message.answer(
-        "🔐 **УПРАВЛЕНИЕ КОШЕЛЬКАМИ**\n\n"
-        "Выберите действие:\n"
-        "📥 **Вход:** Кошелек для приема депозитов (показывается пользователям)\n"
-        "📤 **Выдача:** Кошелек для выплат (требует приватный ключ)",
-        parse_mode="Markdown",
-        reply_markup=admin_wallet_keyboard(),
-    )
+    # Redirect to new dashboard
+    from bot.handlers.admin.wallet_management import show_wallet_dashboard
+    # Pass session=None as it is currently unused in show_wallet_dashboard
+    await show_wallet_dashboard(message, None, state, **data)
 
 
 # Old handlers replaced by wallet_management.py
