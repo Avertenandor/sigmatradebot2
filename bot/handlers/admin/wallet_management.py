@@ -1,7 +1,7 @@
 """
 Admin Wallet Management Handler.
 
-Provides "Trust Wallet"-like dashboard for system wallets.
+Provides "Trust Wallet"-like dashboard for system wallets using Reply Keyboards.
 """
 
 from decimal import Decimal
@@ -9,11 +9,10 @@ from typing import Any
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import Message
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config.settings import settings
 from app.services.blockchain_service import get_blockchain_service
 from bot.keyboards.wallet_mgmt import (
     wallet_amount_keyboard,
@@ -24,7 +23,6 @@ from bot.keyboards.wallet_mgmt import (
 )
 from bot.states.wallet_management import WalletManagementStates
 from bot.utils.admin_utils import clear_state_preserve_admin_token
-from bot.utils.formatters import format_usdt
 
 router = Router(name="admin_wallet_management")
 
@@ -37,14 +35,19 @@ async def show_wallet_dashboard(
     **data: Any,
 ) -> None:
     """Show main wallet dashboard."""
+    # Clear previous state but keep admin token
+    await clear_state_preserve_admin_token(state)
     await _show_dashboard(message, state)
 
 
-async def _show_dashboard(message: Message, state: FSMContext, edit_mode: bool = False) -> None:
+async def _show_dashboard(message: Message, state: FSMContext) -> None:
     """Render the wallet dashboard."""
     await state.set_state(WalletManagementStates.menu)
     
     bs = get_blockchain_service()
+    if not bs:
+        await message.answer("❌ Сервис блокчейна недоступен.")
+        return
     
     # Hot Wallet (Output)
     hot_address = bs.wallet_address
@@ -85,45 +88,28 @@ async def _show_dashboard(message: Message, state: FSMContext, edit_mode: bool =
         
     text += "\n👇 Выберите действие:"
 
-    if edit_mode:
-        await message.edit_text(
-            text,
-            parse_mode="Markdown",
-            reply_markup=wallet_dashboard_keyboard()
-        )
-    else:
-        await message.answer(
-            text,
-            parse_mode="Markdown",
-            reply_markup=wallet_dashboard_keyboard()
-        )
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=wallet_dashboard_keyboard()
+    )
 
 
-@router.callback_query(F.data == "wallet_refresh")
-async def refresh_dashboard(callback: CallbackQuery, state: FSMContext):
+@router.message(F.text == "🔄 Обновить баланс", WalletManagementStates.menu)
+async def refresh_dashboard(message: Message, state: FSMContext):
     """Refresh balances."""
-    await callback.answer("🔄 Обновляю балансы...")
-    await _show_dashboard(callback.message, state, edit_mode=True)
+    await message.answer("🔄 Обновляю балансы...")
+    await _show_dashboard(message, state)
 
 
-@router.callback_query(F.data == "wallet_back_to_dashboard")
-async def back_to_dashboard(callback: CallbackQuery, state: FSMContext):
+@router.message(F.text == "◀️ Назад к кошельку")
+async def back_to_dashboard(message: Message, state: FSMContext):
     """Back to main dashboard."""
-    await _show_dashboard(callback.message, state, edit_mode=True)
+    await _show_dashboard(message, state)
 
 
-@router.callback_query(F.data == "wallet_settings")
-async def go_to_settings(callback: CallbackQuery, state: FSMContext, **data: Any):
-    """Go to wallet settings (Reply Keyboard)."""
-    from bot.handlers.admin.wallet_key_setup import handle_wallet_menu
-    
-    await callback.answer()
-    # Call setup menu (which uses Reply Keyboard)
-    await handle_wallet_menu(callback.message, state, **data)
-
-
-@router.callback_query(F.data == "wallet_receive")
-async def show_receive_info(callback: CallbackQuery):
+@router.message(F.text == "📥 Получить", WalletManagementStates.menu)
+async def show_receive_info(message: Message):
     """Show receive addresses."""
     bs = get_blockchain_service()
     hot_address = bs.wallet_address
@@ -141,20 +127,28 @@ async def show_receive_info(callback: CallbackQuery):
             f"`{cold_address}`\n"
         )
         
-    await callback.message.edit_text(
+    await message.answer(
         text,
         parse_mode="Markdown",
         reply_markup=wallet_back_keyboard()
     )
 
 
+@router.message(F.text == "⚙️ Настройки", WalletManagementStates.menu)
+async def go_to_settings(message: Message, state: FSMContext, **data: Any):
+    """Go to wallet settings."""
+    from bot.handlers.admin.wallet_key_setup import handle_wallet_menu
+    
+    await handle_wallet_menu(message, state, **data)
+
+
 # --- SEND FLOW ---
 
-@router.callback_query(F.data == "wallet_send_menu")
-async def start_send_flow(callback: CallbackQuery, state: FSMContext):
+@router.message(F.text == "📤 Отправить", WalletManagementStates.menu)
+async def start_send_flow(message: Message, state: FSMContext):
     """Start sending process."""
     await state.set_state(WalletManagementStates.selecting_currency_to_send)
-    await callback.message.edit_text(
+    await message.answer(
         "📤 **Отправка средств (Hot Wallet)**\n\n"
         "Выберите валюту для отправки:",
         parse_mode="Markdown",
@@ -162,14 +156,21 @@ async def start_send_flow(callback: CallbackQuery, state: FSMContext):
     )
 
 
-@router.callback_query(F.data.startswith("wallet_send_"))
-async def select_currency(callback: CallbackQuery, state: FSMContext):
+@router.message(WalletManagementStates.selecting_currency_to_send)
+async def select_currency(message: Message, state: FSMContext):
     """Handle currency selection."""
-    currency = callback.data.split("_")[2].upper()  # BNB or USDT
+    if message.text not in ["🔶 BNB (Native)", "💵 USDT (BEP-20)"]:
+        if message.text == "◀️ Назад к кошельку":
+            await back_to_dashboard(message, state)
+            return
+        await message.answer("❌ Выберите валюту из меню:")
+        return
+
+    currency = "BNB" if "BNB" in message.text else "USDT"
     await state.update_data(send_currency=currency)
     await state.set_state(WalletManagementStates.input_address_to_send)
     
-    await callback.message.edit_text(
+    await message.answer(
         f"📤 **Отправка {currency}**\n\n"
         "Введите адрес получателя (BSC/BEP-20):",
         parse_mode="Markdown",
@@ -180,6 +181,10 @@ async def select_currency(callback: CallbackQuery, state: FSMContext):
 @router.message(WalletManagementStates.input_address_to_send)
 async def input_address(message: Message, state: FSMContext):
     """Handle address input."""
+    if message.text == "◀️ Назад к кошельку":
+        await back_to_dashboard(message, state)
+        return
+
     address = message.text.strip()
     bs = get_blockchain_service()
     
@@ -204,45 +209,50 @@ async def input_address(message: Message, state: FSMContext):
     )
 
 
-@router.callback_query(F.data.startswith("wallet_amount_"))
-async def select_amount_percent(callback: CallbackQuery, state: FSMContext):
-    """Handle percentage amount selection."""
-    percent = int(callback.data.split("_")[2])
+@router.message(WalletManagementStates.input_amount_to_send)
+async def process_amount_input(message: Message, state: FSMContext):
+    """Handle amount input (text or percentage buttons)."""
+    if message.text == "❌ Отмена":
+        await back_to_dashboard(message, state)
+        return
+
     bs = get_blockchain_service()
     data = await state.get_data()
     currency = data["send_currency"]
     
-    # Get balance
-    if currency == "BNB":
-        balance = await bs.get_native_balance(bs.wallet_address)
-    else:
-        balance = await bs.get_usdt_balance(bs.wallet_address)
-        
-    if not balance:
-        await callback.answer("❌ Ошибка получения баланса", show_alert=True)
-        return
-
-    # Calculate amount
-    amount = balance * Decimal(percent) / Decimal(100)
+    amount = None
     
-    # Leave some dust for gas if BNB
-    if currency == "BNB" and percent == 100:
-        amount = amount - Decimal("0.002") # Safety margin
-        if amount < 0: amount = Decimal(0)
+    # Handle Percentage Buttons
+    if message.text in ["25%", "50%", "MAX"]:
+        # Get balance
+        if currency == "BNB":
+            balance = await bs.get_native_balance(bs.wallet_address)
+        else:
+            balance = await bs.get_usdt_balance(bs.wallet_address)
+            
+        if not balance:
+            await message.answer("❌ Ошибка получения баланса")
+            return
 
-    await state.update_data(send_amount=str(amount))
-    await _show_confirmation(callback.message, state)
-
-
-@router.message(WalletManagementStates.input_amount_to_send)
-async def input_amount(message: Message, state: FSMContext):
-    """Handle manual amount input."""
-    try:
-        amount = Decimal(message.text.replace(",", "."))
-        if amount <= 0: raise ValueError
-    except ValueError:
-        await message.answer("❌ Неверный формат суммы. Введите число.")
-        return
+        percent_map = {"25%": 25, "50%": 50, "MAX": 100}
+        percent = percent_map[message.text]
+        
+        # Calculate amount
+        amount = balance * Decimal(percent) / Decimal(100)
+        
+        # Leave some dust for gas if BNB and MAX
+        if currency == "BNB" and percent == 100:
+            amount = amount - Decimal("0.002") # Safety margin
+            if amount < 0: amount = Decimal(0)
+            
+    else:
+        # Handle Manual Input
+        try:
+            amount = Decimal(message.text.replace(",", "."))
+            if amount <= 0: raise ValueError
+        except ValueError:
+            await message.answer("❌ Неверный формат суммы. Введите число.")
+            return
 
     await state.update_data(send_amount=str(amount))
     await _show_confirmation(message, state)
@@ -265,22 +275,18 @@ async def _show_confirmation(message: Message, state: FSMContext):
         "Проверьте данные и подтвердите отправку."
     )
     
-    # If called from message handler, answer. If from callback, edit.
-    if isinstance(message, Message):
-        await message.answer(text, parse_mode="Markdown", reply_markup=wallet_confirm_keyboard())
-    else:
-        await message.edit_text(text, parse_mode="Markdown", reply_markup=wallet_confirm_keyboard())
+    await message.answer(text, parse_mode="Markdown", reply_markup=wallet_confirm_keyboard())
 
 
-@router.callback_query(F.data == "wallet_confirm_tx")
-async def execute_transaction(callback: CallbackQuery, state: FSMContext):
+@router.message(F.text == "✅ Подтвердить отправку", WalletManagementStates.confirm_transaction)
+async def execute_transaction(message: Message, state: FSMContext):
     """Execute the transaction."""
     data = await state.get_data()
     currency = data["send_currency"]
     address = data["send_address"]
     amount = float(data["send_amount"])
     
-    await callback.message.edit_text("⏳ **Отправка транзакции...**\nОжидайте подтверждения сети.")
+    await message.answer("⏳ **Отправка транзакции...**\nОжидайте подтверждения сети.")
     
     bs = get_blockchain_service()
     
@@ -291,7 +297,7 @@ async def execute_transaction(callback: CallbackQuery, state: FSMContext):
             result = await bs.send_payment(address, amount)
             
         if result["success"]:
-            await callback.message.edit_text(
+            await message.answer(
                 f"✅ **Транзакция отправлена!**\n\n"
                 f"🔗 Hash: `{result['tx_hash']}`\n\n"
                 f"[Посмотреть в Explorer](https://bscscan.com/tx/{result['tx_hash']})",
@@ -300,7 +306,7 @@ async def execute_transaction(callback: CallbackQuery, state: FSMContext):
                 reply_markup=wallet_back_keyboard()
             )
         else:
-            await callback.message.edit_text(
+            await message.answer(
                 f"❌ **Ошибка отправки**\n\n"
                 f"Причина: {result['error']}",
                 reply_markup=wallet_back_keyboard()
@@ -308,14 +314,13 @@ async def execute_transaction(callback: CallbackQuery, state: FSMContext):
             
     except Exception as e:
         logger.error(f"Wallet send error: {e}")
-        await callback.message.edit_text(
+        await message.answer(
             f"❌ **Критическая ошибка**\n{str(e)}",
             reply_markup=wallet_back_keyboard()
         )
 
 
-@router.callback_query(F.data == "wallet_cancel_send")
-async def cancel_send(callback: CallbackQuery, state: FSMContext):
+@router.message(F.text == "❌ Отменить", WalletManagementStates.confirm_transaction)
+async def cancel_send(message: Message, state: FSMContext):
     """Cancel sending."""
-    await _show_dashboard(callback.message, state, edit_mode=True)
-
+    await _show_dashboard(message, state)

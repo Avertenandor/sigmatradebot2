@@ -1,95 +1,97 @@
 """
-Wallet Management Keyboards.
+Wallet Management Keyboards (Reply).
 """
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
+from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
 
-def wallet_dashboard_keyboard(
-    show_private_key: bool = False
-) -> InlineKeyboardMarkup:
+def wallet_dashboard_keyboard() -> ReplyKeyboardMarkup:
     """
     Main wallet dashboard keyboard.
     """
-    builder = InlineKeyboardBuilder()
+    builder = ReplyKeyboardBuilder()
     
     # Row 1: Send / Receive
     builder.row(
-        InlineKeyboardButton(text="📤 Отправить", callback_data="wallet_send_menu"),
-        InlineKeyboardButton(text="📥 Получить", callback_data="wallet_receive"),
+        KeyboardButton(text="📤 Отправить"),
+        KeyboardButton(text="📥 Получить"),
     )
     
-    # Row 2: Refresh
+    # Row 2: Refresh / Settings
     builder.row(
-        InlineKeyboardButton(text="🔄 Обновить баланс", callback_data="wallet_refresh"),
-        InlineKeyboardButton(text="⚙️ Настройки", callback_data="wallet_settings"),
+        KeyboardButton(text="🔄 Обновить баланс"),
+        KeyboardButton(text="⚙️ Настройки"),
     )
     
-    return builder.as_markup()
+    # Row 3: Back
+    builder.row(
+        KeyboardButton(text="👑 Админ-панель"),
+    )
+    
+    return builder.as_markup(resize_keyboard=True)
 
 
-def wallet_currency_selection_keyboard() -> InlineKeyboardMarkup:
+def wallet_currency_selection_keyboard() -> ReplyKeyboardMarkup:
     """
     Currency selection for sending.
     """
-    builder = InlineKeyboardBuilder()
+    builder = ReplyKeyboardBuilder()
     
     builder.row(
-        InlineKeyboardButton(text="🔶 BNB (Native)", callback_data="wallet_send_bnb"),
-        InlineKeyboardButton(text="💵 USDT (BEP-20)", callback_data="wallet_send_usdt"),
+        KeyboardButton(text="🔶 BNB (Native)"),
+        KeyboardButton(text="💵 USDT (BEP-20)"),
     )
     
     builder.row(
-        InlineKeyboardButton(text="🔙 Назад", callback_data="wallet_back_to_dashboard"),
+        KeyboardButton(text="◀️ Назад к кошельку"),
     )
     
-    return builder.as_markup()
+    return builder.as_markup(resize_keyboard=True)
 
 
-def wallet_amount_keyboard() -> InlineKeyboardMarkup:
+def wallet_amount_keyboard() -> ReplyKeyboardMarkup:
     """
     Quick amount selection.
     """
-    builder = InlineKeyboardBuilder()
+    builder = ReplyKeyboardBuilder()
     
     builder.row(
-        InlineKeyboardButton(text="25%", callback_data="wallet_amount_25"),
-        InlineKeyboardButton(text="50%", callback_data="wallet_amount_50"),
-        InlineKeyboardButton(text="MAX", callback_data="wallet_amount_100"),
+        KeyboardButton(text="25%"),
+        KeyboardButton(text="50%"),
+        KeyboardButton(text="MAX"),
     )
     
     builder.row(
-        InlineKeyboardButton(text="❌ Отмена", callback_data="wallet_cancel_send"),
+        KeyboardButton(text="❌ Отмена"),
     )
     
-    return builder.as_markup()
+    return builder.as_markup(resize_keyboard=True)
 
 
-def wallet_confirm_keyboard() -> InlineKeyboardMarkup:
+def wallet_confirm_keyboard() -> ReplyKeyboardMarkup:
     """
     Transaction confirmation.
     """
-    builder = InlineKeyboardBuilder()
+    builder = ReplyKeyboardBuilder()
     
     builder.row(
-        InlineKeyboardButton(text="✅ Подтвердить отправку", callback_data="wallet_confirm_tx"),
+        KeyboardButton(text="✅ Подтвердить отправку"),
     )
     
     builder.row(
-        InlineKeyboardButton(text="❌ Отменить", callback_data="wallet_cancel_send"),
+        KeyboardButton(text="❌ Отменить"),
     )
     
-    return builder.as_markup()
+    return builder.as_markup(resize_keyboard=True)
 
 
-def wallet_back_keyboard() -> InlineKeyboardMarkup:
+def wallet_back_keyboard() -> ReplyKeyboardMarkup:
     """
     Simple back button.
     """
-    builder = InlineKeyboardBuilder()
+    builder = ReplyKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="🔙 Назад", callback_data="wallet_back_to_dashboard"),
+        KeyboardButton(text="◀️ Назад к кошельку"),
     )
-    return builder.as_markup()
-
+    return builder.as_markup(resize_keyboard=True)
