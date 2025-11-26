@@ -337,3 +337,46 @@ class DepositService:
             "total_users": unique_users,
             "deposits_by_level": deposits_by_level,
         }
+
+    async def get_detailed_stats(self) -> list[dict]:
+        """
+        Get detailed deposit statistics for admin.
+        
+        Returns:
+            List of dicts with deposit details:
+            - user_id, username
+            - amount
+            - roi_paid, roi_cap
+            - next_accrual_at
+            - status
+        """
+        from sqlalchemy import select
+        from app.models.user import User
+
+        # Join User to get username
+        stmt = (
+            select(Deposit, User)
+            .join(User, Deposit.user_id == User.id)
+            .where(
+                Deposit.status == TransactionStatus.CONFIRMED.value,
+                Deposit.is_roi_completed == False # Active deposits only
+            )
+            .order_by(Deposit.created_at.desc())
+        )
+        result = await self.session.execute(stmt)
+        rows = result.all()
+
+        stats = []
+        for deposit, user in rows:
+            stats.append({
+                "deposit_id": deposit.id,
+                "user_id": user.id,
+                "username": user.username or str(user.telegram_id),
+                "amount": deposit.amount,
+                "roi_paid": deposit.roi_paid_amount,
+                "roi_cap": deposit.roi_cap_amount,
+                "next_accrual_at": deposit.next_accrual_at,
+                "level": deposit.level
+            })
+        
+        return stats
