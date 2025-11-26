@@ -12,7 +12,8 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from sqlalchemy.pool import NullPool
 
 from app.config.settings import settings
-from app.models.deposit import Deposit, DepositStatus
+from app.models.deposit import Deposit
+from app.models.enums import TransactionStatus
 from app.models.global_settings import GlobalSettings
 from app.repositories.global_settings_repository import GlobalSettingsRepository
 
@@ -52,7 +53,7 @@ async def fix_deposit_accrual_dates():
             stmt = (
                 select(Deposit)
                 .where(
-                    Deposit.status == DepositStatus.CONFIRMED.value,
+                    Deposit.status == TransactionStatus.CONFIRMED.value,
                     Deposit.next_accrual_at.is_(None),
                     Deposit.is_roi_completed == False
                 )
