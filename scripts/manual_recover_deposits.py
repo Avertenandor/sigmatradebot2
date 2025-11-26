@@ -163,7 +163,7 @@ async def recover_deposits():
     except Exception as e:
         logger.exception(f"Script error: {e}")
     finally:
-        await blockchain.close()
+        blockchain.close()
         await engine.dispose()
         logger.info("🏁 Recovery script finished.")
 
