@@ -49,7 +49,7 @@ async def audit_deposits():
             # 1. Get all confirmed deposits
             stmt = (
                 select(Deposit)
-                .options(selectinload(Deposit.user), selectinload(Deposit.rewards))
+                .options(selectinload(Deposit.user))
                 .where(Deposit.status == DepositStatus.CONFIRMED.value)
                 .order_by(Deposit.created_at)
             )
@@ -60,8 +60,13 @@ async def audit_deposits():
 
             for deposit in deposits:
                 user = deposit.user
-                rewards = deposit.rewards
-                total_rewards = sum(r.amount for r in rewards)
+                
+                # Fetch rewards manually since relationship might be missing
+                r_stmt = select(DepositReward).where(DepositReward.deposit_id == deposit.id).order_by(DepositReward.calculated_at)
+                r_result = await session.execute(r_stmt)
+                rewards = r_result.scalars().all()
+                
+                total_rewards = sum(r.reward_amount for r in rewards) # Note: reward_amount, not amount
                 last_reward = rewards[-1] if rewards else None
                 
                 print(f"\n--- Deposit ID: {deposit.id} ---")
@@ -76,14 +81,18 @@ async def audit_deposits():
                 print(f"Is Completed: {deposit.is_roi_completed}")
                 
                 if last_reward:
-                    print(f"Last Reward: {last_reward.amount} at {last_reward.created_at}")
+                    print(f"Last Reward: {last_reward.reward_amount} at {last_reward.calculated_at}")
                 else:
                     print("No rewards yet.")
 
                 # Check for issues
                 if deposit.next_accrual_at:
                     # Handle timezone awareness
-                    now = datetime.now(deposit.next_accrual_at.tzinfo)
+                    if deposit.next_accrual_at.tzinfo:
+                        now = datetime.now(deposit.next_accrual_at.tzinfo)
+                    else:
+                        now = datetime.utcnow() # Fallback if naive (shouldn't happen with new models)
+                        
                     if deposit.next_accrual_at < now:
                         print(f"⚠️ ALERT: Next accrual was due at {deposit.next_accrual_at} (Past due!)")
                 
