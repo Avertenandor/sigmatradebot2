@@ -69,7 +69,7 @@ class DepositService:
         async with lock.lock(lock_key, timeout=30, blocking=True, blocking_timeout=5.0) as acquired:
             if not acquired:
                 logger.warning(
-                    f"Could not acquire lock for creating deposit for user {user_id}"
+                    f"Could not acquire lock for creating deposit for user {user_id} (key: {lock_key})"
                 )
                 raise ValueError(
                     "Операция уже выполняется. Пожалуйста, подождите."

@@ -284,11 +284,13 @@ async def process_tx_hash(
             return
         
         deposit_service = DepositService(session)
+        redis_client = data.get("redis_client")
         deposit = await deposit_service.create_deposit(
             user_id=user.id,
             level=level,
             amount=expected_amount,
             tx_hash=tx_hash,
+            redis_client=redis_client,
         )
     else:
         # NEW pattern: short transaction for validation and creation
@@ -310,11 +312,13 @@ async def process_tx_hash(
                     return
                 
                 deposit_service = DepositService(session)
+                redis_client = data.get("redis_client")
                 deposit = await deposit_service.create_deposit(
                     user_id=user.id,
                     level=level,
                     amount=expected_amount,
                     tx_hash=tx_hash,
+                    redis_client=redis_client,
                 )
         # Transaction closed here
 
