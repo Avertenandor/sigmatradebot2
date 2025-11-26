@@ -1,0 +1,42 @@
+---
+description: Ensure proper escaping of user input in Markdown formatted messages to prevent Telegram API errors.
+globs: ["**/*.py"]
+---
+
+# Markdown Escaping Rule
+
+When using `parse_mode="Markdown"` or `parse_mode="MarkdownV2"` in `aiogram`, ALWAYS escape user-provided content (usernames, first names, last names, titles, etc.) before inserting it into the message string. Failure to do so will cause `TelegramBadRequest: can't parse entities` if the user input contains Markdown control characters (e.g., `_`, `*`, `[`, `` ` ``).
+
+## Guidelines
+
+1.  **Identify User Input:** Any string that comes from a user or external source (e.g., `user.username`, `message.text`, `first_name`) and is being interpolated into a Markdown string.
+2.  **Use `escape_md`:** Use the project's helper function `bot.utils.formatters.escape_md(text)` to escape the content.
+3.  **Avoid Raw Interpolation:** Do NOT do `f"Hello @{user.username}"` if `parse_mode="Markdown"` is set.
+
+## Example
+
+**INCORRECT:**
+
+```python
+await message.answer(
+    f"User: @{user.username}",
+    parse_mode="Markdown"
+)
+```
+
+**CORRECT:**
+
+```python
+from bot.utils.formatters import escape_md
+
+username = escape_md(user.username) if user.username else "unknown"
+await message.answer(
+    f"User: @{username}",
+    parse_mode="Markdown"
+)
+```
+
+## Exceptions
+
+-   If `parse_mode` is `None` or `"HTML"`, Markdown escaping is not needed (HTML escaping rules apply for HTML).
+-   Data that is guaranteed to be safe (e.g., IDs which are integers, enums, hardcoded strings) does not need escaping.

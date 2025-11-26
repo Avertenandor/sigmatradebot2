@@ -29,6 +29,7 @@ from bot.keyboards.reply import (
 from bot.states.admin_states import AdminStates
 from bot.utils.admin_utils import clear_state_preserve_admin_token
 from bot.utils.menu_buttons import is_menu_button
+from bot.utils.formatters import escape_md
 
 router = Router(name="admin_users")
 
@@ -206,14 +207,6 @@ async def handle_user_selection(
         return
         
     await show_user_profile(message, user, state, session)
-
-
-
-def escape_md(text: str | None) -> str:
-    """Escape special characters for Markdown V1"""
-    if not text:
-        return ""
-    return text.replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")
 
 
 async def show_user_profile(
@@ -721,7 +714,9 @@ async def handle_block_user_input(  # noqa: C901
         except Exception as e:
             logger.warning(f"Failed to send notification to user {user.telegram_id}: {e}")
 
-        display_name = user.username or f"ID {user.telegram_id}"
+        username = escape_md(user.username) if user.username else None
+        display_name = f"@{username}" if username else f"ID {user.telegram_id}"
+        
         await message.reply(
             f"✅ Пользователь {display_name} заблокирован.\n"
             f"Уведомление отправлено пользователю.",
@@ -838,7 +833,9 @@ async def handle_terminate_user_input(  # noqa: C901
         except Exception as e:
             logger.warning(f"Failed to send notification to user {user.telegram_id}: {e}")
 
-        display_name = user.username or f"ID {user.telegram_id}"
+        username = escape_md(user.username) if user.username else None
+        display_name = f"@{username}" if username else f"ID {user.telegram_id}"
+        
         await message.reply(
             f"✅ Аккаунт {display_name} терминирован.\n"
             f"Уведомление отправлено пользователю.",

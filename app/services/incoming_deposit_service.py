@@ -15,6 +15,7 @@ from app.models.enums import TransactionStatus
 from app.services.deposit_service import DepositService
 from app.services.notification_service import NotificationService
 from app.config.settings import settings
+from bot.utils.formatters import escape_md
 
 class IncomingDepositService:
     """
@@ -122,9 +123,10 @@ class IncomingDepositService:
                 )
                 
                 # Notify Admin
+                username = escape_md(user.username) if user.username else "без юзернейма"
                 await self.notification_service.notify_admins(
                     f"💰 **Новый автоматический депозит**\n"
-                    f"User: {user.id} (@{user.username})\n"
+                    f"User: {user.id} (@{username})\n"
                     f"Amount: {amount} USDT\n"
                     f"TX: `{tx_hash}`"
                 )

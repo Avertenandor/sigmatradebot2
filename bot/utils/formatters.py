@@ -53,3 +53,20 @@ def format_transaction_hash(tx_hash: str, show_chars: int = 6) -> str:
         return tx_hash
 
     return f"{tx_hash[:show_chars]}...{tx_hash[-show_chars:]}"
+
+
+def escape_md(text: str | None) -> str:
+    """
+    Escape special characters for Markdown V1.
+    
+    Escapes: _ * ` [
+    
+    Args:
+        text: Input text
+        
+    Returns:
+        Escaped text safe for Markdown
+    """
+    if not text:
+        return ""
+    return str(text).replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")

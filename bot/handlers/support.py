@@ -11,6 +11,7 @@ from aiogram.types import Message
 from app.models.user import User
 from bot.keyboards.reply import support_keyboard
 from bot.states.support_states import SupportStates
+from bot.utils.formatters import escape_md
 
 router = Router(name="support")
 
@@ -160,17 +161,18 @@ async def process_ticket_message(
         if bot_instance:
             # Format admin notification
             if user:
+                username = escape_md(user.username) if user.username else "пользователь"
                 admin_text = (
                     f"🆕 *Новое обращение #{ticket.id}*\n\n"
-                    f"От: @{user.username or 'пользователь'} "
+                    f"От: @{username} "
                     f"(`{user.telegram_id}`)\n"
                     f"Текст: {message.text}"
                 )
             else:
                 # Guest ticket
                 username = (
-                    message.from_user.username
-                    if message.from_user
+                    escape_md(message.from_user.username)
+                    if message.from_user and message.from_user.username
                     else "гость"
                 )
                 admin_text = (
