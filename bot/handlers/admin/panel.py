@@ -338,6 +338,9 @@ async def handle_admin_stats(
     deposit_stats = await deposit_service.get_platform_stats()
     referral_stats = await referral_service.get_platform_referral_stats()
 
+    # R4-X: Detailed deposit stats
+    detailed_deposits = await deposit_service.get_detailed_stats()
+
     text = f"""
 📊 **Статистика платформы**
 
@@ -358,6 +361,24 @@ async def handle_admin_stats(
 • Уровень 4: {deposit_stats["deposits_by_level"].get(4, 0)} депозитов
 • Уровень 5: {deposit_stats["deposits_by_level"].get(5, 0)} депозитов
 
+**📋 Детализация активных депозитов:**
+"""
+
+    if not detailed_deposits:
+        text += "Нет активных депозитов.\n"
+    else:
+        for d in detailed_deposits[:10]:  # Show top 10 recent
+            next_accrual = d["next_accrual_at"].strftime("%d.%m %H:%M") if d["next_accrual_at"] else "Н/Д"
+            text += (
+                f"👤 @{d['username']} (ID: {d['user_id']})\n"
+                f"   💵 Деп: {format_usdt(d['amount'])} | Выплачено: {format_usdt(d['roi_paid'])}\n"
+                f"   ⏳ След. нач: {next_accrual}\n\n"
+            )
+        
+        if len(detailed_deposits) > 10:
+            text += f"... и еще {len(detailed_deposits) - 10} депозитов\n"
+
+    text += f"""
 **Рефералы:**
 🤝 Всего связей: {referral_stats["total_referrals"]}
 💰 Всего начислено: {format_usdt(referral_stats["total_earnings"])} USDT
