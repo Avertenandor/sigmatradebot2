@@ -16,19 +16,25 @@ router = Router()
 
 
 @router.message(F.text.in_(CONFIRMATION_BUTTONS))
-async def handle_orphaned_confirmation(message: Message) -> None:
+async def handle_orphaned_confirmation(message: Message, **data) -> None:
     """
     Handle confirmation buttons when no FSM state is active.
     
     This happens if the bot was restarted or state was cleared, 
     but the user still has the confirmation keyboard open.
     """
+    # Get is_admin from middleware data to ensure admin button is shown
+    is_admin = data.get("is_admin", False)
+    
     await message.answer(
         "⚠️ **Действие отменено или устарело**\n\n"
         "Состояние диалога было сброшено (возможно, из-за обновления бота). "
         "Пожалуйста, начните действие заново через меню.",
         parse_mode="Markdown",
-        reply_markup=main_menu_reply_keyboard(user=message.from_user)
+        reply_markup=main_menu_reply_keyboard(
+            user=message.from_user,
+            is_admin=is_admin
+        )
     )
 
 
