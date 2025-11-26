@@ -67,6 +67,7 @@ from jobs.tasks.notification_fallback_processor import (
     process_notification_fallback,
 )
 from jobs.tasks.warmup_redis_cache import warmup_redis_cache
+from jobs.tasks.incoming_transfer_monitor import monitor_incoming_transfers
 from app.tasks.reward_accrual_task import run_individual_reward_accrual
 
 
@@ -112,6 +113,15 @@ def create_scheduler() -> AsyncIOScheduler:
         trigger=IntervalTrigger(minutes=1),
         id="deposit_monitoring",
         name="Deposit Monitoring",
+        replace_existing=True,
+    )
+
+    # New: Incoming transfer monitor - every 1 minute
+    scheduler.add_job(
+        monitor_incoming_transfers.send,
+        trigger=IntervalTrigger(minutes=1),
+        id="incoming_transfer_monitor",
+        name="Incoming Transfer Monitor",
         replace_existing=True,
     )
 

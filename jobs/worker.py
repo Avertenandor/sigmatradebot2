@@ -54,6 +54,7 @@ from jobs.tasks import (  # noqa: F401
     deposit_monitoring,
     notification_retry,
     payment_retry,
+    incoming_transfer_monitor,
 )
 
 logger.info("Dramatiq worker initialized with all tasks")

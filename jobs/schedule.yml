@@ -1,0 +1,11 @@
+# Schedule incoming transfer monitor to run every minute
+cron:
+  - name: "Monitor Incoming Transfers"
+    minute: "*"
+    hour: "*"
+    day: "*"
+    month: "*"
+    day_of_week: "*"
+    command: "incoming_transfer_monitor.monitor_incoming_transfers"
+    args: []
+
