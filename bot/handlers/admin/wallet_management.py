@@ -66,23 +66,26 @@ async def _show_dashboard(message: Message, state: FSMContext) -> None:
         cold_usdt_bal = await bs.get_usdt_balance(cold_address) or Decimal("0")
 
     # Formatting
-    def fmt(val):
+    def fmt_bnb(val):
+        return f"{val:.5f}" if val is not None else "Err"
+
+    def fmt_usdt(val):
         return f"{val:.4f}" if val is not None else "Err"
 
     text = (
         "🔐 **Админ-кошелек (Dashboard)**\n\n"
         "🔥 **HOT WALLET (Выплатной)**\n"
         f"Адрес: `{hot_address}`\n"
-        f"🔶 BNB: **{fmt(hot_bnb_bal)}**\n"
-        f"💵 USDT: **{fmt(hot_usdt_bal)}**\n"
+        f"🔶 BNB: **{fmt_bnb(hot_bnb_bal)}**\n"
+        f"💵 USDT: **{fmt_usdt(hot_usdt_bal)}**\n"
     )
     
     if has_cold:
         text += (
             "\n❄️ **INPUT WALLET (Приемный)**\n"
             f"Адрес: `{cold_address}`\n"
-            f"🔶 BNB: **{fmt(cold_bnb_bal)}**\n"
-            f"💵 USDT: **{fmt(cold_usdt_bal)}**\n"
+            f"🔶 BNB: **{fmt_bnb(cold_bnb_bal)}**\n"
+            f"💵 USDT: **{fmt_usdt(cold_usdt_bal)}**\n"
             "_(Только просмотр, ключи не хранятся)_\n"
         )
         
