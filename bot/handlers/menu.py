@@ -113,7 +113,8 @@ async def handle_main_menu(
     logger.info(f"[MENU] handle_main_menu called for user {telegram_id}, text: {message.text}")
     
     user: User | None = data.get("user")
-    logger.info(f"[MENU] User from data: {user.id if user else None}, data keys: {list(data.keys())}")
+    is_admin = data.get("is_admin")
+    logger.info(f"[MENU] User from data: {user.id if user else None}, is_admin={is_admin}, data keys: {list(data.keys())}")
     
     if not user:
         # Если по какой-то причине DI не предоставил user, просто очистим
