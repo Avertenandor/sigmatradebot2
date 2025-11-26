@@ -30,8 +30,21 @@ def main_menu_reply_keyboard(
     Returns:
         ReplyKeyboardMarkup with main menu buttons
     """
+    # Safely access telegram_id
     user_id = user.id if user else None
-    telegram_id = user.telegram_id if user else None
+    
+    # Fix for AttributeError: 'User' object has no attribute 'telegram_id'
+    # In fallback handler, message.from_user is a Telegram User object (aiogram), 
+    # which has 'id', NOT 'telegram_id'.
+    # Our database User model (app.models.user) has 'telegram_id'.
+    # We need to handle both cases.
+    telegram_id = None
+    if user:
+        if hasattr(user, 'telegram_id'):
+            telegram_id = user.telegram_id
+        elif hasattr(user, 'id'):
+            telegram_id = user.id
+            
     logger.debug(
         f"[KEYBOARD] main_menu_reply_keyboard called: "
         f"user_id={user_id}, telegram_id={telegram_id}, "
