@@ -451,6 +451,27 @@ async def process_wallet(
                         )
                         await state.clear()
                         return
+                    
+                    # Check if wallet is already used by another user (Unique constraint)
+                    from app.services.user_service import UserService
+                    user_service = UserService(session)
+                    existing_user = await user_service.get_by_wallet(wallet_address)
+                    if existing_user:
+                        telegram_id = message.from_user.id if message.from_user else None
+                        if existing_user.telegram_id != telegram_id:
+                             await message.answer(
+                                "❌ Этот кошелек уже привязан к другому пользователю!\n"
+                                "Пожалуйста, используйте другой кошелек."
+                            )
+                             return
+                        else:
+                            await message.answer(
+                                "ℹ️ Этот кошелек уже привязан к вашему аккаунту.\n"
+                                "Используйте /start для входа."
+                            )
+                            await state.clear()
+                            return
+
         except (OperationalError, InterfaceError, DatabaseError) as e:
             logger.error(
                 f"Database error checking wallet blacklist: {e}", exc_info=True
@@ -470,7 +491,10 @@ async def process_wallet(
                 "обратитесь в поддержку."
             )
             return
+        
         user_service = UserService(session)
+        
+        # Check if wallet is already used
         existing = await user_service.get_by_wallet(wallet_address)
     else:
         # NEW pattern: short transaction

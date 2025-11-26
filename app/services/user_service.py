@@ -223,6 +223,13 @@ class UserService:
         Returns:
             Updated user or None
         """
+        # Validate wallet uniqueness (additional check besides DB constraint)
+        if "wallet_address" in data:
+            wallet_address = data["wallet_address"]
+            existing = await self.user_repo.get_by_wallet_address(wallet_address)
+            if existing and existing.id != user_id:
+                raise ValueError("Wallet address is already used by another user")
+
         user = await self.user_repo.update(user_id, **data)
 
         if user:
