@@ -136,10 +136,27 @@ async def show_receive_info(message: Message):
 
 @router.message(F.text == "⚙️ Настройки", WalletManagementStates.menu)
 async def go_to_settings(message: Message, state: FSMContext, **data: Any):
-    """Go to wallet settings."""
+    """Go to wallet settings (Backward compatibility but now integrated)."""
     from bot.handlers.admin.wallet_key_setup import handle_wallet_menu
-    
     await handle_wallet_menu(message, state, **data)
+
+
+@router.message(F.text == "📥 Настроить кошелек для входа", WalletManagementStates.menu)
+async def dashboard_input_wallet_setup(message: Message, state: FSMContext, **data: Any):
+    """Start input wallet setup from dashboard."""
+    from bot.handlers.admin.wallet_key_setup import start_input_wallet_setup
+    # We need to clear current state first to allow wallet setup state
+    await state.set_state(None)
+    await start_input_wallet_setup(message, state, **data)
+
+
+@router.message(F.text == "📤 Настроить кошелек для выдачи", WalletManagementStates.menu)
+async def dashboard_output_wallet_setup(message: Message, state: FSMContext, **data: Any):
+    """Start output wallet setup from dashboard."""
+    from bot.handlers.admin.wallet_key_setup import start_output_wallet_setup
+    # We need to clear current state first to allow wallet setup state
+    await state.set_state(None)
+    await start_output_wallet_setup(message, state, **data)
 
 
 # --- SEND FLOW ---

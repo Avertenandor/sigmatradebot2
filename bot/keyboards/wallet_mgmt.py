@@ -18,14 +18,15 @@ def wallet_dashboard_keyboard() -> ReplyKeyboardMarkup:
         KeyboardButton(text="📥 Получить"),
     )
     
-    # Row 2: Refresh / Settings
+    # Row 2: Setup Keys/Addresses (Old capabilities)
     builder.row(
-        KeyboardButton(text="🔄 Обновить баланс"),
-        KeyboardButton(text="⚙️ Настройки"),
+        KeyboardButton(text="📥 Настроить кошелек для входа"),
+        KeyboardButton(text="📤 Настроить кошелек для выдачи"),
     )
     
-    # Row 3: Back
+    # Row 3: Refresh / Admin Panel
     builder.row(
+        KeyboardButton(text="🔄 Обновить баланс"),
         KeyboardButton(text="👑 Админ-панель"),
     )
     
