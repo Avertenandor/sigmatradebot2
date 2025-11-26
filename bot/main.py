@@ -347,6 +347,10 @@ async def main() -> None:  # noqa: C901
     dp.include_router(admin_support.router)
     dp.include_router(user_messages.router)
     
+    # Fallback handler for orphaned states (must be BEFORE debug_unhandled)
+    from bot.handlers import fallback
+    dp.include_router(fallback.router)
+    
     # Debug handler (MUST BE LAST to catch unhandled messages)
     from bot.handlers import debug_unhandled
     dp.include_router(debug_unhandled.router)
