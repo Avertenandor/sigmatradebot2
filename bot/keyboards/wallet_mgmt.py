@@ -23,6 +23,7 @@ def wallet_dashboard_keyboard(
     # Row 2: Refresh
     builder.row(
         InlineKeyboardButton(text="🔄 Обновить баланс", callback_data="wallet_refresh"),
+        InlineKeyboardButton(text="⚙️ Настройки", callback_data="wallet_settings"),
     )
     
     return builder.as_markup()

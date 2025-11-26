@@ -112,6 +112,16 @@ async def back_to_dashboard(callback: CallbackQuery, state: FSMContext):
     await _show_dashboard(callback.message, state, edit_mode=True)
 
 
+@router.callback_query(F.data == "wallet_settings")
+async def go_to_settings(callback: CallbackQuery, state: FSMContext, **data: Any):
+    """Go to wallet settings (Reply Keyboard)."""
+    from bot.handlers.admin.wallet_key_setup import handle_wallet_menu
+    
+    await callback.answer()
+    # Call setup menu (which uses Reply Keyboard)
+    await handle_wallet_menu(callback.message, state, **data)
+
+
 @router.callback_query(F.data == "wallet_receive")
 async def show_receive_info(callback: CallbackQuery):
     """Show receive addresses."""

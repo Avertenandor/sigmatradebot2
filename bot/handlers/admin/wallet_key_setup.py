@@ -38,8 +38,12 @@ class WalletSetupStates(StatesGroup):
 async def handle_wallet_menu(message: Message, state: FSMContext, **data: Any) -> None:
     """Show wallet management menu."""
     # Check admin permissions
+    user = data.get("event_from_user")
+    if not user:
+        user = message.from_user
+        
     admin_ids = settings.get_admin_ids()
-    if not admin_ids or message.from_user.id != admin_ids[0]:
+    if not admin_ids or not user or user.id != admin_ids[0]:
         await message.answer("❌ Команда доступна только главному администратору")
         return
 
@@ -57,62 +61,21 @@ async def handle_wallet_menu(message: Message, state: FSMContext, **data: Any) -
     )
 
 
-@router.message(F.text == "🔐 Управление кошельком")
-async def cmd_wallet_menu(message: Message, state: FSMContext, **data: Any):
-    """Entry point for wallet management."""
-    await handle_wallet_menu(message, state, **data)
+# Old handlers replaced by wallet_management.py
+# Keeping file for backward compatibility of existing FSM states if any user is stuck
+
 
 
 @router.message(F.text == "📊 Статус кошельков")
-async def handle_wallet_status(message: Message, **data: Any):
-    """Show wallet status."""
-    admin_ids = settings.get_admin_ids()
-    if not admin_ids or message.from_user.id != admin_ids[0]:
-        return
-
-    # Check Input Wallet
-    input_wallet = settings.system_wallet_address
-    input_status = "✅ Установлен" if input_wallet and input_wallet != "0x" + "0"*40 else "⚠️ Не настроен"
-    
-    # Check Output Wallet
-    output_key = settings.wallet_private_key
-    output_address = settings.wallet_address
-    
-    is_test_key = output_key == "0" * 64 or not output_key
-    
-    if is_test_key:
-        output_status = "🔴 Тестовый/Отсутствует"
-        output_address_display = "Не настроен"
-    else:
-        try:
-            account = Account.from_key(output_key)
-            actual_address = account.address
-            if actual_address.lower() == output_address.lower():
-                output_status = "✅ Активен"
-                output_address_display = f"`{output_address}`"
-            else:
-                output_status = "⚠️ Ошибка (адрес не совпадает)"
-                output_address_display = f"Conf: `{output_address}`\nReal: `{actual_address}`"
-        except Exception as e:
-            output_status = f"❌ Ошибка ключа: {str(e)}"
-            output_address_display = "Ошибка"
-
-    text = (
-        "📊 **СТАТУС КОШЕЛЬКОВ**\n\n"
-        f"📥 **Кошелек на ВХОД (Депозиты):**\n"
-        f"Статус: {input_status}\n"
-        f"Адрес: `{input_wallet}`\n\n"
-        f"📤 **Кошелек на ВЫДАЧУ (Выплаты):**\n"
-        f"Статус: {output_status}\n"
-        f"Адрес: {output_address_display}"
-    )
-    
-    from bot.keyboards.reply import admin_wallet_keyboard
-    await message.answer(
-        text,
-        parse_mode="Markdown",
-        reply_markup=admin_wallet_keyboard(),
-    )
+async def handle_wallet_status(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """Show wallet status (redirect to new dashboard)."""
+    from bot.handlers.admin.wallet_management import show_wallet_dashboard
+    await show_wallet_dashboard(message, session, state, **data)
 
 
 # ==========================================
