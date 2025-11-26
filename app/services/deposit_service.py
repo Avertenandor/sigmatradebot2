@@ -176,6 +176,7 @@ class DepositService:
         Confirm deposit after blockchain confirmation.
 
         Processes referral rewards automatically after confirmation.
+        Sets next_accrual_at based on global settings.
 
         Args:
             deposit_id: Deposit ID
@@ -184,14 +185,31 @@ class DepositService:
         Returns:
             Updated deposit
         """
-        from datetime import UTC, datetime
+        from datetime import UTC, datetime, timedelta
+        from app.repositories.global_settings_repository import GlobalSettingsRepository
 
         try:
+            # R12-1: Calculate next_accrual_at based on settings
+            settings_repo = GlobalSettingsRepository(self.session)
+            global_settings = await settings_repo.get_settings()
+            
+            roi_settings = global_settings.roi_settings or {}
+            accrual_period_hours = int(roi_settings.get("accrual_period_hours", 24))
+            
+            # Start cycle immediately or after period?
+            # "Установить next_accrual_at = datetime.now(UTC) ... чтобы запустить цикл"
+            # Usually accrual happens after period. But if we want "immediate" effect for new users, 
+            # we might set it to now + period. The previous fix set it to NOW because they were already waiting.
+            # Standard logic: Accrue after X hours.
+            now = datetime.now(UTC)
+            next_accrual = now + timedelta(hours=accrual_period_hours)
+
             deposit = await self.deposit_repo.update(
                 deposit_id,
                 status=TransactionStatus.CONFIRMED.value,
                 block_number=block_number,
-                confirmed_at=datetime.now(UTC),
+                confirmed_at=now,
+                next_accrual_at=next_accrual, # Set next accrual date
             )
 
             if deposit:
