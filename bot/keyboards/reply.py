@@ -925,6 +925,11 @@ def transaction_history_keyboard(
     builder.row(
         KeyboardButton(text="🎁 Реферальные"),
     )
+    
+    # Export button
+    builder.row(
+        KeyboardButton(text="📥 Скачать отчет (Excel)"),
+    )
 
     # Navigation buttons
     nav_buttons = []

@@ -20,6 +20,10 @@ from bot.keyboards.reply import (
     transaction_history_keyboard,
 )
 from bot.utils.formatters import format_transaction_hash, format_usdt, escape_md
+from app.services.report_service import ReportService
+from aiogram.types import BufferedInputFile
+from datetime import datetime
+from loguru import logger
 
 router = Router(name="transaction")
 
@@ -335,3 +339,38 @@ async def handle_transaction_pagination(
         page=new_page,
         **safe_data,
     )
+
+
+@router.message(F.text == "📥 Скачать отчет (Excel)")
+async def handle_export_report(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """Handle Excel report export."""
+    user: User | None = data.get("user")
+    if not user:
+        await message.answer("Ошибка: пользователь не найден")
+        return
+
+    wait_msg = await message.answer("⏳ Генерирую отчет... Пожалуйста, подождите.")
+
+    try:
+        report_service = ReportService(session)
+        # Generate report
+        report_bytes = await report_service.generate_user_report(user.id)
+        
+        # Send file
+        filename = f"SigmaTrade_Report_{user.telegram_id}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+        input_file = BufferedInputFile(report_bytes, filename=filename)
+        
+        await message.answer_document(
+            document=input_file,
+            caption="📊 Ваш полный отчет (транзакции, депозиты, рефералы)",
+        )
+        await wait_msg.delete()
+        
+    except Exception as e:
+        logger.exception(f"Failed to generate report for user {user.id}: {e}")
+        await wait_msg.edit_text("❌ Произошла ошибка при генерации отчета. Обратитесь в поддержку.")
