@@ -19,7 +19,7 @@ from bot.keyboards.reply import (
     main_menu_reply_keyboard,
     transaction_history_keyboard,
 )
-from bot.utils.formatters import format_transaction_hash, format_usdt
+from bot.utils.formatters import format_transaction_hash, format_usdt, escape_md
 
 router = Router(name="transaction")
 
@@ -161,22 +161,27 @@ async def _show_transaction_history(
         )
 
         for idx, tx in enumerate(transactions, start_num):
-            type_emoji = get_transaction_type_emoji(tx["type"])
-            status_emoji = get_status_emoji(tx["status"])
-            date = tx["created_at"].strftime("%d.%m.%Y %H:%M")
+            type_emoji = get_transaction_type_emoji(tx.type)
+            status_emoji = get_status_emoji(tx.status)
+            date = tx.created_at.strftime("%d.%m.%Y %H:%M")
+            
+            # Extract ID from composite ID if possible, or use full ID
+            tx_id_display = tx.id.split(':')[1] if ':' in tx.id else tx.id
+            
+            description = escape_md(tx.description)
 
-            text += f"{idx}. {type_emoji} *{tx['description']}*\n"
+            text += f"{idx}. {type_emoji} *{description}* (ID: `{tx_id_display}`)\n"
             text += (
-                f"   {status_emoji} {get_status_text(tx['status'])} | "
-                f"*{format_usdt(tx['amount'])} USDT*\n"
+                f"   {status_emoji} {get_status_text(tx.status)} | "
+                f"*{format_usdt(tx.amount)} USDT*\n"
             )
             text += f"   📅 {date}\n"
 
             if (
-                tx.get("tx_hash")
-                and tx["status"] == TransactionStatus.CONFIRMED
+                tx.tx_hash
+                and tx.status == TransactionStatus.CONFIRMED
             ):
-                short_hash = format_transaction_hash(tx["tx_hash"])
+                short_hash = format_transaction_hash(tx.tx_hash)
                 text += f"   🔗 TX: `{short_hash}`\n"
 
             text += "\n"
