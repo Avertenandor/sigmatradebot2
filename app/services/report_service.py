@@ -10,7 +10,8 @@ from decimal import Decimal
 
 import openpyxl
 from loguru import logger
-from openpyxl.styles import Font, PatternFill
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -100,13 +101,55 @@ class ReportService:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    def _apply_header_style(self, ws):
+        """Apply professional style to the header row."""
+        header_font = Font(bold=True, color="FFFFFF", name="Calibri", size=11)
+        header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+        alignment = Alignment(horizontal="center", vertical="center")
+        
+        for cell in ws[1]:
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = alignment
+
+    def _adjust_column_widths(self, ws):
+        """Auto-adjust column widths."""
+        for col in ws.columns:
+            max_length = 0
+            column = col[0].column_letter
+            for cell in col:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            adjusted_width = (max_length + 2) * 1.2
+            # Cap width at 50 chars to avoid super wide columns
+            ws.column_dimensions[column].width = min(adjusted_width, 50)
+
+    def _apply_zebra_striping(self, ws):
+        """Apply alternating row colors for readability."""
+        fill_even = PatternFill(start_color="E9EFF7", end_color="E9EFF7", fill_type="solid")
+        thin_border = Side(border_style="thin", color="D4D4D4")
+        border = Border(left=thin_border, right=thin_border, top=thin_border, bottom=thin_border)
+        
+        for row in ws.iter_rows(min_row=2):
+            for cell in row:
+                cell.border = border
+                if row[0].row % 2 == 0:
+                    cell.fill = fill_even
+
     def _create_general_sheet(self, wb, user: User, deposits: list[Deposit], earnings: list):
         ws = wb.active
         ws.title = "Общая информация"
         
         # Styles
-        header_font = Font(bold=True, color="FFFFFF")
-        header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+        title_font = Font(bold=True, size=14, color="366092")
+        label_font = Font(bold=True)
+        
+        ws.append(["ОТЧЕТ ПОЛЬЗОВАТЕЛЯ SIGMATRADE"])
+        ws["A1"].font = title_font
+        ws.merge_cells("A1:B1")
         
         data = [
             ("ID пользователя", user.id),
@@ -132,6 +175,11 @@ class ReportService:
         for row in data:
             ws.append(row)
 
+        # Style labels (first column)
+        for row in ws.iter_rows(min_row=2, max_col=1):
+            for cell in row:
+                cell.font = label_font
+
         # Formatting
         ws.column_dimensions['A'].width = 30
         ws.column_dimensions['B'].width = 40
@@ -155,18 +203,9 @@ class ReportService:
                 float(tx.balance_after)
             ])
             
-        # Auto-width
-        for col in ws.columns:
-            max_length = 0
-            column = col[0].column_letter
-            for cell in col:
-                try:
-                    if len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except:
-                    pass
-            adjusted_width = (max_length + 2)
-            ws.column_dimensions[column].width = adjusted_width
+        self._apply_header_style(ws)
+        self._apply_zebra_striping(ws)
+        self._adjust_column_widths(ws)
 
     def _create_deposits_sheet(self, wb, deposits: list[Deposit]):
         ws = wb.create_sheet("Депозиты")
@@ -191,23 +230,34 @@ class ReportService:
                 roi_percent,
                 dep.tx_hash or "-"
             ])
+            
+        self._apply_header_style(ws)
+        self._apply_zebra_striping(ws)
+        self._adjust_column_widths(ws)
 
     def _create_referrals_sheet(self, wb, referrals: list[Referral]):
         ws = wb.create_sheet("Рефералы")
         
-        headers = ["ID", "Дата регистрации", "Уровень", "Пользователь", "Заработано с него (USDT)"]
+        headers = ["ID", "Дата регистрации", "Уровень", "Пользователь (Username)", "Пользователь (ID)", "Заработано с него (USDT)"]
         ws.append(headers)
         
         for ref in referrals:
-            username = "Неизвестно"
+            username = "Не указан"
+            telegram_id = "Неизвестно"
+            
             if ref.referral:
-                username = f"@{ref.referral.username}" if ref.referral.username else f"ID {ref.referral.telegram_id}"
+                username = f"@{ref.referral.username}" if ref.referral.username else "Не указан"
+                telegram_id = str(ref.referral.telegram_id)
             
             ws.append([
                 ref.id,
                 ref.created_at.strftime("%Y-%m-%d %H:%M:%S"),
                 ref.level,
                 username,
+                telegram_id,
                 float(ref.total_earned)
             ])
-
+            
+        self._apply_header_style(ws)
+        self._apply_zebra_striping(ws)
+        self._adjust_column_widths(ws)
