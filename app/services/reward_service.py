@@ -499,8 +499,10 @@ class RewardService:
         from datetime import timedelta
 
         from app.services.roi_corridor_service import RoiCorridorService
+        from app.services.referral_service import ReferralService
 
         corridor_service = RoiCorridorService(self.session)
+        referral_service = ReferralService(self.session)
 
         # Get deposits due for accrual
         now = datetime.now(UTC)
@@ -581,6 +583,11 @@ class RewardService:
                     deposit.id,
                     roi_paid_amount=new_roi_paid,
                     next_accrual_at=next_accrual,
+                )
+
+                # R19: Process referral rewards from ROI
+                await referral_service.process_roi_referral_rewards(
+                    deposit.user_id, reward_amount
                 )
 
                 # Check if ROI completed

@@ -16,6 +16,7 @@ from app.repositories.referral_earning_repository import (
     ReferralEarningRepository,
 )
 from app.repositories.referral_repository import ReferralRepository
+from app.repositories.user_repository import UserRepository
 
 # Referral system configuration (from PART2 docs)
 REFERRAL_DEPTH = 3
@@ -34,6 +35,7 @@ class ReferralService:
         self.session = session
         self.referral_repo = ReferralRepository(session)
         self.earning_repo = ReferralEarningRepository(session)
+        self.user_repo = UserRepository(session)
 
     async def get_referral_chain(
         self, user_id: int, depth: int = REFERRAL_DEPTH
@@ -252,11 +254,26 @@ class ReferralService:
 
             reward_amount = deposit_amount * rate
 
+            # Fetch referrer to update balance
+            referrer = await self.user_repo.get_by_id(relationship.referrer_id)
+            if not referrer:
+                logger.warning(
+                    f"Referrer {relationship.referrer_id} not found for reward",
+                    extra={"referral_id": relationship.id}
+                )
+                continue
+
+            # Update referrer balance
+            referrer.balance += reward_amount
+            referrer.total_earned += reward_amount
+            self.session.add(referrer)
+
             # Create earning record
             await self.earning_repo.create(
                 referral_id=relationship.id,
                 amount=reward_amount,
-                paid=False,  # Will be paid by payment processor
+                paid=True,  # Paid to internal balance
+                tx_hash='internal_balance',
             )
 
             # Update total earned in relationship
@@ -273,6 +290,84 @@ class ReferralService:
                     "level": level,
                     "rate": str(rate),
                     "amount": str(reward_amount),
+                    "source": "deposit",
+                },
+            )
+
+        await self.session.commit()
+
+        return True, total_rewards, None
+
+    async def process_roi_referral_rewards(
+        self, user_id: int, roi_amount: Decimal
+    ) -> tuple[bool, Decimal, str | None]:
+        """
+        Process referral rewards for ROI accrual.
+
+        Args:
+            user_id: User who received ROI
+            roi_amount: ROI amount
+
+        Returns:
+            Tuple of (success, total_rewards, error_message)
+        """
+        # Get all referral relationships for this user
+        relationships = await self.referral_repo.get_referrals_for_user(
+            user_id
+        )
+
+        if not relationships:
+            return True, Decimal("0"), None
+
+        total_rewards = Decimal("0")
+
+        # Create earning records for each referrer
+        for relationship in relationships:
+            level = relationship.level
+            rate = REFERRAL_RATES.get(level, Decimal("0"))
+
+            if rate == Decimal("0"):
+                continue
+
+            # Reward is % of ROI amount
+            reward_amount = roi_amount * rate
+
+            if reward_amount <= 0:
+                continue
+
+            # Fetch referrer to update balance
+            referrer = await self.user_repo.get_by_id(relationship.referrer_id)
+            if not referrer:
+                continue
+
+            # Update referrer balance
+            referrer.balance += reward_amount
+            referrer.total_earned += reward_amount
+            self.session.add(referrer)
+
+            # Create earning record
+            await self.earning_repo.create(
+                referral_id=relationship.id,
+                amount=reward_amount,
+                paid=True,  # Paid to internal balance
+                tx_hash='internal_balance_roi',
+            )
+
+            # Update total earned in relationship
+            relationship.total_earned += reward_amount
+            self.session.add(relationship)
+
+            total_rewards += reward_amount
+
+            logger.info(
+                "Referral ROI reward created",
+                extra={
+                    "referrer_id": relationship.referrer_id,
+                    "referral_user_id": user_id,
+                    "level": level,
+                    "rate": str(rate),
+                    "amount": str(reward_amount),
+                    "source": "roi",
                 },
             )
 
