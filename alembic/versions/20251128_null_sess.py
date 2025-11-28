@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '20251128_make_reward_session_id_nullable'
+revision: str = '20251128_null_sess'
 down_revision: Union[str, None] = '20251126_add_unique_wallet'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
