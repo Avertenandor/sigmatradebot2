@@ -179,7 +179,7 @@ async def handle_master_key_input(
              from bot.handlers.admin.finpass_recovery import show_recovery_requests
              await show_recovery_requests(message, session, state, **data)
              return
-        elif redirect_message_text in ("💰 Финансовая отчетность", "💰 Финансовая отчётность"):
+        elif redirect_message_text and "Финансовая" in redirect_message_text:
              from bot.handlers.admin.financials import show_financial_list
              await show_financial_list(message, session, state, **data)
              return

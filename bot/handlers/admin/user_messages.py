@@ -83,6 +83,14 @@ async def process_user_id_for_messages(
         return
 
     # Parse telegram_id
+    
+    # Breakout for financial reports (navigation fix)
+    if message.text and "Финансовая" in message.text:
+        await state.clear()
+        from bot.handlers.admin.financials import show_financial_list
+        await show_financial_list(message, session, state, **data)
+        return
+
     try:
         telegram_id = int(message.text.strip())
     except ValueError:

@@ -48,7 +48,7 @@ class AdminFinancialStates(StatesGroup):
     viewing_wallet_history = State()  # История смены кошельков
 
 
-@router.message(StateFilter('*'), F.text.in_({"💰 Финансовая отчетность", "💰 Финансовая отчётность"}))
+@router.message(StateFilter('*'), F.text.contains("Финансовая"))
 async def show_financial_list(
     message: Message,
     session: AsyncSession,
@@ -59,6 +59,8 @@ async def show_financial_list(
     Show paginated list of users with financial summary.
     Entry point for the section.
     """
+    await state.clear()
+    logger.info(f"[FINANCIALS] Handler triggered by: {message.text}")
     # Проверка прав доступа: только super_admin и extended_admin
     is_super_admin = data.get("is_super_admin", False)
     is_extended_admin = data.get("is_extended_admin", False)
