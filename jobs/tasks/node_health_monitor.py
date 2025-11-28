@@ -39,17 +39,13 @@ async def _monitor_node_health_async() -> None:
 
     try:
         # Check provider health
-        health = await blockchain_service.health_check()
+        status = await blockchain_service.get_providers_status()
 
-        # Get connection status (default to False if missing)
-        http_healthy = health.get("providers", {}).get("http_connected", False)
-        
-        # Also check general 'connected' flag as fallback
-        if not http_healthy:
-            http_healthy = health.get("connected", False)
+        # Check if ANY provider is connected
+        is_healthy = any(p.get("connected", False) for p in status.values())
 
-        # If HTTP is healthy, we're good
-        if http_healthy:
+        # If healthy, we're good
+        if is_healthy:
             # If maintenance mode was active, deactivate it
             if settings.blockchain_maintenance_mode:
                 settings.blockchain_maintenance_mode = False
