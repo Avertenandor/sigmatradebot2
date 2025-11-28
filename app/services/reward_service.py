@@ -569,7 +569,6 @@ class RewardService:
                     reward_rate=rate,
                     reward_amount=reward_amount,
                     paid=False,
-                    actual_rate=rate,  # Save actual rate
                 )
 
                 # Update deposit
