@@ -48,7 +48,7 @@ class AdminFinancialStates(StatesGroup):
     viewing_wallet_history = State()  # История смены кошельков
 
 
-@router.message(StateFilter('*'), F.text == "💰 Финансовая отчетность")
+@router.message(StateFilter('*'), F.text.in_({"💰 Финансовая отчетность", "💰 Финансовая отчётность"}))
 async def show_financial_list(
     message: Message,
     session: AsyncSession,
