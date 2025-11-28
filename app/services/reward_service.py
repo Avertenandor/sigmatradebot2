@@ -569,6 +569,7 @@ class RewardService:
                     reward_rate=rate,
                     reward_amount=reward_amount,
                     paid=False,
+                    calculated_at=datetime.now(UTC),
                 )
 
                 # Update deposit
