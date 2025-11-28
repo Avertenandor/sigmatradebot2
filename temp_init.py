@@ -34,7 +34,7 @@ from app.models.financial_password_recovery import (
     FinancialPasswordRecovery,
 )
 
-# КРИТИЧНЫЕ модели из PART5
+# PART5 Critical Models
 from app.models.payment_retry import PaymentRetry, PaymentType
 from app.models.referral import Referral
 from app.models.referral_earning import ReferralEarning
@@ -97,7 +97,7 @@ __all__ = [
     # PART5 Critical Models
     "PaymentRetry",
     "FailedNotification",
-    "NotificationQueueFallback",  # R11-3: PostgreSQL fallback for notifications
+    "NotificationQueueFallback",
     # Support Models
     "SupportTicket",
     "SupportMessage",
@@ -109,3 +109,4 @@ __all__ = [
     "UserWalletHistory",
     "WalletChangeRequest",
 ]
+

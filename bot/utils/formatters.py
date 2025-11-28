@@ -55,6 +55,27 @@ def format_transaction_hash(tx_hash: str, show_chars: int = 6) -> str:
     return f"{tx_hash[:show_chars]}...{tx_hash[-show_chars:]}"
 
 
+def format_tx_hash_with_link(tx_hash: str | None) -> str:
+    """
+    Format TX hash with BSCScan link for Telegram.
+    
+    Args:
+        tx_hash: Transaction hash
+        
+    Returns:
+        Formatted string with shortened hash and link
+        Example: `0x1234...5678` [🔗](https://bscscan.com/tx/0x...)
+    """
+    if not tx_hash:
+        return "—"
+    
+    if len(tx_hash) > 20:
+        short = f"{tx_hash[:10]}...{tx_hash[-8:]}"
+        return f"`{short}` [🔗](https://bscscan.com/tx/{tx_hash})"
+    
+    return f"`{tx_hash}`"
+
+
 def escape_md(text: str | None) -> str:
     """
     Escape special characters for Markdown V1.

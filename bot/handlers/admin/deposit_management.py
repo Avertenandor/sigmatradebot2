@@ -891,6 +891,6 @@ async def back_to_admin_panel(
         data: Handler data
     """
     await clear_state_preserve_admin_token(state)
-    from bot.handlers.admin.panel import admin_panel_handler
+    from bot.handlers.admin.panel import handle_admin_panel_button
     
-    await admin_panel_handler(message, state, **data)
+    await handle_admin_panel_button(message, session, **data)

@@ -23,6 +23,7 @@ from bot.keyboards.reply import (
     referral_keyboard,
     settings_keyboard,
     withdrawal_keyboard,
+    wallet_menu_keyboard,
 )
 from bot.states.profile_update import ProfileUpdateStates
 from bot.states.registration import RegistrationStates
@@ -586,7 +587,7 @@ async def show_my_wallet(
         f"⚠️ Сохраните приватный ключ в безопасном месте!"
     )
 
-    await message.answer(text, parse_mode="Markdown")
+    await message.answer(text, parse_mode="Markdown", reply_markup=wallet_menu_keyboard())
 
 
 @router.message(StateFilter('*'), F.text == "📝 Регистрация")

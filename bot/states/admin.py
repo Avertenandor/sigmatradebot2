@@ -90,3 +90,11 @@ class AdminSupportStates(StatesGroup):
     answering_ticket = State()  # Answering a ticket
     confirming_close = State()  # Confirming ticket closure
     confirming_reopen = State()  # Confirming ticket reopen
+
+
+class AdminFinpassRecoveryStates(StatesGroup):
+    """States for finpass recovery management."""
+
+    viewing_list = State()  # Viewing list of requests
+    viewing_request = State()  # Viewing specific request
+    confirming_action = State()  # Confirming approve/reject (optional, mostly direct action)

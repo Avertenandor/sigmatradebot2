@@ -175,6 +175,14 @@ async def handle_master_key_input(
         elif redirect_message_text == "📊 Статистика":
              await handle_admin_stats(message, session, **data)
              return
+        elif redirect_message_text == "🔑 Восстановление пароля":
+             from bot.handlers.admin.finpass_recovery import show_recovery_requests
+             await show_recovery_requests(message, session, state, **data)
+             return
+        elif redirect_message_text == "💰 Финансовая отчетность":
+             from bot.handlers.admin.financials import show_financial_list
+             await show_financial_list(message, session, state, **data)
+             return
     
     await state.set_state(None)  # Clear state
 

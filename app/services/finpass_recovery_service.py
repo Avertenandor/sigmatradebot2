@@ -266,6 +266,12 @@ class FinpassRecoveryService:
         )
         return updated or request
 
+    async def get_request_by_id(
+        self, request_id: int
+    ) -> FinancialPasswordRecovery | None:
+        """Get a request by ID."""
+        return await self.repository.get_by_id(request_id)
+
     async def _get_request(
         self, request_id: int
     ) -> FinancialPasswordRecovery:

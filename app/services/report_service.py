@@ -48,6 +48,7 @@ class ReportService:
         deposits = await self._get_deposits(user_id)
         referrals = await self._get_referrals(user_id)
         earnings = await self.earning_repo.get_all_for_referrer(user_id)
+        wallet_history = await self._get_wallet_history(user_id)
 
         # Create workbook
         wb = openpyxl.Workbook()
@@ -63,6 +64,9 @@ class ReportService:
         
         # Sheet 4: Referrals
         self._create_referrals_sheet(wb, referrals)
+
+        # Sheet 5: Wallet History
+        self._create_wallet_history_sheet(wb, wallet_history)
 
         # Save to bytes
         output = io.BytesIO()
@@ -98,6 +102,12 @@ class ReportService:
             .options(selectinload(Referral.referral))
             .order_by(Referral.created_at.desc())
         )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def _get_wallet_history(self, user_id: int) -> list:
+        from app.models.user_wallet_history import UserWalletHistory
+        stmt = select(UserWalletHistory).where(UserWalletHistory.user_id == user_id).order_by(UserWalletHistory.changed_at.desc())
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
@@ -256,6 +266,23 @@ class ReportService:
                 username,
                 telegram_id,
                 float(ref.total_earned)
+            ])
+            
+        self._apply_header_style(ws)
+        self._apply_zebra_striping(ws)
+        self._adjust_column_widths(ws)
+
+    def _create_wallet_history_sheet(self, wb, history: list):
+        ws = wb.create_sheet("История смены кошелька")
+        
+        headers = ["Дата изменения", "Старый кошелек", "Новый кошелек"]
+        ws.append(headers)
+        
+        for h in history:
+            ws.append([
+                h.changed_at.strftime("%Y-%m-%d %H:%M:%S"),
+                h.old_wallet_address,
+                h.new_wallet_address
             ])
             
         self._apply_header_style(ws)

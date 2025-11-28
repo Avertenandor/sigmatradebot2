@@ -48,3 +48,20 @@ def admin_blockchain_keyboard(
     
     return builder.as_markup()
 
+
+def finpass_recovery_actions_keyboard(request_id: int) -> InlineKeyboardMarkup:
+    """
+    Actions for finpass recovery request.
+
+    Args:
+        request_id: Request ID
+
+    Returns:
+        InlineKeyboardMarkup
+    """
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="✅ Одобрить", callback_data=f"approve_recovery_{request_id}"),
+        InlineKeyboardButton(text="❌ Отклонить", callback_data=f"reject_recovery_{request_id}"),
+    )
+    return builder.as_markup()

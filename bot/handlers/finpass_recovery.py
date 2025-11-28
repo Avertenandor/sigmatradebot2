@@ -139,6 +139,7 @@ async def process_recovery_reason(
     session: AsyncSession,
     user: User,
     state: FSMContext,
+    **data: Any,
 ) -> None:
     """
     Process recovery reason.
@@ -148,13 +149,15 @@ async def process_recovery_reason(
         session: Database session
         user: Current user
         state: FSM state
+        **data: Handler data
     """
     # Check if message is a menu button or cancel - if so, clear state
     from bot.utils.menu_buttons import is_menu_button
 
+    is_admin = data.get("is_admin", False)
+
     if is_menu_button(message.text) or message.text == "❌ Отмена":
         await state.clear()
-        is_admin = False
         blacklist_entry = None
         try:
             from app.repositories.blacklist_repository import BlacklistRepository
@@ -191,8 +194,7 @@ async def process_recovery_reason(
 
         await session.commit()
 
-        # Get is_admin and blacklist_entry for keyboard
-        is_admin = False
+        # Get blacklist_entry for keyboard
         blacklist_entry = None
         try:
             from app.repositories.blacklist_repository import BlacklistRepository

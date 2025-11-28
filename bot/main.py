@@ -235,6 +235,7 @@ async def main() -> None:  # noqa: C901
         transaction,
         verification,
         withdrawal,
+        wallet_change,
     )
     from bot.handlers.admin import (
         admins,
@@ -254,6 +255,7 @@ async def main() -> None:  # noqa: C901
         withdrawals,
         withdrawal_settings,
         blockchain_settings,
+        financials,
     )
 
     # Master key management (only for super admin telegram_id: 1040687384)
@@ -276,6 +278,7 @@ async def main() -> None:  # noqa: C901
     # User handlers (registered AFTER menu to ensure menu handlers
     # process menu buttons first, even if user is in FSM state)
     dp.include_router(contact_update.router)  # Contact update with buttons
+    dp.include_router(wallet_change.router)
     dp.include_router(deposit.router)
     dp.include_router(withdrawal.router)
     dp.include_router(referral.router)
@@ -306,6 +309,8 @@ async def main() -> None:  # noqa: C901
     withdrawal_settings.router.callback_query.middleware(admin_auth_middleware)
     blockchain_settings.router.message.middleware(admin_auth_middleware)
     blockchain_settings.router.callback_query.middleware(admin_auth_middleware)
+    financials.router.message.middleware(admin_auth_middleware)
+    financials.router.callback_query.middleware(admin_auth_middleware)
     broadcast.router.message.middleware(admin_auth_middleware)
     broadcast.router.callback_query.middleware(admin_auth_middleware)
     blacklist.router.message.middleware(admin_auth_middleware)
@@ -335,6 +340,7 @@ async def main() -> None:  # noqa: C901
     dp.include_router(withdrawals.router)
     dp.include_router(withdrawal_settings.router)
     dp.include_router(blockchain_settings.router)
+    dp.include_router(financials.router)
     dp.include_router(broadcast.router)
     dp.include_router(blacklist.router)
     dp.include_router(deposit_settings.router)
