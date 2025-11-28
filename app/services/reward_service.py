@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.deposit import Deposit
 from app.models.deposit_reward import DepositReward
-from app.models.enums import TransactionStatus
+from app.models.enums import TransactionStatus, TransactionType
 from app.models.reward_session import RewardSession
 from app.repositories.deposit_repository import DepositRepository
 from app.repositories.deposit_reward_repository import (
@@ -22,6 +22,8 @@ from app.repositories.deposit_reward_repository import (
 from app.repositories.reward_session_repository import (
     RewardSessionRepository,
 )
+from app.repositories.transaction_repository import TransactionRepository
+from app.repositories.user_repository import UserRepository
 
 
 class RewardService:
@@ -33,6 +35,8 @@ class RewardService:
         self.session_repo = RewardSessionRepository(session)
         self.reward_repo = DepositRewardRepository(session)
         self.deposit_repo = DepositRepository(session)
+        self.user_repo = UserRepository(session)
+        self.transaction_repo = TransactionRepository(session)
 
     async def create_session(
         self,
@@ -397,6 +401,13 @@ class RewardService:
                     },
                 )
 
+            # Credit ROI to user's internal balance and create accounting transaction
+            await self._credit_roi_to_balance(
+                user_id=deposit.user_id,
+                reward_amount=reward_amount,
+                deposit_id=deposit.id,
+            )
+
             rewards_calculated += 1
             total_reward_amount += reward_amount
 
@@ -620,6 +631,13 @@ class RewardService:
                         },
                     )
 
+                # Credit ROI to user's internal balance and create accounting transaction
+                await self._credit_roi_to_balance(
+                    user_id=deposit.user_id,
+                    reward_amount=reward_amount,
+                    deposit_id=deposit.id,
+                )
+
             except Exception as e:
                 logger.error(
                     f"Error processing deposit {deposit.id}: {e}",
@@ -632,6 +650,53 @@ class RewardService:
         logger.info(
             "Individual rewards processing completed",
             extra={"processed": len(deposits)},
+        )
+
+    async def _credit_roi_to_balance(
+        self,
+        user_id: int,
+        reward_amount: Decimal,
+        deposit_id: int,
+    ) -> None:
+        """
+        Credit ROI reward to user's internal balance and create transaction.
+
+        Args:
+            user_id: User ID receiving the reward
+            reward_amount: Reward amount to credit
+            deposit_id: Source deposit ID (for reference linking)
+        """
+        if reward_amount <= 0:
+            return
+
+        user = await self.user_repo.get_by_id(user_id)
+        if not user:
+            logger.error(
+                "Failed to credit ROI to balance: user not found",
+                extra={"user_id": user_id, "reward_amount": str(reward_amount)},
+            )
+            return
+
+        balance_before = user.balance or Decimal("0")
+        balance_after = balance_before + reward_amount
+
+        # Update user balances
+        user.balance = balance_after
+        user.total_earned = (user.total_earned or Decimal("0")) + reward_amount
+        self.session.add(user)
+
+        # Create accounting transaction for internal ROI credit
+        await self.transaction_repo.create(
+            user_id=user.id,
+            type=TransactionType.DEPOSIT_REWARD.value,
+            amount=reward_amount,
+            balance_before=balance_before,
+            balance_after=balance_after,
+            status=TransactionStatus.CONFIRMED.value,
+            description="ROI reward credited to internal balance",
+            reference_type="deposit",
+            reference_id=deposit_id,
+            tx_hash="internal_balance",
         )
 
     async def _send_roi_completed_notification(

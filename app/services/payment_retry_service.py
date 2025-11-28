@@ -263,11 +263,11 @@ class PaymentRetryService:
                         tx_hash=tx_hash,
                     )
 
-            # Create transaction record
+            # Create transaction record for on-chain payout
             tx_type = (
                 TransactionType.REFERRAL_REWARD
                 if retry.payment_type == PaymentType.REFERRAL_EARNING.value
-                else TransactionType.DEPOSIT_REWARD
+                else TransactionType.SYSTEM_PAYOUT
             )
 
             await self.transaction_repo.create(
@@ -275,7 +275,6 @@ class PaymentRetryService:
                 tx_hash=tx_hash,
                 type=tx_type.value,
                 amount=retry.amount,
-                from_address="",
                 to_address=user.wallet_address,
                 status=TransactionStatus.CONFIRMED.value,
             )
