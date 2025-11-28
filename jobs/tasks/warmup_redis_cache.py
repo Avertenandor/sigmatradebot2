@@ -24,7 +24,7 @@ from app.config.settings import settings
 from app.repositories.deposit_level_version_repository import (
     DepositLevelVersionRepository,
 )
-from app.repositories.system_setting_repository import SystemSettingRepository
+from app.repositories.global_settings_repository import GlobalSettingsRepository
 from app.repositories.user_repository import UserRepository
 
 
@@ -138,23 +138,33 @@ async def _warmup_redis_cache_async() -> None:
                 f"R11-3: Cached {deposit_levels_loaded} deposit levels"
             )
 
-            # 3. Load system settings
-            settings_repo = SystemSettingRepository(session)
-            system_settings = await settings_repo.find_all()
+            # 3. Load global settings
+            settings_repo = GlobalSettingsRepository(session)
+            global_settings = await settings_repo.get_settings()
 
-            for setting in system_settings:
-                try:
-                    setting_key = f"system_setting:{setting.key}"
-                    await redis_client.set(
-                        setting_key, setting.value, ex=1800
-                    )  # 30 min TTL
-                    settings_loaded += 1
-                except Exception as e:
-                    logger.warning(
-                        f"R11-3: Failed to cache setting {setting.key}: {e}"
-                    )
-
-            logger.info(f"R11-3: Cached {settings_loaded} system settings")
+            try:
+                import json
+                from decimal import Decimal
+                
+                # Convert settings to dict for caching
+                settings_dict = {
+                    "min_withdrawal_amount": str(global_settings.min_withdrawal_amount),
+                    "daily_withdrawal_limit": str(global_settings.daily_withdrawal_limit) if global_settings.daily_withdrawal_limit else None,
+                    "is_daily_limit_enabled": global_settings.is_daily_limit_enabled,
+                    "auto_withdrawal_enabled": global_settings.auto_withdrawal_enabled,
+                    "active_rpc_provider": global_settings.active_rpc_provider,
+                    "is_auto_switch_enabled": global_settings.is_auto_switch_enabled,
+                    "max_open_deposit_level": global_settings.max_open_deposit_level,
+                    "roi_settings": global_settings.roi_settings,
+                }
+                
+                await redis_client.set(
+                    "global_settings", json.dumps(settings_dict), ex=1800
+                )  # 30 min TTL
+                settings_loaded = 1
+                logger.info("R11-3: Cached global settings")
+            except Exception as e:
+                logger.warning(f"R11-3: Failed to cache global settings: {e}")
 
     except Exception as e:
         logger.error(f"R11-3: Error during cache warmup: {e}", exc_info=True)
