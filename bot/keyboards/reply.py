@@ -1052,9 +1052,9 @@ def master_key_management_reply_keyboard() -> ReplyKeyboardMarkup:
         ReplyKeyboardMarkup with master key management options
     """
     builder = ReplyKeyboardBuilder()
-    builder.row(KeyboardButton(text=" Показать текущий ключ"))
-    builder.row(KeyboardButton(text=" Сгенерировать новый ключ"))
-    builder.row(KeyboardButton(text=" Главное меню"))
+    builder.row(KeyboardButton(text="🔍 Показать текущий ключ"))
+    builder.row(KeyboardButton(text="🔄 Сгенерировать новый ключ"))
+    builder.row(KeyboardButton(text="◀️ Главное меню"))
     return builder.as_markup(resize_keyboard=True)
 
 
