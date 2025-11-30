@@ -11,7 +11,7 @@ from aiogram import BaseMiddleware, Bot
 from aiogram.types import ErrorEvent, TelegramObject, Update
 from loguru import logger
 
-from config import settings
+from app.config.settings import settings
 
 
 class ErrorHandlerMiddleware(BaseMiddleware):
