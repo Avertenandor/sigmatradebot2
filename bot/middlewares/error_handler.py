@@ -9,7 +9,7 @@ import traceback
 from typing import Any, Awaitable, Callable
 
 from aiogram import BaseMiddleware, Bot
-from aiogram.types import Message, TelegramObject
+from aiogram.types import CallbackQuery, Message, TelegramObject, Update, User
 from loguru import logger
 
 from app.config.settings import settings
@@ -23,6 +23,25 @@ class ErrorHandlerMiddleware(BaseMiddleware):
     - Notifies admins with technical details
     - Sends friendly message to user (no technical info!)
     """
+
+    def _get_user(self, event: TelegramObject) -> User | None:
+        """Extract user from event."""
+        if isinstance(event, Update):
+            if event.message:
+                return event.message.from_user
+            if event.callback_query:
+                return event.callback_query.from_user
+            if event.inline_query:
+                return event.inline_query.from_user
+            if event.my_chat_member:
+                return event.my_chat_member.from_user
+            if event.chat_member:
+                return event.chat_member.from_user
+        elif isinstance(event, Message):
+            return event.from_user
+        elif isinstance(event, CallbackQuery):
+            return event.from_user
+        return None
 
     async def __call__(
         self,
@@ -38,12 +57,13 @@ class ErrorHandlerMiddleware(BaseMiddleware):
             logger.exception(f"Unhandled exception: {e}")
 
             bot: Bot | None = data.get("bot")
+            user = self._get_user(event)
 
             # 1. Send friendly message to user (NO technical details!)
-            if bot and isinstance(event, Message) and event.from_user:
+            if bot and user:
                 try:
                     await bot.send_message(
-                        chat_id=event.from_user.id,
+                        chat_id=user.id,
                         text=(
                             "❌ Произошла временная ошибка.\n\n"
                             "Администраторы уже уведомлены и работают над решением.\n"
@@ -61,11 +81,11 @@ class ErrorHandlerMiddleware(BaseMiddleware):
 
                     # Get user info for context
                     user_info = "Unknown"
-                    if isinstance(event, Message) and event.from_user:
+                    if user:
                         user_info = (
-                            f"@{event.from_user.username}"
-                            if event.from_user.username
-                            else f"ID: {event.from_user.id}"
+                            f"@{user.username}"
+                            if user.username
+                            else f"ID: {user.id}"
                         )
 
                     text = (
