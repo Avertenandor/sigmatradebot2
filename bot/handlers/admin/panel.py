@@ -138,11 +138,8 @@ async def handle_master_key_input(
         # Clean up
         await state.update_data(auth_redirect_message=None)
         
-        # Determine handler based on text
-        # We need to simulate the button press
-        message.text = redirect_message_text
-        
-        # Route to specific handlers manually if possible
+        # Route to specific handlers manually based on saved text
+        # Note: Don't modify message.text - aiogram Message objects are frozen
         if redirect_message_text == "🆘 Техподдержка":
             from bot.handlers.admin.support import handle_admin_support_menu
             await handle_admin_support_menu(message, state, **data)
@@ -188,6 +185,9 @@ async def handle_master_key_input(
              from bot.handlers.admin.financials import show_financial_list
              await show_financial_list(message, session, state, **data)
              return
+        elif redirect_message_text == "👑 Админ-панель":
+             # Just continue to show admin panel below
+             pass
     
     await state.set_state(None)  # Clear state
 
@@ -683,7 +683,7 @@ async def handle_admin_withdrawals(
                     f"• ID: {withdrawal.id}\n"
                     f"  Пользователь: {withdrawal.user_id}\n"
                     f"  Сумма: {format_usdt(withdrawal.amount)} USDT\n"
-                    f"  Адрес: `{withdrawal.wallet_address}`\n\n"
+                    f"  Адрес: `{withdrawal.to_address}`\n\n"
                 )
             
             if len(pending_withdrawals) > 10:
