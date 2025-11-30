@@ -136,15 +136,21 @@ class BlockchainService:
 
     def _init_providers(self) -> None:
         """Initialize Web3 providers based on settings."""
+        # RPC timeout in seconds
+        rpc_timeout = 30
+        
         # 1. QuickNode
         qn_url = self.settings.rpc_quicknode_http or self.settings.rpc_url
         if qn_url:
             try:
-                w3_qn = Web3(Web3.HTTPProvider(qn_url))
+                w3_qn = Web3(Web3.HTTPProvider(
+                    qn_url,
+                    request_kwargs={'timeout': rpc_timeout}
+                ))
                 w3_qn.middleware_onion.inject(geth_poa_middleware, layer=0)
                 if w3_qn.is_connected():
                     self.providers["quicknode"] = w3_qn
-                    logger.info("✅ QuickNode provider connected")
+                    logger.info("✅ QuickNode provider connected (timeout=30s)")
                 else:
                     logger.warning("❌ QuickNode provider failed to connect")
             except Exception as e:
@@ -154,11 +160,14 @@ class BlockchainService:
         nr_url = self.settings.rpc_nodereal_http
         if nr_url:
             try:
-                w3_nr = Web3(Web3.HTTPProvider(nr_url))
+                w3_nr = Web3(Web3.HTTPProvider(
+                    nr_url,
+                    request_kwargs={'timeout': rpc_timeout}
+                ))
                 w3_nr.middleware_onion.inject(geth_poa_middleware, layer=0)
                 if w3_nr.is_connected():
                     self.providers["nodereal"] = w3_nr
-                    logger.info("✅ NodeReal provider connected")
+                    logger.info("✅ NodeReal provider connected (timeout=30s)")
                 else:
                     logger.warning("❌ NodeReal provider failed to connect")
             except Exception as e:

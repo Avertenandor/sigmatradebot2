@@ -348,3 +348,67 @@ class FinancialReportService:
             wallet_history=wallet_dtos
         )
 
+    async def export_all_users_csv(self) -> str:
+        """
+        Export all users to CSV format.
+        
+        Returns:
+            CSV string with all user data
+        """
+        import csv
+        import io
+        
+        # Get all users with their stats
+        stmt = (
+            select(
+                User.id,
+                User.telegram_id,
+                User.username,
+                User.wallet_address,
+                User.balance,
+                User.total_earned,
+                User.is_verified,
+                User.is_banned,
+                User.created_at,
+                User.last_active,
+                func.coalesce(func.sum(Deposit.amount), 0).label('total_deposited'),
+                func.count(Deposit.id).label('deposits_count'),
+            )
+            .outerjoin(Deposit, User.id == Deposit.user_id)
+            .group_by(User.id)
+            .order_by(User.id.asc())
+        )
+        
+        result = await self.session.execute(stmt)
+        rows = result.all()
+        
+        # Create CSV
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Header
+        writer.writerow([
+            'ID', 'Telegram ID', 'Username', 'Wallet', 'Balance',
+            'Total Earned', 'Total Deposited', 'Deposits Count',
+            'Verified', 'Banned', 'Created At', 'Last Active'
+        ])
+        
+        # Data rows
+        for row in rows:
+            writer.writerow([
+                row.id,
+                row.telegram_id,
+                row.username or '',
+                row.wallet_address,
+                float(row.balance),
+                float(row.total_earned),
+                float(row.total_deposited),
+                row.deposits_count,
+                'Yes' if row.is_verified else 'No',
+                'Yes' if row.is_banned else 'No',
+                row.created_at.strftime('%Y-%m-%d %H:%M') if row.created_at else '',
+                row.last_active.strftime('%Y-%m-%d %H:%M') if row.last_active else '',
+            ])
+        
+        return output.getvalue()
+

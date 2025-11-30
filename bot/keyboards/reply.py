@@ -833,7 +833,8 @@ def admin_deposit_level_actions_keyboard(
 def notification_settings_reply_keyboard(
     deposit_enabled: bool,
     withdrawal_enabled: bool,
-    marketing_enabled: bool,
+    roi_enabled: bool = True,
+    marketing_enabled: bool = False,
 ) -> ReplyKeyboardMarkup:
     """
     Notification settings reply keyboard.
@@ -841,6 +842,7 @@ def notification_settings_reply_keyboard(
     Args:
         deposit_enabled: Whether deposit notifications are enabled
         withdrawal_enabled: Whether withdrawal notifications are enabled
+        roi_enabled: Whether ROI notifications are enabled
         marketing_enabled: Whether marketing notifications are enabled
 
     Returns:
@@ -864,6 +866,15 @@ def notification_settings_reply_keyboard(
     )
     builder.row(
         KeyboardButton(text=withdrawal_text),
+    )
+
+    # ROI notifications toggle
+    roi_text = (
+        "✅ Уведомления о ROI" if roi_enabled
+        else "❌ Уведомления о ROI"
+    )
+    builder.row(
+        KeyboardButton(text=roi_text),
     )
 
     # Marketing notifications toggle

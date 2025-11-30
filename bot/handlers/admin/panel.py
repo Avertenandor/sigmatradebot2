@@ -3,6 +3,7 @@ Admin Panel Handler
 Handles admin panel main menu and platform statistics
 """
 
+from datetime import UTC
 from typing import Any
 
 from aiogram import F, Router
@@ -332,6 +333,52 @@ async def handle_back_to_main_menu(
     # Remove 'user' and 'state' from data to avoid duplicate arguments
     safe_data = {k: v for k, v in data.items() if k not in ('user', 'state')}
     await show_main_menu(message, session, user, state, **safe_data)
+
+
+@router.message(Command("retention"))
+async def cmd_retention(
+    message: Message,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """
+    Retention metrics (DAU/WAU/MAU) for admins.
+    Usage: /retention
+    """
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        await message.answer("❌ Эта функция доступна только администраторам")
+        return
+
+    from app.services.analytics_service import AnalyticsService
+
+    analytics = AnalyticsService(session)
+    metrics = await analytics.get_retention_metrics()
+    cohorts = await analytics.get_cohort_stats(days=7)
+    avg_deposit = await analytics.get_average_deposit()
+
+    # Build text
+    text = (
+        f"📈 *Retention-метрики*\n\n"
+        f"👥 *Активные пользователи:*\n"
+        f"• DAU (24ч): *{metrics['dau']}* ({metrics['dau_rate']}%)\n"
+        f"• WAU (7д): *{metrics['wau']}* ({metrics['wau_rate']}%)\n"
+        f"• MAU (30д): *{metrics['mau']}* ({metrics['mau_rate']}%)\n"
+        f"• Всего: *{metrics['total_users']}*\n\n"
+        f"📊 *Stickiness (DAU/MAU):* `{metrics['stickiness']}%`\n\n"
+        f"💰 *Депозиты:*\n"
+        f"• Средний чек: *{avg_deposit['avg_deposit']:.2f} USDT*\n"
+        f"• Конверсия в депозит: *{avg_deposit['deposit_rate']}%*\n\n"
+        f"📅 *Когорты (последние 7 дней):*\n"
+    )
+
+    for cohort in cohorts:
+        text += (
+            f"• {cohort['date']}: {cohort['registered']} рег → "
+            f"{cohort['deposited']} деп ({cohort['conversion_rate']}%)\n"
+        )
+
+    await message.answer(text, parse_mode="Markdown")
 
 
 @router.message(Command("dashboard"))
@@ -686,3 +733,50 @@ async def handle_admin_management(
     from bot.handlers.admin.admins import show_admin_management
     
     await show_admin_management(message, session, **data)
+
+
+@router.message(Command("export"))
+async def cmd_export_users(
+    message: Message,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """
+    Export all users to CSV file for admins.
+    Usage: /export
+    """
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        await message.answer("❌ Эта функция доступна только администраторам")
+        return
+
+    from aiogram.enums import ChatAction
+    from aiogram.types import BufferedInputFile
+    from app.services.financial_report_service import FinancialReportService
+
+    # Send typing indicator
+    await message.bot.send_chat_action(
+        chat_id=message.chat.id,
+        action=ChatAction.UPLOAD_DOCUMENT
+    )
+
+    try:
+        report_service = FinancialReportService(session)
+        csv_data = await report_service.export_all_users_csv()
+        
+        # Create file
+        file_bytes = csv_data.encode('utf-8-sig')  # BOM for Excel compatibility
+        file = BufferedInputFile(
+            file_bytes,
+            filename=f"users_export_{datetime.now(UTC).strftime('%Y%m%d_%H%M')}.csv"
+        )
+        
+        await message.answer_document(
+            file,
+            caption="📊 *Экспорт пользователей*\n\nФайл содержит данные всех пользователей.",
+            parse_mode="Markdown"
+        )
+        
+    except Exception as e:
+        logger.error(f"Error exporting users: {e}")
+        await message.answer("❌ Ошибка при экспорте пользователей.")

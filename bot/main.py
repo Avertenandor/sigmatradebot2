@@ -419,6 +419,33 @@ async def main() -> None:  # noqa: C901
     except Exception as e:
         logger.warning(f"Failed to start health check server: {e}")
 
+    # Graceful shutdown handler
+    shutdown_event = asyncio.Event()
+    
+    async def shutdown_handler():
+        """Handle graceful shutdown."""
+        logger.info("Graceful shutdown initiated...")
+        shutdown_event.set()
+        
+        # Stop scheduler if running
+        try:
+            from jobs.scheduler import scheduler_instance
+            if scheduler_instance and scheduler_instance.running:
+                scheduler_instance.shutdown(wait=True)
+                logger.info("Scheduler stopped")
+        except Exception as e:
+            logger.warning(f"Error stopping scheduler: {e}")
+        
+        # Close database connections
+        try:
+            from app.config.database import engine
+            await engine.dispose()
+            logger.info("Database connections closed")
+        except Exception as e:
+            logger.warning(f"Error closing database: {e}")
+        
+        logger.info("Graceful shutdown complete")
+
     try:
         logger.info("Starting polling...")
         await dp.start_polling(
@@ -428,6 +455,7 @@ async def main() -> None:  # noqa: C901
         logger.exception(f"Polling error: {e}")
         raise
     finally:
+        await shutdown_handler()
         if redis_client:
             await redis_client.aclose()
         await bot.session.close()
@@ -437,7 +465,7 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("Bot stopped by user")
+        logger.info("Bot stopped by user (KeyboardInterrupt)")
     except Exception as e:
         logger.exception(f"Bot crashed: {e}")
         sys.exit(1)

@@ -13,6 +13,7 @@ class LoggerMiddleware(BaseMiddleware):
     Logger middleware.
 
     Logs all incoming updates with request ID tracking.
+    Includes language_code as proxy for user location/region.
     """
 
     async def __call__(
@@ -31,6 +32,9 @@ class LoggerMiddleware(BaseMiddleware):
         user: User | None = data.get("event_from_user")
         user_id = user.id if user else None
         username = user.username if user else None
+        
+        # Log language_code as a proxy for region (Telegram doesn't provide IP)
+        language_code = user.language_code if user else None
 
         # Get update type - try from data first, then from event
         update: Update | None = data.get("event_update")
@@ -49,7 +53,8 @@ class LoggerMiddleware(BaseMiddleware):
             update_type = "callback_query"
 
         logger.info(
-            f"[{request_id}] {update_type} from user {user_id} (@{username})"
+            f"[{request_id}] {update_type} from user {user_id} (@{username}) "
+            f"[lang={language_code}]"
         )
         
         # Log message text for debugging

@@ -122,13 +122,24 @@ class BroadcastService:
 
                 except TelegramRetryAfter as e:
                     await asyncio.sleep(e.retry_after)
-                    # Retry once
+                    # Retry once after waiting
                     try:
-                        # ... (retry logic simplified, just skip for now to avoid complexity)
-                        pass 
-                    except:
+                        if broadcast_type == "text":
+                            await self.bot.send_message(
+                                telegram_id,
+                                text,
+                                parse_mode="Markdown",
+                                reply_markup=reply_markup,
+                            )
+                            success_count += 1
+                        else:
+                            # Skip retry for media to avoid complexity
+                            failed_count += 1
+                    except Exception as retry_error:
+                        logger.warning(f"Retry failed for {telegram_id}: {retry_error}")
                         failed_count += 1
-                except Exception:
+                except Exception as send_error:
+                    logger.debug(f"Failed to send to {telegram_id}: {send_error}")
                     failed_count += 1
 
                 # Rate limiting: 20 messages per second (0.05s delay)
