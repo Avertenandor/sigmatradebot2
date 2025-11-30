@@ -144,17 +144,68 @@ async def withdraw_all(
         )
         return
 
-    # Save amount and ask for password
+    # Save amount and ask for CONFIRMATION first
     await state.update_data(amount=amount)
+    await state.set_state(WithdrawalStates.waiting_for_confirmation)
 
     text = (
-        f"💸 Вывод средств (ВСЁ)\n\n"
-        f"Сумма к выводу: {amount} USDT\n\n"
-        f"Для подтверждения введите ваш финансовый пароль:"
+        f"⚠️ *Подтверждение вывода*\n\n"
+        f"💰 Сумма: *{amount:.2f} USDT*\n"
+        f"💳 Кошелёк: `{user.wallet_address[:10]}...{user.wallet_address[-6:]}`\n\n"
+        f"❗️ Убедитесь, что это ваш *ЛИЧНЫЙ* кошелёк (не биржевой)!\n\n"
+        f"Для подтверждения напишите: *да* или *yes*\n"
+        f"Для отмены: *нет* или *отмена*"
     )
 
-    await message.answer(text, reply_markup=ReplyKeyboardRemove())
-    await state.set_state(WithdrawalStates.waiting_for_financial_password)
+    await message.answer(text, parse_mode="Markdown")
+
+
+@router.message(WithdrawalStates.waiting_for_confirmation)
+async def confirm_withdrawal(
+    message: Message,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """Handle withdrawal confirmation."""
+    user: User | None = data.get("user")
+    if not user:
+        await message.answer("❌ Ошибка: пользователь не найден")
+        await state.clear()
+        return
+
+    # Check for menu button
+    if is_menu_button(message.text or ""):
+        await state.clear()
+        return
+
+    answer = (message.text or "").strip().lower()
+    
+    if answer in ("да", "yes", "д", "y"):
+        # Confirmed - ask for password
+        state_data = await state.get_data()
+        amount = state_data.get("amount")
+        
+        text = (
+            f"💸 *Вывод средств*\n\n"
+            f"Сумма к выводу: *{amount} USDT*\n\n"
+            f"Для подтверждения введите ваш финансовый пароль:"
+        )
+
+        await message.answer(text, reply_markup=ReplyKeyboardRemove(), parse_mode="Markdown")
+        await state.set_state(WithdrawalStates.waiting_for_financial_password)
+    
+    elif answer in ("нет", "no", "н", "n", "отмена", "cancel"):
+        await state.clear()
+        await message.answer(
+            "❌ Вывод отменён.",
+            reply_markup=withdrawal_keyboard(),
+        )
+    
+    else:
+        await message.answer(
+            "⚠️ Напишите *да* для подтверждения или *нет* для отмены.",
+            parse_mode="Markdown",
+        )
 
 
 @router.message(F.text == "💵 Вывести указанную сумму")
@@ -483,8 +534,8 @@ async def _show_withdrawal_history(
         text += f"{status_icon} *{tx.amount} USDT* | {date}\n"
         text += f"ID: `{tx.id}`\n"
         if tx.tx_hash:
-            text += f"Hash: `{tx.tx_hash[:10]}...`\n"
-        text += "-------------------\n"
+            text += f"🔗 [BscScan](https://bscscan.com/tx/{tx.tx_hash})\n"
+        text += "───────────────────\n"
 
     # Pagination keyboard would go here (omitted for brevity, assume simple list)
     await message.answer(text, parse_mode="Markdown")

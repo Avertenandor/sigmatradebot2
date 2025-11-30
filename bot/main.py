@@ -283,6 +283,7 @@ async def main() -> None:  # noqa: C901
     dp.include_router(deposit.router)
     dp.include_router(withdrawal.router)
     dp.include_router(referral.router)
+    dp.include_router(calculator.router)
     dp.include_router(profile.router)
     dp.include_router(transaction.router)
     dp.include_router(support.router)

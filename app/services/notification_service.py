@@ -452,3 +452,50 @@ class NotificationService:
                 extra={"telegram_id": telegram_id},
             )
             return False
+
+    async def notify_roi_accrual(
+        self,
+        telegram_id: int,
+        amount: float,
+        deposit_level: int,
+        roi_progress_percent: float,
+    ) -> bool:
+        """
+        Notify user about ROI accrual.
+
+        Args:
+            telegram_id: User telegram ID
+            amount: ROI amount accrued
+            deposit_level: Deposit level
+            roi_progress_percent: Current ROI progress (0-500%)
+
+        Returns:
+            True if notification sent successfully
+        """
+        from bot.main import bot_instance
+
+        # Progress bar
+        filled = int(roi_progress_percent / 50)  # 10 blocks for 500%
+        empty = 10 - filled
+        progress_bar = "█" * filled + "░" * empty
+
+        message = (
+            f"💰 *Начислен ROI*\n\n"
+            f"📊 Уровень {deposit_level}: *+{amount:.2f} USDT*\n"
+            f"📈 Прогресс: {progress_bar} {roi_progress_percent:.1f}%\n\n"
+            f"_Баланс обновлён автоматически._"
+        )
+
+        try:
+            await bot_instance.send_message(
+                chat_id=telegram_id,
+                text=message,
+                parse_mode="Markdown",
+            )
+            return True
+        except Exception as e:
+            logger.error(
+                f"Failed to notify user about ROI accrual: {e}",
+                extra={"telegram_id": telegram_id},
+            )
+            return False

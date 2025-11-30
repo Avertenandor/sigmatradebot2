@@ -334,6 +334,89 @@ async def handle_back_to_main_menu(
     await show_main_menu(message, session, user, state, **safe_data)
 
 
+@router.message(Command("dashboard"))
+async def cmd_dashboard(
+    message: Message,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """
+    Quick dashboard with 24h metrics for admins.
+    Usage: /dashboard
+    """
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        await message.answer("❌ Эта функция доступна только администраторам")
+        return
+
+    from datetime import UTC, datetime, timedelta
+    from sqlalchemy import select, func, and_
+    from app.models.user import User
+    from app.models.deposit import Deposit
+    from app.models.transaction import Transaction
+    from app.models.enums import TransactionStatus, TransactionType
+
+    cutoff_24h = datetime.now(UTC) - timedelta(hours=24)
+
+    # New users in 24h
+    stmt = select(func.count(User.id)).where(User.created_at >= cutoff_24h)
+    result = await session.execute(stmt)
+    new_users_24h = result.scalar() or 0
+
+    # New deposits in 24h
+    stmt = select(func.count(Deposit.id), func.coalesce(func.sum(Deposit.amount), 0)).where(
+        and_(
+            Deposit.created_at >= cutoff_24h,
+            Deposit.status == "ACTIVE",
+        )
+    )
+    result = await session.execute(stmt)
+    row = result.one()
+    deposits_24h_count = row[0] or 0
+    deposits_24h_amount = float(row[1] or 0)
+
+    # Withdrawals in 24h
+    stmt = select(func.count(Transaction.id), func.coalesce(func.sum(Transaction.amount), 0)).where(
+        and_(
+            Transaction.created_at >= cutoff_24h,
+            Transaction.transaction_type == TransactionType.WITHDRAWAL.value,
+            Transaction.status == TransactionStatus.COMPLETED.value,
+        )
+    )
+    result = await session.execute(stmt)
+    row = result.one()
+    withdrawals_24h_count = row[0] or 0
+    withdrawals_24h_amount = float(row[1] or 0)
+
+    # Pending withdrawals
+    stmt = select(func.count(Transaction.id)).where(
+        and_(
+            Transaction.transaction_type == TransactionType.WITHDRAWAL.value,
+            Transaction.status == TransactionStatus.PENDING.value,
+        )
+    )
+    result = await session.execute(stmt)
+    pending_withdrawals = result.scalar() or 0
+
+    # Fraud alerts (users with risk_score > 50)
+    # Simplified - count banned users as proxy
+    stmt = select(func.count(User.id)).where(User.is_banned == True)
+    result = await session.execute(stmt)
+    fraud_alerts = result.scalar() or 0
+
+    text = (
+        f"📊 *Дашборд (за 24ч)*\n\n"
+        f"👥 Новых пользователей: *{new_users_24h}*\n"
+        f"💰 Депозитов: *{deposits_24h_count}* ({deposits_24h_amount:.2f} USDT)\n"
+        f"💸 Выводов: *{withdrawals_24h_count}* ({withdrawals_24h_amount:.2f} USDT)\n"
+        f"⏳ Ожидают одобрения: *{pending_withdrawals}*\n"
+        f"🚨 Заблокировано: *{fraud_alerts}*\n\n"
+        f"_Обновлено: {datetime.now(UTC).strftime('%H:%M UTC')}_"
+    )
+
+    await message.answer(text, parse_mode="Markdown")
+
+
 @router.message(F.text == "📊 Статистика")
 async def handle_admin_stats(
     message: Message,

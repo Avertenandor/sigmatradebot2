@@ -69,6 +69,7 @@ from jobs.tasks.notification_fallback_processor import (
 from jobs.tasks.warmup_redis_cache import warmup_redis_cache
 from jobs.tasks.incoming_transfer_monitor import monitor_incoming_transfers
 from app.tasks.reward_accrual_task import run_individual_reward_accrual
+from app.tasks.deposit_reminder_task import run_deposit_reminder_task
 
 
 def create_scheduler() -> AsyncIOScheduler:
@@ -206,7 +207,16 @@ def create_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
-    logger.info("Task scheduler configured with 14 jobs")
+    # Deposit reminder - every 6 hours
+    scheduler.add_job(
+        run_deposit_reminder_task,
+        trigger=IntervalTrigger(hours=6),
+        id="deposit_reminder",
+        name="Deposit Reminder",
+        replace_existing=True,
+    )
+
+    logger.info("Task scheduler configured with 15 jobs")
 
     return scheduler
 

@@ -101,6 +101,7 @@ def main_menu_reply_keyboard(
             KeyboardButton(text="📜 История"),
         )
         builder.row(
+            KeyboardButton(text="📊 Калькулятор"),
             KeyboardButton(text="🔐 Получить финпароль"),
         )
         builder.row(
