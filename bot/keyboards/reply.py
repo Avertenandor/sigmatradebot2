@@ -138,8 +138,8 @@ def main_menu_reply_keyboard(
                     f"[KEYBOARD] NOT adding master key button: "
                     f"telegram_id={telegram_id} != {admin_ids[0] if admin_ids else 'None'}"
                 )
-        else:
-            logger.info(f"[KEYBOARD] NOT adding admin panel button (is_admin={is_admin}) for user {telegram_id}")
+        
+        # Log for non-admin case is handled by the if block above
 
     keyboard = builder.as_markup(resize_keyboard=True)
     logger.info(f"[KEYBOARD] Keyboard created for user {telegram_id}, buttons count: {len(keyboard.keyboard)}")
