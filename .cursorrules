@@ -1,0 +1,13 @@
+# Cursor Rules - SigmaTradeBot
+
+## Operational Mode
+- **ONLINE MODE ONLY**: Always check live server status via SSH.
+- **EFFICIENCY**: Limit interactions to 1-2 tool cycles maximum per request.
+- **CONCISENESS**: Provide brief, dense summaries. No fluff.
+- **TOKEN ECONOMY**: Avoid repetitive context.
+
+## Technical Context
+- Server: 34.88.234.78
+- Path: /opt/sigmatradebot
+- Stack: Docker Compose (bot, worker, scheduler, postgres, redis)
+
