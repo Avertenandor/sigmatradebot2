@@ -642,7 +642,9 @@ class WithdrawalService:
         from app.models.deposit_reward import DepositReward
         from app.repositories.deposit_repository import DepositRepository
 
-        today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        # Use naive datetime for compatibility with TIMESTAMP WITHOUT TIME ZONE columns
+        today = datetime.now(UTC).date()
+        today_start = datetime(today.year, today.month, today.day)
 
         # Calculate today's ROI (sum of rewards accrued today)
         stmt = select(func.coalesce(func.sum(DepositReward.reward_amount), Decimal("0"))).where(
@@ -665,7 +667,7 @@ class WithdrawalService:
             Transaction.user_id == user_id,
             Transaction.type == TransactionType.WITHDRAWAL.value,
             Transaction.status.in_([
-                TransactionStatus.COMPLETED.value,
+                TransactionStatus.CONFIRMED.value,
                 TransactionStatus.PROCESSING.value,
                 TransactionStatus.PENDING.value,
             ]),

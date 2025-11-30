@@ -944,6 +944,25 @@ def finpass_recovery_keyboard() -> ReplyKeyboardMarkup:
     return builder.as_markup(resize_keyboard=True)
 
 
+def finpass_recovery_confirm_keyboard() -> ReplyKeyboardMarkup:
+    """
+    Financial password recovery confirmation keyboard.
+
+    Returns:
+        ReplyKeyboardMarkup with confirm/cancel buttons
+    """
+    builder = ReplyKeyboardBuilder()
+
+    builder.row(
+        KeyboardButton(text="✅ Отправить заявку"),
+    )
+    builder.row(
+        KeyboardButton(text="❌ Отменить"),
+    )
+
+    return builder.as_markup(resize_keyboard=True)
+
+
 def transaction_history_keyboard(
     current_filter: str | None = None,
     has_prev: bool = False,

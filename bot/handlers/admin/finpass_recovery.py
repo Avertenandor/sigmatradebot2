@@ -8,6 +8,7 @@ import re
 from typing import Any
 
 from aiogram import F, Router
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from loguru import logger
@@ -26,7 +27,7 @@ from bot.states.admin import AdminFinpassRecoveryStates
 router = Router()
 
 
-@router.message(F.text == "🔑 Восстановление пароля")
+@router.message(StateFilter("*"), F.text == "🔑 Восстановление пароля")
 async def show_recovery_requests(
     message: Message,
     session: AsyncSession,
@@ -88,7 +89,7 @@ async def show_recovery_requests(
     )
 
 
-@router.message(AdminFinpassRecoveryStates.viewing_list, F.text.regexp(r'^🔑 Запрос #(\d+)'))
+@router.message(StateFilter("*"), F.text.regexp(r'^🔑 Запрос #(\d+)'))
 async def handle_view_request(
     message: Message,
     session: AsyncSession,
@@ -103,9 +104,20 @@ async def handle_view_request(
     match = re.search(r'#(\d+)', message.text)
     if not match:
         return
-    
+
     request_id = int(match.group(1))
     await show_request_details(message, session, state, request_id)
+
+
+def escape_markdown(text: str) -> str:
+    """Escape special Markdown characters in user input."""
+    if not text:
+        return ""
+    # Escape Markdown special chars: _ * [ ] ( ) ~ ` > # + - = | { } . !
+    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    for char in special_chars:
+        text = text.replace(char, f'\\{char}')
+    return text
 
 
 async def show_request_details(
@@ -115,46 +127,58 @@ async def show_request_details(
     request_id: int,
 ) -> None:
     """Show request details and action buttons."""
-    recovery_service = FinpassRecoveryService(session)
-    request = await recovery_service.get_request_by_id(request_id)
-    
-    if not request:
+    try:
+        recovery_service = FinpassRecoveryService(session)
+        request = await recovery_service.get_request_by_id(request_id)
+
+        if not request:
+            await message.answer(
+                f"❌ Запрос #{request_id} не найден.",
+                reply_markup=get_admin_keyboard_from_data({}),
+            )
+            # Try to reload list
+            await show_recovery_requests(message, session, state)
+            return
+
+        user_service = UserService(session)
+        user = await user_service.get_user_by_id(request.user_id)
+
+        if user:
+            username = escape_markdown(user.username) if user.username else str(user.telegram_id)
+            user_label = f"{username} (ID: {user.id})"
+            telegram_link = f"TG: {user.telegram_id}"
+        else:
+            user_label = f"ID: {request.user_id}"
+            telegram_link = "TG: Неизвестно"
+
+        # Escape user-provided reason to prevent Markdown parsing errors
+        safe_reason = escape_markdown(request.reason or "Не указана")
+
+        text = (
+            f"🔑 *Запрос на восстановление #{request.id}*\n\n"
+            f"👤 Пользователь: {user_label}\n"
+            f"📱 {telegram_link}\n"
+            f"📅 Создан: {request.created_at.strftime('%d.%m.%Y %H:%M')}\n\n"
+            f"📝 *Причина:*\n{safe_reason}\n\n"
+            "Выберите действие:"
+        )
+
+        await state.update_data(current_request_id=request_id)
+        await state.set_state(AdminFinpassRecoveryStates.viewing_request)
+
         await message.answer(
-            f"❌ Запрос #{request_id} не найден.",
+            text,
+            parse_mode="Markdown",
+            reply_markup=admin_finpass_request_actions_keyboard(),
+        )
+
+    except Exception as e:
+        logger.error(f"Error showing request details for #{request_id}: {e}")
+        await message.answer(
+            "❌ Произошла ошибка при загрузке данных запроса.\n"
+            "Попробуйте еще раз или вернитесь к списку.",
             reply_markup=get_admin_keyboard_from_data({}),
         )
-        # Try to reload list
-        await show_recovery_requests(message, session, state)
-        return
-
-    user_service = UserService(session)
-    user = await user_service.get_user_by_id(request.user_id)
-    
-    if user:
-        username = user.username or str(user.telegram_id)
-        user_label = f"{username} (ID: {user.id})"
-        telegram_link = f"TG: `{user.telegram_id}`"
-    else:
-        user_label = f"ID: {request.user_id}"
-        telegram_link = "TG: Неизвестно"
-
-    text = (
-        f"🔑 **Запрос на восстановление #{request.id}**\n\n"
-        f"👤 Пользователь: {user_label}\n"
-        f"📱 {telegram_link}\n"
-        f"📅 Создан: {request.created_at.strftime('%d.%m.%Y %H:%M')}\n\n"
-        f"📝 **Причина:**\n{request.reason}\n\n"
-        "Выберите действие:"
-    )
-
-    await state.update_data(current_request_id=request_id)
-    await state.set_state(AdminFinpassRecoveryStates.viewing_request)
-
-    await message.answer(
-        text,
-        parse_mode="Markdown",
-        reply_markup=admin_finpass_request_actions_keyboard(),
-    )
 
 
 @router.message(AdminFinpassRecoveryStates.viewing_request, F.text == "✅ Одобрить запрос")
@@ -215,33 +239,50 @@ async def approve_request_action(
         user.earnings_blocked = True
 
         # Notify user
+        notification_sent = False
         try:
+            logger.info(f"Sending new password to user telegram_id={user.telegram_id}")
             await message.bot.send_message(
                 user.telegram_id,
-                f"✅ **Ваш запрос на восстановление пароля одобрен!**\n\n"
+                f"✅ *Ваш запрос на восстановление пароля одобрен!*\n\n"
                 f"Новый финансовый пароль: `{new_password}`\n\n"
-                f"⚠️ **Важно:**\n"
+                f"⚠️ *Важно:*\n"
                 f"• Сохраните этот пароль в надёжном месте\n"
                 f"• Ваши выплаты заблокированы до первого использования пароля\n\n"
                 f"Используйте раздел 'Вывод' для проверки.",
                 parse_mode="Markdown",
             )
+            notification_sent = True
+            logger.info(f"Password notification sent to user {user.telegram_id}")
         except Exception as e:
-            logger.error(f"Failed to notify user {user.id}: {e}")
-            await message.answer("⚠️ Не удалось отправить сообщение пользователю, но пароль сброшен.")
+            logger.error(f"Failed to notify user {user.id} (tg={user.telegram_id}): {e}")
 
         await recovery_service.mark_sent(
             request_id=request.id,
             admin_id=admin.id,
-            admin_notes="Password sent to user",
+            admin_notes="Password sent to user" if notification_sent else "Password NOT sent - notification failed",
         )
         await session.commit()
 
-        await message.answer(
-            f"✅ Запрос #{request_id} успешно одобрен.\n"
-            f"Новый пароль сгенерирован и отправлен пользователю.",
-            reply_markup=get_admin_keyboard_from_data(data),
-        )
+        # Always show password to admin for backup
+        if notification_sent:
+            await message.answer(
+                f"✅ Запрос #{request_id} успешно одобрен.\n"
+                f"Новый пароль отправлен пользователю.\n\n"
+                f"📋 *Резервная копия (для админа):*\n"
+                f"Пароль: `{new_password}`",
+                parse_mode="Markdown",
+                reply_markup=get_admin_keyboard_from_data(data),
+            )
+        else:
+            await message.answer(
+                f"⚠️ Запрос #{request_id} одобрен, но НЕ удалось отправить пользователю!\n\n"
+                f"📋 *Передайте пароль вручную:*\n"
+                f"Пароль: `{new_password}`\n"
+                f"Telegram ID: `{user.telegram_id}`",
+                parse_mode="Markdown",
+                reply_markup=get_admin_keyboard_from_data(data),
+            )
         # Return to list to process next
         await show_recovery_requests(message, session, state, **data)
 
@@ -311,7 +352,7 @@ async def reject_request_action(
         await message.answer(f"❌ Ошибка при отклонении: {e}")
 
 
-@router.message(AdminFinpassRecoveryStates.viewing_request, F.text == "◀️ Назад к списку")
+@router.message(StateFilter("*"), F.text == "◀️ Назад к списку")
 async def back_to_list_action(
     message: Message,
     session: AsyncSession,

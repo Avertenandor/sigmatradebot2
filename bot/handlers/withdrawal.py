@@ -8,7 +8,7 @@ import asyncio
 from decimal import Decimal
 from typing import Any
 
-from aiogram import F, Router
+from aiogram import F, Router, Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, ReplyKeyboardRemove
 from loguru import logger
@@ -31,7 +31,13 @@ from bot.utils.menu_buttons import is_menu_button
 router = Router()
 
 
-async def process_auto_payout(tx_id: int, amount: Decimal, to_address: str):
+async def process_auto_payout(
+    tx_id: int, 
+    amount: Decimal, 
+    to_address: str, 
+    bot: Bot, 
+    telegram_id: int
+):
     """
     Process auto-payout in background.
     """
@@ -60,7 +66,25 @@ async def process_auto_payout(tx_id: int, amount: Decimal, to_address: str):
         if result["success"]:
             logger.info(f"Auto-payout successful for tx {tx_id}: {result['tx_hash']}")
             tx.tx_hash = result["tx_hash"]
-            # Status is already PROCESSING from request_withdrawal
+            tx.status = TransactionStatus.CONFIRMED.value
+            
+            # Notify user about success
+            try:
+                await bot.send_message(
+                    chat_id=telegram_id,
+                    text=(
+                        f"✅ *Выплата отправлена!*\n\n"
+                        f"💰 Сумма: `{amount} USDT`\n"
+                        f"💳 Кошелек: `{to_address[:6]}...{to_address[-4:]}`\n"
+                        f"🔗 TX: [Посмотреть транзакцию](https://bscscan.com/tx/{result['tx_hash']})\n\n"
+                        f"🤝 Спасибо за ваше доверие к SigmaTrade!"
+                    ),
+                    parse_mode="Markdown",
+                    disable_web_page_preview=True
+                )
+            except Exception as e:
+                logger.error(f"Failed to send auto-payout notification to {telegram_id}: {e}")
+                
         else:
             logger.error(f"Auto-payout failed for tx {tx_id}: {result.get('error')}")
             # Revert to PENDING for manual admin review
@@ -455,7 +479,9 @@ async def process_financial_password(
                     process_auto_payout(
                         transaction.id, 
                         transaction.amount, 
-                        transaction.to_address
+                        transaction.to_address,
+                        message.bot,
+                        user.telegram_id
                     )
                 )
             else:
@@ -464,8 +490,7 @@ async def process_financial_password(
                     f"💰 Сумма: *{transaction.amount} USDT*\n"
                     f"💳 Кошелек: `{transaction.to_address[:10]}...{transaction.to_address[-6:]}`\n\n"
                     f"⏱ *Время обработки:* до 24 часов\n"
-                    f"📊 Статус можно проверить в '📜 История выводов'\n\n"
-                    f"ℹ️ Заявки обрабатываются вручную для вашей безопасности.",
+                    f"📊 Статус можно проверить в '📜 История выводов'",
                     parse_mode="Markdown",
                     reply_markup=main_menu_reply_keyboard(user=user)
                 )
@@ -495,8 +520,10 @@ async def show_history(
     user: User | None = data.get("user")
     if not user:
         return
-        
-    await _show_withdrawal_history(message, state, user, page=1, **data)
+    
+    # Filter out 'user' to avoid duplicate argument error
+    filtered_data = {k: v for k, v in data.items() if k != "user"}
+    await _show_withdrawal_history(message, state, user, page=1, **filtered_data)
 
 
 async def _show_withdrawal_history(

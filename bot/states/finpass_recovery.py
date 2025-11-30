@@ -11,3 +11,4 @@ class FinpassRecoveryStates(StatesGroup):
     """States for financial password recovery."""
 
     waiting_for_reason = State()
+    waiting_for_confirmation = State()

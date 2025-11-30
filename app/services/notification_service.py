@@ -398,10 +398,10 @@ class NotificationService:
         from bot.main import bot_instance
 
         message = (
-            f"✅ **Ваша заявка на вывод средств одобрена!**\n\n"
+            f"✅ **Выплата отправлена!**\n\n"
             f"💰 Сумма: {amount:.2f} USDT\n"
-            f"🔗 Транзакция: `{tx_hash}`\n\n"
-            f"Средства будут отправлены в ближайшее время."
+            f"🔗 TX: [Посмотреть транзакцию](https://bscscan.com/tx/{tx_hash})\n\n"
+            f"🤝 Спасибо за ваше доверие к SigmaTrade!"
         )
 
         try:
@@ -409,6 +409,7 @@ class NotificationService:
                 chat_id=telegram_id,
                 text=message,
                 parse_mode="Markdown",
+                disable_web_page_preview=True
             )
             return True
         except Exception as e:
