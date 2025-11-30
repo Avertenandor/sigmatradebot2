@@ -385,7 +385,7 @@ async def process_financial_password(
 
     session_factory = data.get("session_factory")
     
-    # Verify password and create withdrawal with SHORT transaction
+    # Verify password and create withdrawal
     if not session_factory:
         await message.answer("❌ Системная ошибка (no session factory)")
         return
@@ -394,24 +394,19 @@ async def process_financial_password(
         transaction = None
         error = None
         is_auto = False
+        no_finpass = False
         
         async with session_factory() as session:
-            async with session.begin():
-                user_service = UserService(session)
-                # Re-check user (detached)
-                current_user = await user_service.get_by_id(user.id)
-                if not current_user:
-                    raise ValueError("User not found")
-                
-                # Check password
-                if not current_user.financial_password:
-                    await message.answer(
-                        "❌ Финансовый пароль не установлен!",
-                        reply_markup=main_menu_reply_keyboard(user=current_user)
-                    )
-                    await state.clear()
-                    return
-
+            user_service = UserService(session)
+            # Re-check user (detached)
+            current_user = await user_service.get_by_id(user.id)
+            if not current_user:
+                raise ValueError("User not found")
+            
+            # Check password
+            if not current_user.financial_password:
+                no_finpass = True
+            else:
                 # Verify password with rate limiting
                 is_valid, rate_error = await user_service.verify_financial_password(
                     current_user.id, password
@@ -432,8 +427,13 @@ async def process_financial_password(
                         available_balance=Decimal(str(balance["available_balance"])),
                     )
         
-        # Outside transaction
-        if error:
+        # Outside session - send messages
+        if no_finpass:
+            await message.answer(
+                "❌ Финансовый пароль не установлен!",
+                reply_markup=main_menu_reply_keyboard(user=user)
+            )
+        elif error:
             await message.answer(
                 f"❌ {error}",
                 reply_markup=withdrawal_keyboard(),
@@ -470,7 +470,10 @@ async def process_financial_password(
                     reply_markup=main_menu_reply_keyboard(user=user)
                 )
         else:
-            await message.answer("❌ Неизвестная ошибка")
+            await message.answer(
+                "❌ Неизвестная ошибка",
+                reply_markup=withdrawal_keyboard(),
+            )
 
     except Exception as e:
         logger.error(f"Error processing withdrawal: {e}", exc_info=True)
