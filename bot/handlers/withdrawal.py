@@ -386,7 +386,7 @@ async def process_financial_password(
             async with session.begin():
                 user_service = UserService(session)
                 # Re-check user (detached)
-                current_user = await user_service.get_user(user.id)
+                current_user = await user_service.get_by_id(user.id)
                 if not current_user:
                     raise ValueError("User not found")
                 
