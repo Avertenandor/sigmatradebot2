@@ -239,33 +239,50 @@ async def approve_request_action(
         user.earnings_blocked = True
 
         # Notify user
+        notification_sent = False
         try:
+            logger.info(f"Sending new password to user telegram_id={user.telegram_id}")
             await message.bot.send_message(
                 user.telegram_id,
-                f"✅ **Ваш запрос на восстановление пароля одобрен!**\n\n"
+                f"✅ *Ваш запрос на восстановление пароля одобрен!*\n\n"
                 f"Новый финансовый пароль: `{new_password}`\n\n"
-                f"⚠️ **Важно:**\n"
+                f"⚠️ *Важно:*\n"
                 f"• Сохраните этот пароль в надёжном месте\n"
                 f"• Ваши выплаты заблокированы до первого использования пароля\n\n"
                 f"Используйте раздел 'Вывод' для проверки.",
                 parse_mode="Markdown",
             )
+            notification_sent = True
+            logger.info(f"Password notification sent to user {user.telegram_id}")
         except Exception as e:
-            logger.error(f"Failed to notify user {user.id}: {e}")
-            await message.answer("⚠️ Не удалось отправить сообщение пользователю, но пароль сброшен.")
+            logger.error(f"Failed to notify user {user.id} (tg={user.telegram_id}): {e}")
 
         await recovery_service.mark_sent(
             request_id=request.id,
             admin_id=admin.id,
-            admin_notes="Password sent to user",
+            admin_notes="Password sent to user" if notification_sent else "Password NOT sent - notification failed",
         )
         await session.commit()
 
-        await message.answer(
-            f"✅ Запрос #{request_id} успешно одобрен.\n"
-            f"Новый пароль сгенерирован и отправлен пользователю.",
-            reply_markup=get_admin_keyboard_from_data(data),
-        )
+        # Always show password to admin for backup
+        if notification_sent:
+            await message.answer(
+                f"✅ Запрос #{request_id} успешно одобрен.\n"
+                f"Новый пароль отправлен пользователю.\n\n"
+                f"📋 *Резервная копия (для админа):*\n"
+                f"Пароль: `{new_password}`",
+                parse_mode="Markdown",
+                reply_markup=get_admin_keyboard_from_data(data),
+            )
+        else:
+            await message.answer(
+                f"⚠️ Запрос #{request_id} одобрен, но НЕ удалось отправить пользователю!\n\n"
+                f"📋 *Передайте пароль вручную:*\n"
+                f"Пароль: `{new_password}`\n"
+                f"Telegram ID: `{user.telegram_id}`",
+                parse_mode="Markdown",
+                reply_markup=get_admin_keyboard_from_data(data),
+            )
         # Return to list to process next
         await show_recovery_requests(message, session, state, **data)
 
