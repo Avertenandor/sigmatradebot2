@@ -299,9 +299,17 @@ async def show_withdrawal_menu(
     user_service = UserService(session)
     balance = await user_service.get_user_balance(user.id)
 
+    # Get min withdrawal amount
+    from app.services.withdrawal_service import WithdrawalService
+    withdrawal_service = WithdrawalService(session)
+    min_amount = await withdrawal_service.get_min_withdrawal_amount()
+
     text = (
         f"💸 *Вывод средств*\n\n"
-        f"Доступно для вывода: `{balance['available_balance']:.2f} USDT`\n\n"
+        f"Доступно для вывода: `{balance['available_balance']:.2f} USDT`\n"
+        f"💰 *Минимальная сумма:* `{min_amount} USDT`\n\n"
+        f"ℹ️ _Вывод возможен по накоплению {min_amount} USDT прибыли, "
+        f"чтобы не нагружать выплатную систему и не переплачивать комиссии._\n\n"
         f"Выберите действие:"
     )
 
