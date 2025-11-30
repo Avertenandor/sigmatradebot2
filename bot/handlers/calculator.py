@@ -15,7 +15,7 @@ from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
-from bot.keyboards.reply import main_menu_reply_keyboard
+from bot.keyboards.reply import main_menu_reply_keyboard, cancel_keyboard
 from bot.utils.menu_buttons import is_menu_button
 
 router = Router(name="calculator")
@@ -37,9 +37,9 @@ async def get_deposit_versions(session: AsyncSession) -> dict:
     result = {}
     for v in versions:
         result[v.level] = {
-            "amount": float(v.amount),
-            "roi_percent": float(v.roi_percent),
-            "roi_cap": float(v.roi_cap) if v.roi_cap else None,
+            "amount": v.amount,  # Decimal
+            "roi_percent": v.roi_percent,  # Decimal
+            "roi_cap": v.roi_cap,  # Decimal or None
         }
     return result
 
@@ -73,10 +73,10 @@ async def show_calculator(
         "📊 *Калькулятор доходности*\n\n"
         "Введите сумму депозита (USDT) для расчёта:\n\n"
         f"💡 *Доступные уровни:*\n{levels_text}\n"
-        "Введите сумму или нажмите '📊 Главное меню' для выхода:"
+        "Введите сумму или нажмите '❌ Отмена' для выхода:"
     )
 
-    await message.answer(text, parse_mode="Markdown")
+    await message.answer(text, parse_mode="Markdown", reply_markup=cancel_keyboard())
     await state.set_state(CalculatorStates.waiting_for_amount)
 
 
@@ -88,9 +88,10 @@ async def process_calculator_amount(
     **data: Any,
 ) -> None:
     """Process calculator amount input with dynamic rates from DB."""
-    # Check for menu button
-    if is_menu_button(message.text or ""):
+    # Check for menu button or cancel
+    if is_menu_button(message.text or "") or message.text == "❌ Отмена":
         await state.clear()
+        await message.answer("Отменено", reply_markup=main_menu_reply_keyboard())
         return
 
     # Parse amount
@@ -115,7 +116,7 @@ async def process_calculator_amount(
     # Find matching level
     level = None
     for lvl, info in levels.items():
-        if float(amount) == info["amount"]:
+        if amount == info["amount"]:
             level = lvl
             break
 
@@ -123,7 +124,7 @@ async def process_calculator_amount(
         # Find closest level
         closest_level = min(
             levels.keys(),
-            key=lambda x: abs(levels[x]["amount"] - float(amount)),
+            key=lambda x: abs(levels[x]["amount"] - amount),
         )
         await message.answer(
             f"⚠️ Сумма {amount} USDT не соответствует ни одному уровню.\n\n"
@@ -133,15 +134,16 @@ async def process_calculator_amount(
         )
         return
 
-    # Calculate projections
+    # Calculate projections (using Decimal)
     level_info = levels[level]
-    daily_roi = float(amount) * level_info["roi_percent"] / 100
+    roi_percent = level_info["roi_percent"]
+    daily_roi = amount * roi_percent / Decimal("100")
     weekly_roi = daily_roi * 7
     monthly_roi = daily_roi * 30
     
     # ROI cap calculations
     if level_info["roi_cap"]:
-        max_roi = float(amount) * level_info["roi_cap"] / 100
+        max_roi = amount * level_info["roi_cap"] / Decimal("100")
         days_to_cap = int(max_roi / daily_roi) if daily_roi > 0 else 0
         cap_text = (
             f"\n🎯 *ROI Cap:* {int(level_info['roi_cap'])}%\n"
@@ -154,7 +156,7 @@ async def process_calculator_amount(
     text = (
         f"📊 *Калькулятор: Level {level}*\n\n"
         f"💵 Депозит: *{amount} USDT*\n"
-        f"📈 ROI: *{level_info['roi_percent']:.3f}%* в день\n\n"
+        f"📈 ROI: *{roi_percent:.3f}%* в день\n\n"
         f"*Прогноз заработка:*\n"
         f"• За день: *{daily_roi:.2f} USDT*\n"
         f"• За неделю: *{weekly_roi:.2f} USDT*\n"

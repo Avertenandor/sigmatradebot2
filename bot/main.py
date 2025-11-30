@@ -157,6 +157,11 @@ async def main() -> None:  # noqa: C901
     # Register middlewares (PART5: RequestID must be first!)
     # RateLimit must be BEFORE Database to reduce DB load on spam
     dp.update.middleware(RequestIDMiddleware())
+    
+    # Global Error Handler
+    from bot.middlewares.error_handler import ErrorHandlerMiddleware
+    dp.update.middleware(ErrorHandlerMiddleware())
+
     dp.update.middleware(LoggerMiddleware())
     
     # Rate limiting (optional, requires Redis) - BEFORE Database

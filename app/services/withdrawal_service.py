@@ -228,7 +228,12 @@ class WithdrawalService:
                         f"_Лимит обновляется в 00:00 UTC._"
                     ), False
 
-                # Deduct balance BEFORE creating transaction
+                # Calculate Fee
+                service_fee_percent = getattr(global_settings, "withdrawal_service_fee", Decimal("0"))
+                fee_amount = amount * (service_fee_percent / Decimal("100"))
+                net_amount = amount - fee_amount
+
+                # Deduct balance BEFORE creating transaction (Gross amount)
                 balance_before = user.balance
                 user.balance = user.balance - amount
                 balance_after = user.balance
@@ -244,7 +249,8 @@ class WithdrawalService:
                 transaction = await self.transaction_repo.create(
                     user_id=user_id,
                     type=TransactionType.WITHDRAWAL.value,
-                    amount=amount,
+                    amount=amount,  # Gross amount
+                    fee=fee_amount,  # Service fee
                     balance_before=balance_before,
                     balance_after=balance_after,
                     to_address=user.wallet_address,

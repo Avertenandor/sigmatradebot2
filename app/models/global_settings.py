@@ -35,6 +35,9 @@ class GlobalSettings(Base):
     auto_withdrawal_enabled: Mapped[bool] = mapped_column(
         Boolean, default=True, nullable=False
     )
+    withdrawal_service_fee: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), default=Decimal("0.00"), nullable=False
+    )
     
     # Blockchain settings
     active_rpc_provider: Mapped[str] = mapped_column(

@@ -70,6 +70,7 @@ from jobs.tasks.warmup_redis_cache import warmup_redis_cache
 from jobs.tasks.incoming_transfer_monitor import monitor_incoming_transfers
 from app.tasks.reward_accrual_task import run_individual_reward_accrual
 from app.tasks.deposit_reminder_task import run_deposit_reminder_task
+from app.tasks.cleanup_task import run_cleanup_task
 
 
 def create_scheduler() -> AsyncIOScheduler:
@@ -216,7 +217,16 @@ def create_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
-    logger.info("Task scheduler configured with 15 jobs")
+    # Cleanup task - every week (Sunday at 04:00 UTC)
+    scheduler.add_job(
+        run_cleanup_task,
+        trigger=CronTrigger(day_of_week="sun", hour=4, minute=0),
+        id="cleanup_task",
+        name="Data Cleanup Task",
+        replace_existing=True,
+    )
+
+    logger.info("Task scheduler configured with 16 jobs")
 
     return scheduler
 

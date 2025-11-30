@@ -257,118 +257,40 @@ async def execute_broadcast(
         await state.clear()
         return
 
-    user_service = UserService(session)
-    await message.reply("📨 Ставлю рассылку в очередь...")
-
-    # Get all user telegram IDs
-    user_telegram_ids = await user_service.get_all_telegram_ids()
-
-    if not user_telegram_ids:
-        await message.reply("❌ Нет пользователей для рассылки")
-        await state.clear()
-        return
-
-    # Prepare markup if button exists
-    reply_markup = None
-    if button_data:
-        builder = InlineKeyboardBuilder()
-        builder.button(text=button_data["text"], url=button_data["url"])
-        reply_markup = builder.as_markup()
-
-    # Generate unique broadcast ID
-    broadcast_id = f"broadcast_{admin_id}_{int(datetime.now().timestamp())}"
-
-    # Start broadcast (with rate limiting: 15 msg/sec)
-    total_users = len(user_telegram_ids)
-    success_count = 0
-    failed_count = 0
-
-    await message.reply(
-        f"✅ Рассылка запущена!\n\n"
-        f"👥 Всего пользователей: {total_users}\n"
-        f"⏱ Примерное время: {int(total_users / 15) + 1} сек.\n"
-        f"🔗 Кнопка: {'✅ ' + button_data['text'] if button_data else '❌ Нет'}\n\n"
-        f"📊 Рассылка идёт в фоновом режиме с ограничением 15 сообщений/сек.\n"
-        f"✉️ ID рассылки: `{broadcast_id}`",
-        parse_mode="Markdown",
+    from app.services.broadcast_service import BroadcastService
+    
+    # Start broadcast in background
+    service = BroadcastService(session, message.bot)
+    broadcast_id = await service.start_broadcast(
+        admin_id=admin_id,
+        broadcast_data=broadcast_data,
+        button_data=button_data,
+        admin_telegram_id=message.chat.id
     )
-
-    broadcast_type = broadcast_data["type"]
-    text = broadcast_data.get("text")
-    file_id = broadcast_data.get("file_id")
-    caption = broadcast_data.get("caption")
-
-    # Send messages with rate limiting
-    for i, telegram_id in enumerate(user_telegram_ids):
-        try:
-            if broadcast_type == "text":
-                await message.bot.send_message(
-                    telegram_id,
-                    text,
-                    parse_mode="Markdown",
-                    reply_markup=reply_markup,
-                )
-            elif broadcast_type == "photo":
-                await message.bot.send_photo(
-                    telegram_id,
-                    file_id,
-                    caption=caption,
-                    parse_mode="Markdown" if caption else None,
-                    reply_markup=reply_markup,
-                )
-            elif broadcast_type == "voice":
-                await message.bot.send_voice(
-                    telegram_id,
-                    file_id,
-                    caption=caption,
-                    parse_mode="Markdown" if caption else None,
-                    reply_markup=reply_markup,
-                )
-            elif broadcast_type == "audio":
-                await message.bot.send_audio(
-                    telegram_id,
-                    file_id,
-                    caption=caption,
-                    parse_mode="Markdown" if caption else None,
-                    reply_markup=reply_markup,
-                )
-
-            success_count += 1
-
-            # Rate limiting: 15 messages per second
-            if (i + 1) % 15 == 0:
-                await asyncio.sleep(1)
-
-        except Exception:
-            failed_count += 1
-            continue
 
     # Record broadcast timestamp for rate limiting
     broadcast_rate_limits[admin_id] = datetime.now()
 
-    # Send completion message
     await message.reply(
-        f"✅ **Рассылка завершена!**\n\n"
-        f"✅ Успешно: {success_count}\n"
-        f"❌ Ошибки: {failed_count}\n"
-        f"👥 Всего: {total_users}\n"
-        f"🔗 С кнопкой: {'Да' if button_data else 'Нет'}",
+        f"✅ **Рассылка запущена в фоне!**\n\n"
+        f"✉️ ID: `{broadcast_id}`\n"
+        f"Вы получите уведомление по завершении.",
         parse_mode="Markdown",
         reply_markup=get_admin_keyboard_from_data(data),
     )
 
-    # Log admin action
+    # Log admin action (start)
     admin: Admin | None = data.get("admin")
     if admin:
         log_service = AdminLogService(session)
-        message_preview = text or caption or f"{broadcast_type} message"
+        message_preview = broadcast_data.get("text") or broadcast_data.get("caption") or f"{broadcast_data['type']} message"
         if button_data:
             message_preview += f" [Button: {button_data['text']}]"
             
         await log_service.log_broadcast_sent(
             admin=admin,
-            total_users=success_count,
-            message_preview=message_preview,
+            total_users=0, # Unknown at start
+            message_preview=f"Started: {message_preview}",
         )
 
     # Reset state

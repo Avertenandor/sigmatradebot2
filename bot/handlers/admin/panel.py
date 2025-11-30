@@ -404,13 +404,32 @@ async def cmd_dashboard(
     result = await session.execute(stmt)
     fraud_alerts = result.scalar() or 0
 
+    # 📊 Text-based charts
+    def make_bar(value: float, max_val: float, length: int = 10) -> str:
+        if max_val == 0: return "░" * length
+        filled = int((value / max_val) * length)
+        return "█" * filled + "░" * (length - filled)
+
+    chart = ""
+    # Example chart: Deposits vs Withdrawals
+    max_vol = max(deposits_24h_amount, withdrawals_24h_amount)
+    if max_vol > 0:
+        dep_bar = make_bar(deposits_24h_amount, max_vol)
+        wd_bar = make_bar(withdrawals_24h_amount, max_vol)
+        chart = (
+            f"\n📈 *Объем за 24ч:*\n"
+            f"📥 Деп: `{dep_bar}` {int(deposits_24h_amount)}$\n"
+            f"📤 Выв: `{wd_bar}` {int(withdrawals_24h_amount)}$\n"
+        )
+
     text = (
         f"📊 *Дашборд (за 24ч)*\n\n"
         f"👥 Новых пользователей: *{new_users_24h}*\n"
         f"💰 Депозитов: *{deposits_24h_count}* ({deposits_24h_amount:.2f} USDT)\n"
         f"💸 Выводов: *{withdrawals_24h_count}* ({withdrawals_24h_amount:.2f} USDT)\n"
         f"⏳ Ожидают одобрения: *{pending_withdrawals}*\n"
-        f"🚨 Заблокировано: *{fraud_alerts}*\n\n"
+        f"🚨 Заблокировано: *{fraud_alerts}*\n"
+        f"{chart}\n"
         f"_Обновлено: {datetime.now(UTC).strftime('%H:%M UTC')}_"
     )
 

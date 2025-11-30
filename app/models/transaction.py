@@ -61,6 +61,9 @@ class Transaction(Base):
     amount: Mapped[Decimal] = mapped_column(
         DECIMAL(18, 8), nullable=False
     )
+    fee: Mapped[Decimal] = mapped_column(
+        DECIMAL(18, 8), default=Decimal("0"), nullable=False
+    )
 
     # Balance tracking
     balance_before: Mapped[Decimal] = mapped_column(
