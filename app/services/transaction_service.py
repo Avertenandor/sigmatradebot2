@@ -5,7 +5,7 @@ Provides unified transaction history across all types.
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, UTC
 from decimal import Decimal
 
 from loguru import logger
@@ -141,7 +141,7 @@ class TransactionService:
                     type=TransactionType.DEPOSIT,
                     amount=deposit.amount,
                     status=TransactionStatus(deposit.status),
-                    created_at=deposit.created_at,
+                    created_at=deposit.created_at.replace(tzinfo=UTC) if deposit.created_at.tzinfo is None else deposit.created_at,
                     description=f"Депозит уровня {deposit.level}",
                     tx_hash=tx_hash,
                     explorer_link=(
@@ -178,7 +178,7 @@ class TransactionService:
                     type=TransactionType.WITHDRAWAL,
                     amount=withdrawal.amount,
                     status=TransactionStatus(withdrawal.status),
-                    created_at=withdrawal.created_at,
+                    created_at=withdrawal.created_at.replace(tzinfo=UTC) if withdrawal.created_at.tzinfo is None else withdrawal.created_at,
                     description="Вывод средств",
                     tx_hash=tx_hash,
                     explorer_link=(
@@ -215,7 +215,7 @@ class TransactionService:
                     type=TransactionType.REFERRAL_REWARD,
                     amount=earning.amount,
                     status=status,
-                    created_at=earning.created_at,
+                    created_at=earning.created_at.replace(tzinfo=UTC) if earning.created_at.tzinfo is None else earning.created_at,
                     description=(
                         f"Реферальное вознаграждение "
                         f"(уровень {level or '?'})"
