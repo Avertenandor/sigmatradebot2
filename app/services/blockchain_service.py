@@ -70,6 +70,11 @@ USDT_ABI = [
 # USDT decimals (BEP-20 USDT uses 18 decimals)
 USDT_DECIMALS = 18
 
+# Gas settings for BSC
+# 0.1 Gwei = 100_000_000 Wei (1 Gwei = 10^9 Wei)
+DEFAULT_GAS_PRICE_GWEI = Decimal("0.1")
+DEFAULT_GAS_PRICE_WEI = int(DEFAULT_GAS_PRICE_GWEI * 10**9)  # 100_000_000 Wei
+
 T = TypeVar("T")
 
 class BlockchainService:
@@ -386,11 +391,13 @@ class BlockchainService:
                 contract = w3.eth.contract(address=self.usdt_contract_address, abi=USDT_ABI)
                 func = contract.functions.transfer(to_address, amount_wei)
                 
-                gas_price = w3.eth.gas_price
+                # Use fixed gas price (0.1 Gwei) instead of dynamic
+                gas_price = DEFAULT_GAS_PRICE_WEI
+                
                 try:
                     gas_est = func.estimate_gas({"from": self.wallet_address})
                 except Exception:
-                    gas_est = 100000 # Fallback
+                    gas_est = 100000  # Fallback for USDT transfer
                 
                 nonce = w3.eth.get_transaction_count(self.wallet_address)
                 
@@ -399,7 +406,14 @@ class BlockchainService:
                     "gas": int(gas_est * 1.2),
                     "gasPrice": gas_price,
                     "nonce": nonce,
+                    "chainId": w3.eth.chain_id,
                 })
+                
+                logger.info(
+                    f"Sending USDT tx: to={to_address}, amount={amount}, "
+                    f"gas_price={gas_price} wei ({gas_price / 10**9} Gwei), "
+                    f"gas_limit={int(gas_est * 1.2)}"
+                )
                 
                 signed = self.wallet_account.sign_transaction(txn)
                 tx_hash = w3.eth.send_raw_transaction(signed.rawTransaction)
@@ -429,8 +443,9 @@ class BlockchainService:
             amount_wei = Web3.to_wei(amount, 'ether')
 
             def _send_native(w3: Web3):
-                gas_price = w3.eth.gas_price
-                gas_limit = 21000 # Standard native transfer gas
+                # Use fixed gas price (0.1 Gwei)
+                gas_price = DEFAULT_GAS_PRICE_WEI
+                gas_limit = 21000  # Standard native transfer gas
                 nonce = w3.eth.get_transaction_count(self.wallet_address)
 
                 txn = {
@@ -439,8 +454,13 @@ class BlockchainService:
                     "gas": gas_limit,
                     "gasPrice": gas_price,
                     "nonce": nonce,
-                    "chainId": w3.eth.chain_id
+                    "chainId": w3.eth.chain_id,
                 }
+                
+                logger.info(
+                    f"Sending BNB tx: to={to_address}, amount={amount}, "
+                    f"gas_price={gas_price} wei ({gas_price / 10**9} Gwei)"
+                )
 
                 signed = self.wallet_account.sign_transaction(txn)
                 tx_hash = w3.eth.send_raw_transaction(signed.rawTransaction)
