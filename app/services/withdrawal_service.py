@@ -637,16 +637,17 @@ class WithdrawalService:
         Returns:
             Dict with exceeded, daily_roi, withdrawn_today, remaining
         """
-        from datetime import UTC, datetime, timedelta
-        from app.models.reward import Reward
+        from datetime import UTC, datetime
+
+        from app.models.deposit_reward import DepositReward
         from app.repositories.deposit_repository import DepositRepository
 
         today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
 
         # Calculate today's ROI (sum of rewards accrued today)
-        stmt = select(func.coalesce(func.sum(Reward.reward_amount), Decimal("0"))).where(
-            Reward.user_id == user_id,
-            Reward.created_at >= today_start,
+        stmt = select(func.coalesce(func.sum(DepositReward.reward_amount), Decimal("0"))).where(
+            DepositReward.user_id == user_id,
+            DepositReward.calculated_at >= today_start,
         )
         result = await self.session.execute(stmt)
         daily_roi = result.scalar() or Decimal("0")
@@ -659,7 +660,7 @@ class WithdrawalService:
                 if deposit.deposit_version and deposit.deposit_version.roi_percent:
                     daily_roi += (deposit.amount * deposit.deposit_version.roi_percent) / 100
 
-        # Get today's completed withdrawals
+        # Get today's withdrawals (pending, processing, completed)
         stmt = select(func.coalesce(func.sum(Transaction.amount), Decimal("0"))).where(
             Transaction.user_id == user_id,
             Transaction.type == TransactionType.WITHDRAWAL.value,
@@ -676,8 +677,10 @@ class WithdrawalService:
         # Calculate remaining
         remaining = max(daily_roi - withdrawn_today, Decimal("0"))
 
-        # Check if exceeded
-        exceeded = (withdrawn_today + requested_amount) > daily_roi and daily_roi > Decimal("0")
+        # Check if exceeded (only if there's a daily ROI limit)
+        exceeded = False
+        if daily_roi > Decimal("0"):
+            exceeded = (withdrawn_today + requested_amount) > daily_roi
 
         return {
             "exceeded": exceeded,
