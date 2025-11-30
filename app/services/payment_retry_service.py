@@ -5,7 +5,7 @@ Exponential backoff retry mechanism for failed payments.
 Prevents user fund loss from transient failures.
 """
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from loguru import logger
@@ -207,7 +207,7 @@ class PaymentRetryService:
         await self.retry_repo.update(
             retry.id,
             attempt_count=retry.attempt_count + 1,
-            last_attempt_at=datetime.utcnow(),
+            last_attempt_at=datetime.now(UTC),
         )
 
         try:
@@ -229,7 +229,7 @@ class PaymentRetryService:
             )
 
             payment_result = await blockchain_service.send_payment(
-                user.wallet_address, float(retry.amount)
+                user.wallet_address, retry.amount
             )
 
             if not payment_result["success"]:
@@ -259,7 +259,7 @@ class PaymentRetryService:
                     await self.reward_repo.update(
                         reward_id,
                         paid=True,
-                        paid_at=datetime.utcnow(),
+                        paid_at=datetime.now(UTC),
                         tx_hash=tx_hash,
                     )
 
@@ -353,7 +353,7 @@ class PaymentRetryService:
             Next retry datetime
         """
         delay_minutes = BASE_RETRY_DELAY_MINUTES * (2 ** attempt_count)
-        return datetime.utcnow() + timedelta(minutes=delay_minutes)
+        return datetime.now(UTC) + timedelta(minutes=delay_minutes)
 
     async def get_dlq_items(self) -> list[PaymentRetry]:
         """
@@ -394,7 +394,7 @@ class PaymentRetryService:
             retry_id,
             in_dlq=False,
             attempt_count=0,
-            next_retry_at=datetime.utcnow(),
+            next_retry_at=datetime.now(UTC),
         )
 
         await self.session.flush()

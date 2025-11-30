@@ -30,6 +30,7 @@ from bot.keyboards.reply import (
     admin_deposits_list_keyboard,
     admin_withdrawals_list_keyboard,
     admin_wallet_history_keyboard,
+    get_admin_keyboard_from_data,
 )
 from bot.utils.formatters import escape_md, format_tx_hash_with_link
 from bot.utils.menu_buttons import is_menu_button
@@ -813,8 +814,13 @@ async def back_to_card_from_wallet_history(
 async def back_to_admin_panel(
     message: Message,
     state: FSMContext,
+    session: AsyncSession,
+    **data: Any,
 ) -> None:
-    """Return to main admin panel."""
-    await state.clear()
-    await message.answer("👑 Панель администратора", reply_markup=admin_keyboard())
+    """Return to main admin panel from any financials state."""
+    # Сохраняем admin_session_token и возвращаемся в общий хендлер панели
+    await clear_state_preserve_admin_token(state)
+    from bot.handlers.admin.panel import handle_admin_panel_button
+
+    await handle_admin_panel_button(message, session, **data)
 

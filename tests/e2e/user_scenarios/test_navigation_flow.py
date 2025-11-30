@@ -8,15 +8,21 @@ Tests complete navigation scenarios:
 - State preservation on errors
 """
 
+import hashlib
 import pytest
 
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
+from app.services import UserService
 from bot.states.deposit import DepositStates
 from bot.states.registration import RegistrationStates
 from bot.states.withdrawal import WithdrawalStates
 from bot.utils.menu_buttons import is_menu_button
-from tests.conftest import hash_password
+
+
+def hash_password(password: str) -> str:
+    """Hash password for tests (simple bcrypt-like hash)."""
+    return hashlib.sha256(password.encode()).hexdigest()
 
 
 @pytest.mark.e2e

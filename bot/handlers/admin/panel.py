@@ -18,7 +18,11 @@ from app.services.admin_service import AdminService
 from app.services.deposit_service import DepositService
 from app.services.referral_service import ReferralService
 from app.services.user_service import UserService
-from bot.keyboards.reply import admin_keyboard, main_menu_reply_keyboard
+from bot.keyboards.reply import (
+    admin_keyboard,
+    get_admin_keyboard_from_data,
+    main_menu_reply_keyboard,
+)
 from bot.states.admin_states import AdminStates
 from bot.utils.formatters import format_usdt
 
@@ -289,15 +293,21 @@ async def handle_admin_panel_button(
     if user:
         blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
 
-    # Get admin and super_admin status
-    admin, is_super_admin = await get_admin_and_super_status(
-        session, telegram_id, data
+    # Get admin and role flags for keyboard
+    admin, _ = await get_admin_and_super_status(session, telegram_id, data)
+    # AdminAuthMiddleware уже положил is_extended_admin / is_super_admin в data
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=get_admin_keyboard_from_data(data),
     )
+    # Get admin and role flags for keyboard
+    admin, _ = await get_admin_and_super_status(session, telegram_id, data)
 
     await message.answer(
         text,
         parse_mode="Markdown",
-        reply_markup=admin_keyboard(is_super_admin=is_super_admin),
+        reply_markup=get_admin_keyboard_from_data(data),
     )
 
 

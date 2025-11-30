@@ -13,6 +13,7 @@ Detects:
 """
 
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 
 from loguru import logger
@@ -30,16 +31,8 @@ class AdminSecurityMonitor:
     R10-3: Monitor admin actions for compromise detection.
 
     Automatically blocks admins when suspicious patterns are detected.
+    Thresholds are configurable via settings.py / .env
     """
-
-    # Thresholds for suspicious activity
-    MAX_BANS_PER_HOUR = 20
-    MAX_TERMINATIONS_PER_HOUR = 20
-    MAX_WITHDRAWAL_APPROVALS_PER_HOUR = 50
-    MAX_ADMIN_CREATIONS_PER_DAY = 5
-    MAX_ADMIN_DELETIONS_PER_DAY = 5
-    MAX_LARGE_WITHDRAWAL_APPROVALS_PER_HOUR = 10  # >$1000
-    LARGE_WITHDRAWAL_THRESHOLD = 1000  # USDT
 
     def __init__(
         self,
@@ -144,9 +137,9 @@ class AdminSecurityMonitor:
     ) -> dict[str, Any]:
         """Check for mass bans/terminations."""
         threshold = (
-            self.MAX_BANS_PER_HOUR
+            settings.admin_max_bans_per_hour
             if action_type == "USER_BLOCKED"
-            else self.MAX_TERMINATIONS_PER_HOUR
+            else settings.admin_max_terminations_per_hour
         )
 
         # Count actions in last hour
@@ -193,12 +186,12 @@ class AdminSecurityMonitor:
         )
 
         # Check for mass approvals (hourly)
-        if count >= self.MAX_WITHDRAWAL_APPROVALS_PER_HOUR:
+        if count >= settings.admin_max_withdrawal_approvals_per_hour:
             return {
                 "suspicious": True,
                 "reason": (
                     f"Mass withdrawal approvals: {count} in last hour "
-                    f"(threshold: {self.MAX_WITHDRAWAL_APPROVALS_PER_HOUR})"
+                    f"(threshold: {settings.admin_max_withdrawal_approvals_per_hour})"
                 ),
                 "should_block": True,
                 "severity": "critical",
@@ -245,18 +238,19 @@ class AdminSecurityMonitor:
             amount = details.get("amount")
             if amount:
                 try:
-                    amount_decimal = float(amount)
-                    if amount_decimal >= self.LARGE_WITHDRAWAL_THRESHOLD:
+                    amount_decimal = Decimal(str(amount))
+                    if amount_decimal >= settings.admin_large_withdrawal_threshold:
                         # Count large withdrawals in last hour
                         large_count = await self._count_large_withdrawals(
                             admin_id, one_hour_ago
                         )
-                        if large_count >= self.MAX_LARGE_WITHDRAWAL_APPROVALS_PER_HOUR:
+                        max_large = settings.admin_max_large_withdrawal_approvals_per_hour
+                        if large_count >= max_large:
                             return {
                                 "suspicious": True,
                                 "reason": (
                                     f"Mass large withdrawal approvals: "
-                                    f"{large_count} >${self.LARGE_WITHDRAWAL_THRESHOLD} "
+                                    f"{large_count} >${settings.admin_large_withdrawal_threshold} "
                                     f"in last hour"
                                 ),
                                 "should_block": True,
@@ -277,9 +271,9 @@ class AdminSecurityMonitor:
     ) -> dict[str, Any]:
         """Check for admin creation/deletion spikes."""
         threshold = (
-            self.MAX_ADMIN_CREATIONS_PER_DAY
+            settings.admin_max_creations_per_day
             if action_type == "ADMIN_CREATED"
-            else self.MAX_ADMIN_DELETIONS_PER_DAY
+            else settings.admin_max_deletions_per_day
         )
 
         # Count actions in last 24 hours

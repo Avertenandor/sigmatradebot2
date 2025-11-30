@@ -284,7 +284,8 @@ async def cmd_start(
     if user:
         try:
             user_language = await get_user_language(session, user.id)
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to get user language, using default: {e}")
             pass
     _ = get_translator(user_language)
     
@@ -349,9 +350,10 @@ async def process_wallet(
         user_language = "ru"  # Default
         if user:
             try:
-                user_language = await get_user_language(session, user.id)
-            except Exception:
-                pass
+            user_language = await get_user_language(session, user.id)
+        except Exception as e:
+            logger.warning(f"Failed to get user language, using default: {e}")
+            pass
         _ = get_translator(user_language)
         
         await message.answer(

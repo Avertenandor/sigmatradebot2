@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.admin import Admin
 from app.services.wallet_admin_service import WalletAdminService
-from bot.keyboards.reply import admin_keyboard
+from bot.keyboards.reply import admin_keyboard, get_admin_keyboard_from_data
 
 router = Router()
 
@@ -53,7 +53,7 @@ async def show_wallet_management(
     await message.answer(
         text,
         parse_mode="Markdown",
-        reply_markup=admin_keyboard(),
+        reply_markup=get_admin_keyboard_from_data(data),
     )
 
 
@@ -77,7 +77,7 @@ async def show_wallet_requests(
             "⏳ **Запросы на изменение кошельков**\n\n"
             "Нет ожидающих запросов.",
             parse_mode="Markdown",
-            reply_markup=admin_keyboard(),
+            reply_markup=get_admin_keyboard_from_data(data),
         )
         return
 
@@ -126,7 +126,7 @@ async def approve_wallet_change(
     if not match:
         await message.answer(
             "❌ Неверный формат. Используйте: `одобрить кошелек <ID>`",
-            reply_markup=admin_keyboard(),
+            reply_markup=get_admin_keyboard_from_data(data),
         )
         return
 
@@ -141,7 +141,7 @@ async def approve_wallet_change(
     if not admin:
         await message.answer(
             "❌ Администратор не найден",
-            reply_markup=admin_keyboard(),
+            reply_markup=get_admin_keyboard_from_data(data),
         )
         return
 
@@ -159,7 +159,7 @@ async def approve_wallet_change(
         await message.answer(
             f"✅ Запрос #{request_id} одобрен!\n"
             f"⚠️ Требуется обновить конфигурацию и перезапустить бота.",
-            reply_markup=admin_keyboard(),
+            reply_markup=get_admin_keyboard_from_data(data),
         )
 
         # Refresh display
@@ -168,7 +168,7 @@ async def approve_wallet_change(
     except ValueError as e:
         await message.answer(
             f"❌ Ошибка: {e}",
-            reply_markup=admin_keyboard(),
+            reply_markup=get_admin_keyboard_from_data(data),
         )
 
 
@@ -191,7 +191,7 @@ async def reject_wallet_change(
     if not match:
         await message.answer(
             "❌ Неверный формат. Используйте: `отклонить кошелек <ID>`",
-            reply_markup=admin_keyboard(),
+            reply_markup=get_admin_keyboard_from_data(data),
         )
         return
 
@@ -206,7 +206,7 @@ async def reject_wallet_change(
     if not admin:
         await message.answer(
             "❌ Администратор не найден",
-            reply_markup=admin_keyboard(),
+            reply_markup=get_admin_keyboard_from_data(data),
         )
         return
 
@@ -223,7 +223,7 @@ async def reject_wallet_change(
 
         await message.answer(
             f"✅ Запрос #{request_id} отклонён",
-            reply_markup=admin_keyboard(),
+            reply_markup=get_admin_keyboard_from_data(data),
         )
 
         # Refresh display
@@ -232,5 +232,5 @@ async def reject_wallet_change(
     except ValueError as e:
         await message.answer(
             f"❌ Ошибка: {e}",
-            reply_markup=admin_keyboard(),
+            reply_markup=get_admin_keyboard_from_data(data),
         )

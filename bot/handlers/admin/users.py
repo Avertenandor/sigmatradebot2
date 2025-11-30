@@ -166,6 +166,40 @@ async def handle_list_users(
     )
 
 
+@router.message(F.text.regexp(r"^профиль\s+(\d+)$", flags=0))
+async def handle_profile_by_id_command(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """
+    Open user profile card by explicit command: 'профиль <User ID>'.
+    Удобно вызывать из других админских разделов (например, заявок на вывод).
+    """
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        await message.answer("❌ Эта функция доступна только администраторам")
+        return
+
+    match = re.match(r"^профиль\s+(\d+)$", message.text.strip(), re.IGNORECASE)
+    if not match:
+        await message.answer(
+            "❌ Неверный формат. Используйте: `профиль <User ID>`",
+        )
+        return
+
+    user_id = int(match.group(1))
+
+    user_service = UserService(session)
+    user = await user_service.get_by_id(user_id)
+    if not user:
+        await message.answer(f"❌ Пользователь с ID `{user_id}` не найден.")
+        return
+
+    await show_user_profile(message, user, state, session)
+
+
 @router.message(F.text == "⬅ Предыдущая")
 @router.message(F.text == "Следующая ➡")
 async def handle_user_list_pagination(

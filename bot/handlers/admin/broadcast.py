@@ -22,6 +22,7 @@ from bot.keyboards.reply import (
     admin_broadcast_cancel_keyboard,
     admin_broadcast_keyboard,
     admin_keyboard,
+    get_admin_keyboard_from_data,
 )
 from bot.states.admin_states import AdminStates
 from bot.utils.menu_buttons import is_menu_button
@@ -111,7 +112,7 @@ async def handle_broadcast_message(
         await state.clear()
         await message.answer(
             "❌ Рассылка отменена.",
-            reply_markup=admin_keyboard(),
+            reply_markup=get_admin_keyboard_from_data(data),
         )
         return
 
@@ -184,7 +185,7 @@ async def handle_button_choice(
         await state.clear()
         await message.answer(
             "❌ Рассылка отменена.",
-            reply_markup=admin_keyboard(),
+            reply_markup=get_admin_keyboard_from_data(data),
         )
 
     else:
@@ -206,7 +207,7 @@ async def handle_button_link(
         await state.clear()
         await message.answer(
             "❌ Рассылка отменена.",
-            reply_markup=admin_keyboard(),
+            reply_markup=get_admin_keyboard_from_data(data),
         )
         return
 
@@ -353,7 +354,7 @@ async def execute_broadcast(
         f"👥 Всего: {total_users}\n"
         f"🔗 С кнопкой: {'Да' if button_data else 'Нет'}",
         parse_mode="Markdown",
-        reply_markup=admin_keyboard(),
+        reply_markup=get_admin_keyboard_from_data(data),
     )
 
     # Log admin action

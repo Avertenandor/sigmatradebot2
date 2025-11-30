@@ -159,8 +159,14 @@ async def show_instructions(
         f"BSCScan: https://bscscan.com/address/{settings.system_wallet_address}"
     )
 
+    # Get actual level statuses for deposit keyboard
+    from app.services.deposit_validation_service import DepositValidationService
+    
+    validation_service = DepositValidationService(session)
+    levels_status = await validation_service.get_available_levels(user.id)
+    
     await message.answer(
         instructions_text,
         parse_mode="Markdown",
-        reply_markup=deposit_keyboard(),
+        reply_markup=deposit_keyboard(levels_status=levels_status),
     )

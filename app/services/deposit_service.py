@@ -75,10 +75,22 @@ class DepositService:
                     "Операция уже выполняется. Пожалуйста, подождите."
                 )
 
-            # R17-3: Check emergency stop
-            if settings.emergency_stop_deposits:
+            # R17-3: Check emergency stop (DB flag or static config flag)
+            from app.repositories.global_settings_repository import (
+                GlobalSettingsRepository,
+            )
+
+            settings_repo = GlobalSettingsRepository(self.session)
+            global_settings = await settings_repo.get_settings()
+
+            if (
+                settings.emergency_stop_deposits
+                or getattr(global_settings, "emergency_stop_deposits", False)
+            ):
                 logger.warning(
-                    f"Deposit blocked by emergency stop for user {user_id}, level {level}"
+                    "Deposit blocked by emergency stop for user %s, level %s",
+                    user_id,
+                    level,
                 )
                 raise ValueError(
                     "⚠️ Временная приостановка депозитов из-за технических работ.\n\n"

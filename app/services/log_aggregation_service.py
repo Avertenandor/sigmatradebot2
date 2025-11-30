@@ -122,7 +122,7 @@ class LogAggregationService:
                     "time_window": "1 minute",
                 },
             )
-            # TODO: Send alert to admins
+            # Send alert to admins via Telegram
             await self._send_critical_alert(error_fingerprint, error_count)
 
         elif error_count >= ERROR_FREQUENCY_WARNING:

@@ -109,6 +109,10 @@ class Settings(BaseSettings):
         default=False,
         description="Emergency stop for all withdrawals"
     )
+    emergency_stop_roi: bool = Field(
+        default=False,
+        description="Emergency stop for all ROI accrual calculations"
+    )
 
     # R18-4: Dual control settings
     dual_control_withdrawal_threshold: float = Field(
@@ -141,6 +145,43 @@ class Settings(BaseSettings):
     emergency_stop_deposits: bool = Field(
         default=False,
         description="Emergency stop for all new deposits"
+    )
+
+    # R10-3: Admin security monitor thresholds
+    admin_max_bans_per_hour: int = Field(
+        default=20,
+        gt=0,
+        description="Maximum bans per hour before admin is flagged"
+    )
+    admin_max_terminations_per_hour: int = Field(
+        default=20,
+        gt=0,
+        description="Maximum terminations per hour before admin is flagged"
+    )
+    admin_max_withdrawal_approvals_per_hour: int = Field(
+        default=50,
+        gt=0,
+        description="Maximum withdrawal approvals per hour"
+    )
+    admin_max_creations_per_day: int = Field(
+        default=5,
+        gt=0,
+        description="Maximum admin creations per day"
+    )
+    admin_max_deletions_per_day: int = Field(
+        default=5,
+        gt=0,
+        description="Maximum admin deletions per day"
+    )
+    admin_max_large_withdrawal_approvals_per_hour: int = Field(
+        default=10,
+        gt=0,
+        description="Maximum large (>$1000) withdrawal approvals per hour"
+    )
+    admin_large_withdrawal_threshold: float = Field(
+        default=1000.0,
+        gt=0,
+        description="Threshold for 'large' withdrawal (USDT)"
     )
 
     # R18-1: Dust attack protection

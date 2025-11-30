@@ -11,6 +11,7 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config.settings import settings
 from app.models.deposit import Deposit
 from app.models.deposit_reward import DepositReward
 from app.models.enums import TransactionStatus, TransactionType
@@ -222,6 +223,19 @@ class RewardService:
         Returns:
             Tuple of (success, rewards_calculated, total_amount, error)
         """
+        # R17-3: Emergency stop for ROI accruals
+        if settings.emergency_stop_roi:
+            logger.warning(
+                "Reward calculation blocked by emergency stop ROI",
+                extra={"session_id": session_id},
+            )
+            return (
+                False,
+                0,
+                Decimal("0"),
+                "⚠️ Начисление доходности временно приостановлено администратором.",
+            )
+
         session_obj = await self.get_session_by_id(session_id)
 
         if not session_obj:

@@ -146,7 +146,7 @@ class DepositProcessor:
                         f"minimum {min_deposit} USDT"
                     ),
                     "confirmations": confirmations,
-                    "amount": float(actual_amount),
+                    "amount": actual_amount,
                 }
 
             # Verify amount (if provided)
@@ -162,7 +162,7 @@ class DepositProcessor:
                             f"got {actual_amount}"
                         ),
                         "confirmations": confirmations,
-                        "amount": float(actual_amount),
+                        "amount": actual_amount,
                     }
 
             # Check if enough confirmations
@@ -175,7 +175,7 @@ class DepositProcessor:
                 "required_confirmations": self.confirmation_blocks,
                 "from_address": transfer_data["from"],
                 "to_address": transfer_data["to"],
-                "amount": float(transfer_data["amount"]),
+                "amount": actual_amount,
                 "block_number": tx_block,
                 "tx_hash": tx_hash,
             }

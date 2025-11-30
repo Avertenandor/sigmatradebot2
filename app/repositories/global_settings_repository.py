@@ -38,6 +38,9 @@ class GlobalSettingsRepository:
                 is_auto_switch_enabled=True,
                 max_open_deposit_level=5,
                 roi_settings={},
+                emergency_stop_withdrawals=False,
+                emergency_stop_deposits=False,
+                emergency_stop_roi=False,
             )
             self.session.add(settings)
             await self.session.commit()
@@ -55,6 +58,9 @@ class GlobalSettingsRepository:
         is_auto_switch_enabled: bool | None = None,
         max_open_deposit_level: int | None = None,
         roi_settings: dict[str, Any] | None = None,
+        emergency_stop_withdrawals: bool | None = None,
+        emergency_stop_deposits: bool | None = None,
+        emergency_stop_roi: bool | None = None,
     ) -> GlobalSettings:
         """
         Update global settings.
@@ -85,6 +91,12 @@ class GlobalSettingsRepository:
             current = dict(settings.roi_settings)
             current.update(roi_settings)
             settings.roi_settings = current
+        if emergency_stop_withdrawals is not None:
+            settings.emergency_stop_withdrawals = emergency_stop_withdrawals
+        if emergency_stop_deposits is not None:
+            settings.emergency_stop_deposits = emergency_stop_deposits
+        if emergency_stop_roi is not None:
+            settings.emergency_stop_roi = emergency_stop_roi
 
         await self.session.commit()
         await self.session.refresh(settings)

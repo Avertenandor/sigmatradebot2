@@ -5,7 +5,7 @@ Handles retrying failed notification deliveries with exponential backoff.
 Ensures users don't miss critical notifications.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from aiogram import Bot
 from loguru import logger
@@ -41,7 +41,7 @@ class NotificationRetryService:
             Dict with processed, successful, failed, gave_up counts
         """
         # Get failed notifications ready for retry
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
 
         # Get pending notifications (not resolved, under max retries)
         pending = await self.failed_repo.get_pending_for_retry(
@@ -104,7 +104,7 @@ class NotificationRetryService:
                     await self.failed_repo.update(
                         notification.id,
                         resolved=True,
-                        resolved_at=datetime.utcnow(),
+                        resolved_at=datetime.now(UTC),
                     )
 
                     successful += 1
@@ -127,7 +127,7 @@ class NotificationRetryService:
                         notification.id,
                         attempt_count=notification.attempt_count + 1,
                         last_error=error_msg,
-                        last_attempt_at=datetime.utcnow(),
+                        last_attempt_at=datetime.now(UTC),
                     )
 
                     failed += 1
@@ -247,7 +247,7 @@ class NotificationRetryService:
         await self.failed_repo.update(
             notification_id,
             resolved=True,
-            resolved_at=datetime.utcnow(),
+            resolved_at=datetime.now(UTC),
         )
 
         await self.session.commit()

@@ -99,14 +99,14 @@ class Transaction(Base):
     # Timestamps (stored as naive UTC in DB: TIMESTAMP WITHOUT TIME ZONE)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=lambda: datetime.utcnow(),
+        default=lambda: datetime.now(UTC),
         nullable=False,
         index=True,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=lambda: datetime.utcnow(),
-        onupdate=lambda: datetime.utcnow(),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
 

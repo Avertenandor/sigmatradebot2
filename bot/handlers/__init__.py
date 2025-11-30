@@ -5,9 +5,15 @@ Bot command and message handlers.
 """
 
 from bot.handlers import (
+    account_recovery,
     appeal,
+    contact_update,
+    debug_unhandled,
     deposit,
+    fallback,
+    finpass_recovery,
     instructions,
+    language,
     menu,
     profile,
     referral,
@@ -15,19 +21,27 @@ from bot.handlers import (
     support,
     transaction,
     verification,
+    wallet_change,
     withdrawal,
 )
 
 __all__ = [
+    "account_recovery",
     "appeal",
+    "contact_update",
+    "debug_unhandled",
     "deposit",
+    "fallback",
+    "finpass_recovery",
     "instructions",
+    "language",
     "menu",
-    "start",
-    "verification",
-    "withdrawal",
-    "referral",
     "profile",
-    "transaction",
+    "referral",
+    "start",
     "support",
+    "transaction",
+    "verification",
+    "wallet_change",
+    "withdrawal",
 ]

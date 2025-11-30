@@ -12,8 +12,10 @@ Tests complete role scenarios:
 - TERMINATED: does NOT see menu (middleware blocks before keyboard creation)
 """
 
-import pytest
+import hashlib
 from decimal import Decimal
+
+import pytest
 
 from app.models.blacklist import Blacklist, BlacklistActionType
 from app.repositories.blacklist_repository import BlacklistRepository
@@ -23,7 +25,11 @@ from app.services.deposit_service import DepositService
 from app.services.withdrawal_service import WithdrawalService
 from bot.keyboards.reply import main_menu_reply_keyboard
 from bot.middlewares.ban_middleware import BanMiddleware
-from tests.conftest import hash_password
+
+
+def hash_password(password: str) -> str:
+    """Hash password for tests (simple bcrypt-like hash)."""
+    return hashlib.sha256(password.encode()).hexdigest()
 
 
 def extract_button_texts(keyboard) -> list[str]:

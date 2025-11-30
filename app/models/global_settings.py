@@ -60,6 +60,17 @@ class GlobalSettings(Base):
         JSONB, default=dict, nullable=False
     )
 
+    # Emergency stop flags (R17-3)
+    emergency_stop_withdrawals: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    emergency_stop_deposits: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    emergency_stop_roi: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+
     def __repr__(self) -> str:
         return (
             f"<GlobalSettings(min_withdrawal={self.min_withdrawal_amount}, "

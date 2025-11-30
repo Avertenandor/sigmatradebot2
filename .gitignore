@@ -85,15 +85,14 @@ git_*.py
 
 # === BRANCH: code-only-no-docs ===
 # Documentation (excluded for clean code branch)
-# docs/
-
-# DEV_LOG.md - development journal (contains session details)
-# DEV_LOG.md
-# Temporary planning documents in root (should not be committed)
-# Note: docs/ folder may contain legitimate planning documents
-/FIX_*.md
-/*_PLAN.md
-/PLAN_*.md
+docs/
+DEV_LOG.md
+SCENARIOS_FRAMEWORK.md
+ADMIN_DEPOSIT_GUIDE.md
+README.typescript.md
+FIX_*.md
+*_PLAN.md
+PLAN_*.md
 
 # PM2
 .pm2/
