@@ -520,8 +520,10 @@ async def show_history(
     user: User | None = data.get("user")
     if not user:
         return
-        
-    await _show_withdrawal_history(message, state, user, page=1, **data)
+    
+    # Filter out 'user' to avoid duplicate argument error
+    filtered_data = {k: v for k, v in data.items() if k != "user"}
+    await _show_withdrawal_history(message, state, user, page=1, **filtered_data)
 
 
 async def _show_withdrawal_history(
