@@ -161,13 +161,13 @@ class DatabaseMiddleware(BaseMiddleware):
                                     async with self.session_pool() as lang_session:
                                         user_language = await get_user_language(
                                             lang_session, event.from_user.id
-                                )
-                        except Exception as e:
-                            # If we can't get language, use default
-                            logger.warning(f"Failed to get user language during error handling: {e}")
-                            pass
-                    
-                    _ = get_translator(user_language)
+                                        )
+                                except Exception as e:
+                                    # If we can't get language, use default
+                                    logger.warning(f"Failed to get user language during error handling: {e}")
+                                    pass
+                            
+                            _ = get_translator(user_language)
                             
                             # R11-1: More specific error messages based on error type
                             if isinstance(e, OperationalError):
