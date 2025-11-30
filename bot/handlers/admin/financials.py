@@ -62,19 +62,10 @@ async def show_financial_list(
     """
     await state.clear()
     logger.info(f"[FINANCIALS] Handler triggered by: {message.text}")
-    # Проверка прав доступа: только super_admin и extended_admin
-    is_super_admin = data.get("is_super_admin", False)
-    is_extended_admin = data.get("is_extended_admin", False)
-    
-    if not (is_super_admin or is_extended_admin):
-        logger.warning(
-            f"[ADMIN] User {message.from_user.id} tried to access financial reports "
-            f"but lacks required permissions (super_admin or extended_admin)"
-        )
-        await message.answer(
-            "❌ Доступ запрещён. Требуются расширенные права администратора."
-        )
-        return
+    # Проверка прав доступа: любой админ
+    # R-NEW: Allow basic admins to view financial reports (per user request)
+    # Previously restricted to extended/super, now open.
+    pass
 
     service = FinancialReportService(session)
     

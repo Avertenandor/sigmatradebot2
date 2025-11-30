@@ -214,7 +214,10 @@ async def handle_master_key_input(
     await message.answer(
         text,
         parse_mode="Markdown",
-        reply_markup=admin_keyboard(is_super_admin=is_super_admin),
+        reply_markup=admin_keyboard(
+        is_super_admin=is_super_admin,
+        is_extended_admin=admin.is_extended_admin if admin else False
+    ),
     )
 
 
@@ -255,7 +258,10 @@ async def cmd_admin_panel(
     await message.answer(
         text,
         parse_mode="Markdown",
-        reply_markup=admin_keyboard(is_super_admin=is_super_admin),
+        reply_markup=admin_keyboard(
+        is_super_admin=is_super_admin,
+        is_extended_admin=admin.is_extended_admin if admin else False
+    ),
     )
 
 
@@ -578,7 +584,10 @@ async def handle_admin_stats(
     await message.answer(
         text,
         parse_mode="Markdown",
-        reply_markup=admin_keyboard(is_super_admin=is_super_admin),
+        reply_markup=admin_keyboard(
+        is_super_admin=is_super_admin,
+        is_extended_admin=admin.is_extended_admin if admin else False
+    ),
     )
 
 
@@ -692,7 +701,10 @@ async def handle_admin_withdrawals(
     await message.answer(
         text,
         parse_mode="Markdown",
-        reply_markup=admin_keyboard(is_super_admin=is_super_admin),
+        reply_markup=admin_keyboard(
+        is_super_admin=is_super_admin,
+        is_extended_admin=admin.is_extended_admin if admin else False
+    ),
     )
 
 

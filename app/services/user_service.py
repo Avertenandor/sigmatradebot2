@@ -329,10 +329,22 @@ class UserService:
 
         if is_valid:
             # Reset attempts on success
-            if user.finpass_attempts > 0:
+            should_commit = False
+            
+            if user.finpass_attempts > 0 or user.finpass_locked_until:
                 user.finpass_attempts = 0
                 user.finpass_locked_until = None
+                should_commit = True
+            
+            # Unblock earnings if blocked (Recovery Logic - First successful use unblocks)
+            if getattr(user, "earnings_blocked", False):
+                user.earnings_blocked = False
+                logger.info(f"User {user_id} earnings unblocked after successful finpass verification")
+                should_commit = True
+            
+            if should_commit:
                 await self.session.commit()
+            
             return True, None
         else:
             # Increment attempts

@@ -410,22 +410,14 @@ def admin_keyboard(
 
     Args:
         is_super_admin: Whether current admin is super admin
+        is_extended_admin: Whether current admin is extended admin
 
     Returns:
-        ReplyKeyboardMarkup with admin options, filtered by role:
-        - basic admin (no extended/super flags) → только статистика
-        - extended admin → полный набор, кроме управления админами/мастер-ключом
-        - super admin → полный набор, включая управление админами/мастер-ключом
+        ReplyKeyboardMarkup with admin options, filtered by role.
     """
     builder = ReplyKeyboardBuilder()
 
-    # Basic admin: только просмотр статистики (см. SCENARIOS_FRAMEWORK 9.5.1)
-    if not is_extended_admin and not is_super_admin:
-        builder.row(KeyboardButton(text="📊 Статистика"))
-        builder.row(KeyboardButton(text="◀️ Главное меню"))
-        return builder.as_markup(resize_keyboard=True)
-
-    # Extended / super admin: полный набор админских разделов
+    # Common buttons for ALL admins (Basic, Extended, Super)
     builder.row(KeyboardButton(text="📊 Статистика"))
     builder.row(KeyboardButton(text="👥 Управление пользователями"))
     builder.row(KeyboardButton(text="💸 Заявки на вывод"))
@@ -433,23 +425,30 @@ def admin_keyboard(
         KeyboardButton(text="📢 Рассылка"),
         KeyboardButton(text="🆘 Техподдержка"),
     )
+    
+    # Financial Reports & Finpass Recovery (Safe for all admins per request)
     builder.row(
-        KeyboardButton(text="🔐 Управление кошельком"),
-        KeyboardButton(text="📡 Блокчейн Настройки"),
-    )
-    builder.row(
-        KeyboardButton(text="🚫 Управление черным списком"),
+        KeyboardButton(text="💰 Финансовая отчётность"),
         KeyboardButton(text="🔑 Восстановление пароля"),
     )
-    builder.row(KeyboardButton(text="💰 Управление депозитами"))
-    builder.row(KeyboardButton(text="🚨 Аварийные стопы"))
+    
     builder.row(KeyboardButton(text="📝 Просмотр сообщений пользователей"))
-    builder.row(KeyboardButton(text="💰 Финансовая отчётность"))
 
-    # Дополнительные разделы только для super_admin
+    # Sensitive controls - Extended/Super only
+    if is_extended_admin or is_super_admin:
+        builder.row(
+            KeyboardButton(text="🔐 Управление кошельком"),
+            KeyboardButton(text="📡 Блокчейн Настройки"),
+        )
+        builder.row(
+            KeyboardButton(text="🚫 Управление черным списком"),
+        )
+        builder.row(KeyboardButton(text="💰 Управление депозитами"))
+        builder.row(KeyboardButton(text="🚨 Аварийные стопы"))
+
+    # Super Admin only
     if is_super_admin:
         builder.row(KeyboardButton(text="👥 Управление админами"))
-        # Master key management - фактическая проверка делается в хэндлере
         builder.row(KeyboardButton(text="🔑 Управление мастер-ключом"))
 
     builder.row(KeyboardButton(text="◀️ Главное меню"))
