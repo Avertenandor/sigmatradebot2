@@ -395,6 +395,24 @@ class RewardService:
                 roi_paid_amount=new_roi_paid,
             )
 
+            # Notify user about ROI accrual
+            try:
+                from app.services.notification_service import NotificationService
+                
+                if user and user.telegram_id:
+                    notification_service = NotificationService(self.session)
+                    roi_cap = float(deposit.roi_cap_amount) if deposit.roi_cap_amount else 500.0
+                    roi_progress = (float(new_roi_paid) / (float(deposit.amount) * 5)) * 500 if deposit.amount else 0
+                    
+                    await notification_service.notify_roi_accrual(
+                        telegram_id=user.telegram_id,
+                        amount=float(reward_amount),
+                        deposit_level=deposit.level,
+                        roi_progress_percent=min(roi_progress, 500.0),
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to send ROI notification: {e}")
+
             # R12-1: Check if ROI cap reached for all levels
             if deposit.roi_cap_amount and new_roi_paid >= deposit.roi_cap_amount:
                 # Mark deposit as ROI completed with timestamp

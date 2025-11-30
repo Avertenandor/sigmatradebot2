@@ -7,10 +7,12 @@ from decimal import Decimal
 from typing import Any
 
 from aiogram import F, Router
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
+from loguru import logger
 
 from app.models.admin import Admin
 from app.models.user import User
@@ -55,6 +57,61 @@ async def handle_admin_users_menu(
     )
 
 
+@router.message(Command("search"))
+async def cmd_search_user(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """
+    Quick search user by command: /search @username or /search 0x... or /search 123456
+    """
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        return
+
+    # Parse argument
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        await message.answer(
+            "🔍 *Быстрый поиск пользователя*\n\n"
+            "Использование:\n"
+            "`/search @username` - по юзернейму\n"
+            "`/search 123456789` - по Telegram ID\n"
+            "`/search 0x...` - по адресу кошелька\n",
+            parse_mode="Markdown",
+        )
+        return
+
+    query = args[1].strip()
+    user_service = UserService(session)
+    user = None
+
+    # Search by wallet address
+    if query.startswith("0x") and len(query) == 42:
+        user = await user_service.get_by_wallet(query)
+    # Search by ID
+    elif query.isdigit():
+        user = await user_service.get_by_telegram_id(int(query))
+        if not user:
+            user = await user_service.get_by_id(int(query))
+    # Search by username
+    else:
+        username = query.lstrip("@")
+        user = await user_service.find_by_username(username)
+
+    if not user:
+        await message.answer(
+            f"❌ Пользователь не найден: `{escape_md(query)}`",
+            parse_mode="Markdown",
+        )
+        return
+
+    logger.info(f"Admin search: found user {user.id} by query '{query}'")
+    await show_user_profile(message, user, state, session)
+
+
 @router.message(F.text == "🔍 Найти пользователя")
 async def handle_find_user(
     message: Message,
@@ -70,8 +127,10 @@ async def handle_find_user(
     
     await message.answer(
         "🔍 **Поиск пользователя**\n\n"
-        "Отправьте **Username** (с @ или без), **Telegram ID** или **User ID**.\n\n"
-        "Пример: `@username`, `123456789`",
+        "Отправьте **Username** (с @ или без), **Telegram ID**, **User ID** "
+        "или **адрес кошелька (0x...)**.\n\n"
+        "Пример: `@username`, `123456789`, `0x1234...`\n\n"
+        "💡 Или используйте команду: `/search @username`",
         parse_mode="Markdown",
         reply_markup=cancel_keyboard(),
     )
@@ -97,8 +156,11 @@ async def process_find_user_input(
     user_service = UserService(session)
     user = None
 
-    # Try by ID first
-    if identifier.isdigit():
+    # Try by wallet address
+    if identifier.startswith("0x") and len(identifier) == 42:
+        user = await user_service.get_by_wallet(identifier)
+    # Try by ID
+    elif identifier.isdigit():
         # Try as Telegram ID first (more common input)
         user = await user_service.get_by_telegram_id(int(identifier))
         # If not found, try as User ID

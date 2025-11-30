@@ -157,6 +157,11 @@ async def main() -> None:  # noqa: C901
     # Register middlewares (PART5: RequestID must be first!)
     # RateLimit must be BEFORE Database to reduce DB load on spam
     dp.update.middleware(RequestIDMiddleware())
+    
+    # Global Error Handler
+    from bot.middlewares.error_handler import ErrorHandlerMiddleware
+    dp.update.middleware(ErrorHandlerMiddleware())
+
     dp.update.middleware(LoggerMiddleware())
     
     # Rate limiting (optional, requires Redis) - BEFORE Database
@@ -222,6 +227,7 @@ async def main() -> None:  # noqa: C901
     from bot.handlers import (
         account_recovery,
         appeal,
+        calculator,
         contact_update,
         deposit,
         finpass_recovery,
@@ -283,6 +289,7 @@ async def main() -> None:  # noqa: C901
     dp.include_router(deposit.router)
     dp.include_router(withdrawal.router)
     dp.include_router(referral.router)
+    dp.include_router(calculator.router)
     dp.include_router(profile.router)
     dp.include_router(transaction.router)
     dp.include_router(support.router)
@@ -412,6 +419,33 @@ async def main() -> None:  # noqa: C901
     except Exception as e:
         logger.warning(f"Failed to start health check server: {e}")
 
+    # Graceful shutdown handler
+    shutdown_event = asyncio.Event()
+    
+    async def shutdown_handler():
+        """Handle graceful shutdown."""
+        logger.info("Graceful shutdown initiated...")
+        shutdown_event.set()
+        
+        # Stop scheduler if running
+        try:
+            from jobs.scheduler import scheduler_instance
+            if scheduler_instance and scheduler_instance.running:
+                scheduler_instance.shutdown(wait=True)
+                logger.info("Scheduler stopped")
+        except Exception as e:
+            logger.warning(f"Error stopping scheduler: {e}")
+        
+        # Close database connections
+        try:
+            from app.config.database import engine
+            await engine.dispose()
+            logger.info("Database connections closed")
+        except Exception as e:
+            logger.warning(f"Error closing database: {e}")
+        
+        logger.info("Graceful shutdown complete")
+
     try:
         logger.info("Starting polling...")
         await dp.start_polling(
@@ -421,6 +455,7 @@ async def main() -> None:  # noqa: C901
         logger.exception(f"Polling error: {e}")
         raise
     finally:
+        await shutdown_handler()
         if redis_client:
             await redis_client.aclose()
         await bot.session.close()
@@ -430,7 +465,7 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("Bot stopped by user")
+        logger.info("Bot stopped by user (KeyboardInterrupt)")
     except Exception as e:
         logger.exception(f"Bot crashed: {e}")
         sys.exit(1)

@@ -7,6 +7,7 @@ Bot command and message handlers.
 from bot.handlers import (
     account_recovery,
     appeal,
+    calculator,
     contact_update,
     debug_unhandled,
     deposit,
@@ -28,6 +29,7 @@ from bot.handlers import (
 __all__ = [
     "account_recovery",
     "appeal",
+    "calculator",
     "contact_update",
     "debug_unhandled",
     "deposit",

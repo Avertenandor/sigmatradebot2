@@ -354,7 +354,8 @@ async def handle_export_report(
         await message.answer("Ошибка: пользователь не найден")
         return
 
-    wait_msg = await message.answer("⏳ Генерирую отчет... Пожалуйста, подождите.")
+    wait_msg =     await message.answer("⏳ Генерирую отчет... Пожалуйста, подождите.")
+    await message.bot.send_chat_action(message.chat.id, "upload_document")
 
     try:
         report_service = ReportService(session)

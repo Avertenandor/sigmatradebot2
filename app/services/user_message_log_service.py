@@ -133,3 +133,86 @@ class UserMessageLogService:
         logger.info(f"Deleted {count} messages for user {telegram_id}")
         return count
 
+    async def get_user_message_stats(self, telegram_id: int) -> dict:
+        """
+        Get statistics for user messages.
+
+        Args:
+            telegram_id: Telegram user ID
+
+        Returns:
+            Dict with stats: total, today, week, month, first_message, last_message
+        """
+        from datetime import UTC, datetime, timedelta
+
+        from sqlalchemy import func, select
+
+        from app.models.user_message_log import UserMessageLog
+
+        now = datetime.now(UTC)
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        week_start = today_start - timedelta(days=7)
+        month_start = today_start - timedelta(days=30)
+
+        # Total count
+        total_stmt = select(func.count(UserMessageLog.id)).where(
+            UserMessageLog.telegram_id == telegram_id
+        )
+        total_result = await self.session.execute(total_stmt)
+        total = total_result.scalar_one_or_none() or 0
+
+        # Today count
+        today_stmt = select(func.count(UserMessageLog.id)).where(
+            UserMessageLog.telegram_id == telegram_id,
+            UserMessageLog.created_at >= today_start,
+        )
+        today_result = await self.session.execute(today_stmt)
+        today = today_result.scalar_one_or_none() or 0
+
+        # Week count
+        week_stmt = select(func.count(UserMessageLog.id)).where(
+            UserMessageLog.telegram_id == telegram_id,
+            UserMessageLog.created_at >= week_start,
+        )
+        week_result = await self.session.execute(week_stmt)
+        week = week_result.scalar_one_or_none() or 0
+
+        # Month count
+        month_stmt = select(func.count(UserMessageLog.id)).where(
+            UserMessageLog.telegram_id == telegram_id,
+            UserMessageLog.created_at >= month_start,
+        )
+        month_result = await self.session.execute(month_stmt)
+        month = month_result.scalar_one_or_none() or 0
+
+        # First message
+        first_stmt = (
+            select(UserMessageLog.created_at)
+            .where(UserMessageLog.telegram_id == telegram_id)
+            .order_by(UserMessageLog.created_at.asc())
+            .limit(1)
+        )
+        first_result = await self.session.execute(first_stmt)
+        first_msg = first_result.scalar_one_or_none()
+        first_message = first_msg.strftime("%Y-%m-%d %H:%M") if first_msg else "N/A"
+
+        # Last message
+        last_stmt = (
+            select(UserMessageLog.created_at)
+            .where(UserMessageLog.telegram_id == telegram_id)
+            .order_by(UserMessageLog.created_at.desc())
+            .limit(1)
+        )
+        last_result = await self.session.execute(last_stmt)
+        last_msg = last_result.scalar_one_or_none()
+        last_message = last_msg.strftime("%Y-%m-%d %H:%M") if last_msg else "N/A"
+
+        return {
+            "total": total,
+            "today": today,
+            "week": week,
+            "month": month,
+            "first_message": first_message,
+            "last_message": last_message,
+        }
+

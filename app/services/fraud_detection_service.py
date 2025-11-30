@@ -184,6 +184,9 @@ class FraudDetectionService:
                     },
                 )
 
+                # Send fraud alert to admins
+                await self._send_fraud_alert(user, risk_score, risk_result["factors"])
+
                 return {
                     "blocked": True,
                     "risk_score": risk_score,
@@ -383,5 +386,65 @@ class FraudDetectionService:
             "description": "; ".join(descriptions) if descriptions else "",
         }
 
+    async def _send_fraud_alert(
+        self,
+        user: User,
+        risk_score: int,
+        factors: list[dict],
+    ) -> None:
+        """
+        Send fraud alert to all admins.
 
+        Args:
+            user: User object
+            risk_score: Calculated risk score
+            factors: List of risk factors
+        """
+        try:
+            from app.services.notification_service import NotificationService
+            from app.repositories.admin_repository import AdminRepository
+
+            admin_repo = AdminRepository(self.session)
+            admins = await admin_repo.find_all()
+
+            if not admins:
+                logger.warning("No admins found to send fraud alert")
+                return
+
+            # Format factors
+            factors_text = "\n".join(
+                f"• {f['type']}: {f['description']}" for f in factors[:5]
+            )
+
+            message = (
+                f"🚨 *FRAUD ALERT*\n\n"
+                f"👤 User #{user.id}\n"
+                f"📱 @{user.username or 'N/A'}\n"
+                f"💳 `{user.wallet_address[:10]}...`\n\n"
+                f"⚠️ Risk Score: *{risk_score}/100*\n\n"
+                f"*Причины:*\n{factors_text}\n\n"
+                f"Используйте `/dashboard` для обзора."
+            )
+
+            from bot.main import bot_instance
+
+            for admin in admins:
+                if admin.telegram_id:
+                    try:
+                        await bot_instance.send_message(
+                            chat_id=admin.telegram_id,
+                            text=message,
+                            parse_mode="Markdown",
+                        )
+                        logger.info(
+                            f"Fraud alert sent to admin {admin.id}",
+                            extra={"user_id": user.id, "risk_score": risk_score},
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to send fraud alert to admin {admin.id}: {e}"
+                        )
+
+        except Exception as e:
+            logger.error(f"Failed to send fraud alerts: {e}")
 

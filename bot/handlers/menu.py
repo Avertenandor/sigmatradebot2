@@ -595,11 +595,31 @@ async def show_my_wallet(
             )
             return
     
+    # Get wallet history
+    from sqlalchemy import select, desc
+    from app.models.user_wallet_history import UserWalletHistory
+    
+    stmt = select(UserWalletHistory).where(
+        UserWalletHistory.user_id == user.id
+    ).order_by(desc(UserWalletHistory.changed_at)).limit(5)
+    result = await session.execute(stmt)
+    history = result.scalars().all()
+    
     text = (
         f"💳 *Мой кошелек*\n\n"
-        f"Адрес: `{user.wallet_address}`\n\n"
-        f"⚠️ Сохраните приватный ключ в безопасном месте!"
+        f"📍 Текущий адрес:\n`{user.wallet_address}`\n\n"
     )
+    
+    if history:
+        text += "📜 *История изменений:*\n"
+        for h in history:
+            old_short = f"{h.old_wallet_address[:8]}...{h.old_wallet_address[-6:]}"
+            new_short = f"{h.new_wallet_address[:8]}...{h.new_wallet_address[-6:]}"
+            date_str = h.changed_at.strftime("%d.%m.%Y %H:%M")
+            text += f"• {date_str}\n  `{old_short}` → `{new_short}`\n"
+        text += "\n"
+    
+    text += "⚠️ Сохраните приватный ключ в безопасном месте!"
 
     await message.answer(text, parse_mode="Markdown", reply_markup=wallet_menu_keyboard())
 
@@ -721,14 +741,19 @@ async def show_my_deposits(
     
     for deposit in active_deposits:
         # Calculate ROI progress
-        roi_paid = getattr(deposit, "roi_paid_amount", 0) or 0
-        roi_cap = getattr(deposit, "roi_cap_amount", 0) or 0
+        roi_paid = float(getattr(deposit, "roi_paid_amount", 0) or 0)
+        roi_cap = float(getattr(deposit, "roi_cap_amount", 0) or 0)
         
         if roi_cap > 0:
             roi_percent = (roi_paid / roi_cap) * 100
-            roi_status = f"{roi_percent:.1f}% из 500%"
+            roi_status = f"{roi_percent:.1f}%"
+            # Progress bar (10 chars)
+            filled = int(roi_percent / 10)
+            empty = 10 - filled
+            progress_bar = "█" * filled + "░" * empty
         else:
-            roi_status = "0% из 500%"
+            roi_status = "0%"
+            progress_bar = "░" * 10
         
         # Check if completed
         is_completed = getattr(deposit, "is_roi_completed", False)
@@ -736,11 +761,14 @@ async def show_my_deposits(
         status_text = "Закрыт (ROI 500%)" if is_completed else "Активен"
         
         created_date = deposit.created_at.strftime("%d.%m.%Y %H:%M")
+        remaining = roi_cap - roi_paid
         
         text += (
             f"{status_emoji} *Уровень {deposit.level}*\n"
             f"💰 Сумма: {format_usdt(deposit.amount)} USDT\n"
-            f"📊 ROI: {roi_status}\n"
+            f"📊 ROI: `{progress_bar}` {roi_status}\n"
+            f"✅ Получено: {format_usdt(roi_paid)} USDT\n"
+            f"⏳ Осталось: {format_usdt(remaining)} USDT\n"
             f"📅 Создан: {created_date}\n"
             f"📋 Статус: {status_text}\n"
             f"─────────────────────────────\n\n"
@@ -790,6 +818,7 @@ async def show_notification_settings(
     # Build status text
     deposit_status = "✅ Включены" if settings.deposit_notifications else "❌ Выключены"
     withdrawal_status = "✅ Включены" if settings.withdrawal_notifications else "❌ Выключены"
+    roi_status = "✅ Включены" if getattr(settings, 'roi_notifications', True) else "❌ Выключены"
     marketing_status = "✅ Включены" if settings.marketing_notifications else "❌ Выключены"
     
     text = (
@@ -797,6 +826,7 @@ async def show_notification_settings(
         f"Управляйте уведомлениями, которые вы хотите получать:\n\n"
         f"💰 Уведомления о депозитах: {deposit_status}\n"
         f"💸 Уведомления о выводах: {withdrawal_status}\n"
+        f"📊 Уведомления о ROI: {roi_status}\n"
         f"📢 Маркетинговые уведомления: {marketing_status}\n\n"
         f"Используйте кнопки ниже для изменения настроек."
     )
@@ -807,6 +837,7 @@ async def show_notification_settings(
         reply_markup=notification_settings_reply_keyboard(
             deposit_enabled=settings.deposit_notifications,
             withdrawal_enabled=settings.withdrawal_notifications,
+            roi_enabled=getattr(settings, 'roi_notifications', True),
             marketing_enabled=settings.marketing_notifications,
         ),
     )
@@ -846,6 +877,7 @@ async def toggle_deposit_notification(
     # Update message
     deposit_status = "✅ Включены" if settings.deposit_notifications else "❌ Выключены"
     withdrawal_status = "✅ Включены" if settings.withdrawal_notifications else "❌ Выключены"
+    roi_status = "✅ Включены" if getattr(settings, 'roi_notifications', True) else "❌ Выключены"
     marketing_status = "✅ Включены" if settings.marketing_notifications else "❌ Выключены"
     
     text = (
@@ -853,6 +885,7 @@ async def toggle_deposit_notification(
         f"Управляйте уведомлениями, которые вы хотите получать:\n\n"
         f"💰 Уведомления о депозитах: {deposit_status}\n"
         f"💸 Уведомления о выводах: {withdrawal_status}\n"
+        f"📊 Уведомления о ROI: {roi_status}\n"
         f"📢 Маркетинговые уведомления: {marketing_status}\n\n"
         f"Используйте кнопки ниже для изменения настроек."
     )
@@ -863,6 +896,7 @@ async def toggle_deposit_notification(
         reply_markup=notification_settings_reply_keyboard(
             deposit_enabled=settings.deposit_notifications,
             withdrawal_enabled=settings.withdrawal_notifications,
+            roi_enabled=getattr(settings, 'roi_notifications', True),
             marketing_enabled=settings.marketing_notifications,
         ),
     )
@@ -902,6 +936,7 @@ async def toggle_withdrawal_notification(
     # Update message
     deposit_status = "✅ Включены" if settings.deposit_notifications else "❌ Выключены"
     withdrawal_status = "✅ Включены" if settings.withdrawal_notifications else "❌ Выключены"
+    roi_status = "✅ Включены" if getattr(settings, 'roi_notifications', True) else "❌ Выключены"
     marketing_status = "✅ Включены" if settings.marketing_notifications else "❌ Выключены"
     
     text = (
@@ -909,6 +944,7 @@ async def toggle_withdrawal_notification(
         f"Управляйте уведомлениями, которые вы хотите получать:\n\n"
         f"💰 Уведомления о депозитах: {deposit_status}\n"
         f"💸 Уведомления о выводах: {withdrawal_status}\n"
+        f"📊 Уведомления о ROI: {roi_status}\n"
         f"📢 Маркетинговые уведомления: {marketing_status}\n\n"
         f"Используйте кнопки ниже для изменения настроек."
     )
@@ -919,6 +955,67 @@ async def toggle_withdrawal_notification(
         reply_markup=notification_settings_reply_keyboard(
             deposit_enabled=settings.deposit_notifications,
             withdrawal_enabled=settings.withdrawal_notifications,
+            roi_enabled=getattr(settings, 'roi_notifications', True),
+            marketing_enabled=settings.marketing_notifications,
+        ),
+    )
+
+
+@router.message(F.text.in_({
+    "✅ Уведомления о ROI",
+    "❌ Уведомления о ROI",
+}))
+async def toggle_roi_notification(
+    message: Message,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """Toggle ROI notifications."""
+    user: User | None = data.get("user")
+    if not user:
+        await message.answer("❌ Ошибка: пользователь не найден")
+        return
+    
+    from app.services.user_notification_service import UserNotificationService
+    from bot.keyboards.reply import notification_settings_reply_keyboard
+    
+    notification_service = UserNotificationService(session)
+    settings = await notification_service.get_settings(user.id)
+    
+    # Toggle ROI notifications
+    current_value = getattr(settings, 'roi_notifications', True)
+    new_value = not current_value
+    await notification_service.update_settings(
+        user.id, roi_notifications=new_value
+    )
+    await session.commit()
+    
+    # Refresh settings
+    settings = await notification_service.get_settings(user.id)
+    
+    # Update message
+    deposit_status = "✅ Включены" if settings.deposit_notifications else "❌ Выключены"
+    withdrawal_status = "✅ Включены" if settings.withdrawal_notifications else "❌ Выключены"
+    roi_status = "✅ Включены" if getattr(settings, 'roi_notifications', True) else "❌ Выключены"
+    marketing_status = "✅ Включены" if settings.marketing_notifications else "❌ Выключены"
+    
+    text = (
+        f"🔔 *Настройки уведомлений*\n\n"
+        f"Управляйте уведомлениями, которые вы хотите получать:\n\n"
+        f"💰 Уведомления о депозитах: {deposit_status}\n"
+        f"💸 Уведомления о выводах: {withdrawal_status}\n"
+        f"📊 Уведомления о ROI: {roi_status}\n"
+        f"📢 Маркетинговые уведомления: {marketing_status}\n\n"
+        f"Используйте кнопки ниже для изменения настроек."
+    )
+    
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=notification_settings_reply_keyboard(
+            deposit_enabled=settings.deposit_notifications,
+            withdrawal_enabled=settings.withdrawal_notifications,
+            roi_enabled=getattr(settings, 'roi_notifications', True),
             marketing_enabled=settings.marketing_notifications,
         ),
     )
@@ -958,6 +1055,7 @@ async def toggle_marketing_notification(
     # Update message
     deposit_status = "✅ Включены" if settings.deposit_notifications else "❌ Выключены"
     withdrawal_status = "✅ Включены" if settings.withdrawal_notifications else "❌ Выключены"
+    roi_status = "✅ Включены" if getattr(settings, 'roi_notifications', True) else "❌ Выключены"
     marketing_status = "✅ Включены" if settings.marketing_notifications else "❌ Выключены"
     
     text = (
@@ -965,6 +1063,7 @@ async def toggle_marketing_notification(
         f"Управляйте уведомлениями, которые вы хотите получать:\n\n"
         f"💰 Уведомления о депозитах: {deposit_status}\n"
         f"💸 Уведомления о выводах: {withdrawal_status}\n"
+        f"📊 Уведомления о ROI: {roi_status}\n"
         f"📢 Маркетинговые уведомления: {marketing_status}\n\n"
         f"Используйте кнопки ниже для изменения настроек."
     )
@@ -975,6 +1074,7 @@ async def toggle_marketing_notification(
         reply_markup=notification_settings_reply_keyboard(
             deposit_enabled=settings.deposit_notifications,
             withdrawal_enabled=settings.withdrawal_notifications,
+            roi_enabled=getattr(settings, 'roi_notifications', True),
             marketing_enabled=settings.marketing_notifications,
         ),
     )

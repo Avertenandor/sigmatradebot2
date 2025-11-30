@@ -20,7 +20,11 @@ from app.models.transaction import Transaction # For auto-payout
 from app.models.enums import TransactionStatus # For auto-payout
 from app.services.user_service import UserService
 from app.services.withdrawal_service import WithdrawalService
-from bot.keyboards.reply import main_menu_reply_keyboard, withdrawal_keyboard
+from bot.keyboards.reply import (
+    finpass_input_keyboard,
+    main_menu_reply_keyboard,
+    withdrawal_keyboard,
+)
 from bot.states.withdrawal import WithdrawalStates
 from bot.utils.menu_buttons import is_menu_button
 
@@ -144,17 +148,68 @@ async def withdraw_all(
         )
         return
 
-    # Save amount and ask for password
-    await state.update_data(amount=amount)
+    # Save amount and ask for CONFIRMATION first (convert Decimal to str for JSON)
+    await state.update_data(amount=str(amount))
+    await state.set_state(WithdrawalStates.waiting_for_confirmation)
 
     text = (
-        f"💸 Вывод средств (ВСЁ)\n\n"
-        f"Сумма к выводу: {amount} USDT\n\n"
-        f"Для подтверждения введите ваш финансовый пароль:"
+        f"⚠️ *Подтверждение вывода*\n\n"
+        f"💰 Сумма: *{amount:.2f} USDT*\n"
+        f"💳 Кошелёк: `{user.wallet_address[:10]}...{user.wallet_address[-6:]}`\n\n"
+        f"❗️ Убедитесь, что это ваш *ЛИЧНЫЙ* кошелёк (не биржевой)!\n\n"
+        f"Для подтверждения напишите: *да* или *yes*\n"
+        f"Для отмены: *нет* или *отмена*"
     )
 
-    await message.answer(text, reply_markup=ReplyKeyboardRemove())
-    await state.set_state(WithdrawalStates.waiting_for_financial_password)
+    await message.answer(text, parse_mode="Markdown")
+
+
+@router.message(WithdrawalStates.waiting_for_confirmation)
+async def confirm_withdrawal(
+    message: Message,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """Handle withdrawal confirmation."""
+    user: User | None = data.get("user")
+    if not user:
+        await message.answer("❌ Ошибка: пользователь не найден")
+        await state.clear()
+        return
+
+    # Check for menu button
+    if is_menu_button(message.text or ""):
+        await state.clear()
+        return
+
+    answer = (message.text or "").strip().lower()
+    
+    if answer in ("да", "yes", "д", "y"):
+        # Confirmed - ask for password
+        state_data = await state.get_data()
+        amount = state_data.get("amount")
+        
+        text = (
+            f"💸 *Вывод средств*\n\n"
+            f"Сумма к выводу: *{amount} USDT*\n\n"
+            f"🔐 Введите ваш финансовый пароль:"
+        )
+
+        await message.answer(text, reply_markup=finpass_input_keyboard(), parse_mode="Markdown")
+        await state.set_state(WithdrawalStates.waiting_for_financial_password)
+    
+    elif answer in ("нет", "no", "н", "n", "отмена", "cancel"):
+        await state.clear()
+        await message.answer(
+            "❌ Вывод отменён.",
+            reply_markup=withdrawal_keyboard(),
+        )
+    
+    else:
+        await message.answer(
+            "⚠️ Напишите *да* для подтверждения или *нет* для отмены.",
+            parse_mode="Markdown",
+        )
 
 
 @router.message(F.text == "💵 Вывести указанную сумму")
@@ -267,15 +322,16 @@ async def process_withdrawal_amount(
         )
         return
 
-    await state.update_data(amount=amount)
+    # Convert Decimal to str for JSON serialization in FSM state
+    await state.update_data(amount=str(amount))
 
     text = (
-        f"💸 Вывод средств\n\n"
-        f"Сумма: {amount} USDT\n\n"
-        f"Для подтверждения введите ваш финансовый пароль:"
+        f"💸 *Вывод средств*\n\n"
+        f"Сумма: *{amount} USDT*\n\n"
+        f"🔐 Введите ваш финансовый пароль:"
     )
 
-    await message.answer(text)
+    await message.answer(text, reply_markup=finpass_input_keyboard(), parse_mode="Markdown")
     await state.set_state(WithdrawalStates.waiting_for_financial_password)
 
 
@@ -290,6 +346,15 @@ async def process_financial_password(
     if not user:
         await message.answer("❌ Ошибка: пользователь не найден")
         await state.clear()
+        return
+    
+    # Handle cancel button
+    if (message.text or "").strip() == "❌ Отменить вывод":
+        await state.clear()
+        await message.answer(
+            "❌ Вывод отменён.",
+            reply_markup=withdrawal_keyboard(),
+        )
         return
     
     if is_menu_button(message.text or ""):
@@ -320,7 +385,7 @@ async def process_financial_password(
 
     session_factory = data.get("session_factory")
     
-    # Verify password and create withdrawal with SHORT transaction
+    # Verify password and create withdrawal
     if not session_factory:
         await message.answer("❌ Системная ошибка (no session factory)")
         return
@@ -329,30 +394,25 @@ async def process_financial_password(
         transaction = None
         error = None
         is_auto = False
+        no_finpass = False
         
         async with session_factory() as session:
-            async with session.begin():
-                user_service = UserService(session)
-                # Re-check user (detached)
-                current_user = await user_service.get_user(user.id)
-                if not current_user:
-                    raise ValueError("User not found")
-                
-                # Check password
-                if not current_user.financial_password:
-                    await message.answer(
-                        "❌ Финансовый пароль не установлен!",
-                        reply_markup=main_menu_reply_keyboard(user=current_user)
-                    )
-                    await state.clear()
-                    return
-
-                # Verify password
-                from app.utils.security import verify_password
-                if not verify_password(password, current_user.financial_password):
-                    # Increment failed attempts... (omitted for brevity, assume implemented in UserService or here)
-                    # For now just return error
-                    error = "Неверный финансовый пароль"
+            user_service = UserService(session)
+            # Re-check user (detached)
+            current_user = await user_service.get_by_id(user.id)
+            if not current_user:
+                raise ValueError("User not found")
+            
+            # Check password
+            if not current_user.financial_password:
+                no_finpass = True
+            else:
+                # Verify password with rate limiting
+                is_valid, rate_error = await user_service.verify_financial_password(
+                    current_user.id, password
+                )
+                if not is_valid:
+                    error = rate_error or "Неверный финансовый пароль"
                 else:
                     # Proceed
                     state_data = await state.get_data()
@@ -367,8 +427,13 @@ async def process_financial_password(
                         available_balance=Decimal(str(balance["available_balance"])),
                     )
         
-        # Outside transaction
-        if error:
+        # Outside session - send messages
+        if no_finpass:
+            await message.answer(
+                "❌ Финансовый пароль не установлен!",
+                reply_markup=main_menu_reply_keyboard(user=user)
+            )
+        elif error:
             await message.answer(
                 f"❌ {error}",
                 reply_markup=withdrawal_keyboard(),
@@ -405,7 +470,10 @@ async def process_financial_password(
                     reply_markup=main_menu_reply_keyboard(user=user)
                 )
         else:
-            await message.answer("❌ Неизвестная ошибка")
+            await message.answer(
+                "❌ Неизвестная ошибка",
+                reply_markup=withdrawal_keyboard(),
+            )
 
     except Exception as e:
         logger.error(f"Error processing withdrawal: {e}", exc_info=True)
@@ -483,8 +551,8 @@ async def _show_withdrawal_history(
         text += f"{status_icon} *{tx.amount} USDT* | {date}\n"
         text += f"ID: `{tx.id}`\n"
         if tx.tx_hash:
-            text += f"Hash: `{tx.tx_hash[:10]}...`\n"
-        text += "-------------------\n"
+            text += f"🔗 [BscScan](https://bscscan.com/tx/{tx.tx_hash})\n"
+        text += "───────────────────\n"
 
     # Pagination keyboard would go here (omitted for brevity, assume simple list)
     await message.answer(text, parse_mode="Markdown")

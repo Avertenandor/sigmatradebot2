@@ -101,6 +101,7 @@ def main_menu_reply_keyboard(
             KeyboardButton(text="📜 История"),
         )
         builder.row(
+            KeyboardButton(text="📊 Калькулятор"),
             KeyboardButton(text="🔐 Получить финпароль"),
         )
         builder.row(
@@ -251,6 +252,20 @@ def withdrawal_keyboard() -> ReplyKeyboardMarkup:
     return builder.as_markup(resize_keyboard=True)
 
 
+def finpass_input_keyboard() -> ReplyKeyboardMarkup:
+    """
+    Keyboard for financial password input with cancel button.
+
+    Returns:
+        ReplyKeyboardMarkup with cancel option
+    """
+    builder = ReplyKeyboardBuilder()
+    builder.row(
+        KeyboardButton(text="❌ Отменить вывод"),
+    )
+    return builder.as_markup(resize_keyboard=True)
+
+
 def referral_keyboard() -> ReplyKeyboardMarkup:
     """
     Referral menu reply keyboard.
@@ -395,22 +410,14 @@ def admin_keyboard(
 
     Args:
         is_super_admin: Whether current admin is super admin
+        is_extended_admin: Whether current admin is extended admin
 
     Returns:
-        ReplyKeyboardMarkup with admin options, filtered by role:
-        - basic admin (no extended/super flags) → только статистика
-        - extended admin → полный набор, кроме управления админами/мастер-ключом
-        - super admin → полный набор, включая управление админами/мастер-ключом
+        ReplyKeyboardMarkup with admin options, filtered by role.
     """
     builder = ReplyKeyboardBuilder()
 
-    # Basic admin: только просмотр статистики (см. SCENARIOS_FRAMEWORK 9.5.1)
-    if not is_extended_admin and not is_super_admin:
-        builder.row(KeyboardButton(text="📊 Статистика"))
-        builder.row(KeyboardButton(text="◀️ Главное меню"))
-        return builder.as_markup(resize_keyboard=True)
-
-    # Extended / super admin: полный набор админских разделов
+    # Common buttons for ALL admins (Basic, Extended, Super)
     builder.row(KeyboardButton(text="📊 Статистика"))
     builder.row(KeyboardButton(text="👥 Управление пользователями"))
     builder.row(KeyboardButton(text="💸 Заявки на вывод"))
@@ -418,23 +425,30 @@ def admin_keyboard(
         KeyboardButton(text="📢 Рассылка"),
         KeyboardButton(text="🆘 Техподдержка"),
     )
+    
+    # Financial Reports & Finpass Recovery (Safe for all admins per request)
     builder.row(
-        KeyboardButton(text="🔐 Управление кошельком"),
-        KeyboardButton(text="📡 Блокчейн Настройки"),
-    )
-    builder.row(
-        KeyboardButton(text="🚫 Управление черным списком"),
+        KeyboardButton(text="💰 Финансовая отчётность"),
         KeyboardButton(text="🔑 Восстановление пароля"),
     )
-    builder.row(KeyboardButton(text="💰 Управление депозитами"))
-    builder.row(KeyboardButton(text="🚨 Аварийные стопы"))
+    
     builder.row(KeyboardButton(text="📝 Просмотр сообщений пользователей"))
-    builder.row(KeyboardButton(text="💰 Финансовая отчётность"))
 
-    # Дополнительные разделы только для super_admin
+    # Sensitive controls - Extended/Super only
+    if is_extended_admin or is_super_admin:
+        builder.row(
+            KeyboardButton(text="🔐 Управление кошельком"),
+            KeyboardButton(text="📡 Блокчейн Настройки"),
+        )
+        builder.row(
+            KeyboardButton(text="🚫 Управление черным списком"),
+        )
+        builder.row(KeyboardButton(text="💰 Управление депозитами"))
+        builder.row(KeyboardButton(text="🚨 Аварийные стопы"))
+
+    # Super Admin only
     if is_super_admin:
         builder.row(KeyboardButton(text="👥 Управление админами"))
-        # Master key management - фактическая проверка делается в хэндлере
         builder.row(KeyboardButton(text="🔑 Управление мастер-ключом"))
 
     builder.row(KeyboardButton(text="◀️ Главное меню"))
@@ -832,7 +846,8 @@ def admin_deposit_level_actions_keyboard(
 def notification_settings_reply_keyboard(
     deposit_enabled: bool,
     withdrawal_enabled: bool,
-    marketing_enabled: bool,
+    roi_enabled: bool = True,
+    marketing_enabled: bool = False,
 ) -> ReplyKeyboardMarkup:
     """
     Notification settings reply keyboard.
@@ -840,6 +855,7 @@ def notification_settings_reply_keyboard(
     Args:
         deposit_enabled: Whether deposit notifications are enabled
         withdrawal_enabled: Whether withdrawal notifications are enabled
+        roi_enabled: Whether ROI notifications are enabled
         marketing_enabled: Whether marketing notifications are enabled
 
     Returns:
@@ -863,6 +879,15 @@ def notification_settings_reply_keyboard(
     )
     builder.row(
         KeyboardButton(text=withdrawal_text),
+    )
+
+    # ROI notifications toggle
+    roi_text = (
+        "✅ Уведомления о ROI" if roi_enabled
+        else "❌ Уведомления о ROI"
+    )
+    builder.row(
+        KeyboardButton(text=roi_text),
     )
 
     # Marketing notifications toggle
@@ -1085,16 +1110,22 @@ def user_messages_navigation_keyboard(
     # Navigation row
     nav_buttons = []
     if has_prev:
-        nav_buttons.append(KeyboardButton(text="⬅ Предыдущая страница"))
+        nav_buttons.append(KeyboardButton(text="⬅️ Предыдущая страница"))
     if has_next:
-        nav_buttons.append(KeyboardButton(text="➡ Следующая страница"))
+        nav_buttons.append(KeyboardButton(text="➡️ Следующая страница"))
     
     if nav_buttons:
         builder.row(*nav_buttons)
     
+    # Action buttons
+    builder.row(
+        KeyboardButton(text="🔍 Другой пользователь"),
+        KeyboardButton(text="📊 Статистика"),
+    )
+    
     # Delete button (only for super admin)
     if is_super_admin:
-        builder.row(KeyboardButton(text="🗑️ Удалить все сообщения"))
+        builder.row(KeyboardButton(text="🗑 Удалить все сообщения"))
     
     # Back button
     builder.row(KeyboardButton(text="◀️ Назад в админ-панель"))

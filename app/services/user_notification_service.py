@@ -45,6 +45,7 @@ class UserNotificationService:
                 user_id,
                 deposit_notifications=True,
                 withdrawal_notifications=True,
+                roi_notifications=True,
                 marketing_notifications=False,
             )
             await self.session.flush()
@@ -62,6 +63,7 @@ class UserNotificationService:
             **kwargs: Settings to update:
                 - deposit_notifications: bool
                 - withdrawal_notifications: bool
+                - roi_notifications: bool
                 - marketing_notifications: bool
 
         Returns:

@@ -3,6 +3,7 @@ Admin Panel Handler
 Handles admin panel main menu and platform statistics
 """
 
+from datetime import UTC
 from typing import Any
 
 from aiogram import F, Router
@@ -213,7 +214,10 @@ async def handle_master_key_input(
     await message.answer(
         text,
         parse_mode="Markdown",
-        reply_markup=admin_keyboard(is_super_admin=is_super_admin),
+        reply_markup=admin_keyboard(
+        is_super_admin=is_super_admin,
+        is_extended_admin=admin.is_extended_admin if admin else False
+    ),
     )
 
 
@@ -254,7 +258,10 @@ async def cmd_admin_panel(
     await message.answer(
         text,
         parse_mode="Markdown",
-        reply_markup=admin_keyboard(is_super_admin=is_super_admin),
+        reply_markup=admin_keyboard(
+        is_super_admin=is_super_admin,
+        is_extended_admin=admin.is_extended_admin if admin else False
+    ),
     )
 
 
@@ -332,6 +339,154 @@ async def handle_back_to_main_menu(
     # Remove 'user' and 'state' from data to avoid duplicate arguments
     safe_data = {k: v for k, v in data.items() if k not in ('user', 'state')}
     await show_main_menu(message, session, user, state, **safe_data)
+
+
+@router.message(Command("retention"))
+async def cmd_retention(
+    message: Message,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """
+    Retention metrics (DAU/WAU/MAU) for admins.
+    Usage: /retention
+    """
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        await message.answer("❌ Эта функция доступна только администраторам")
+        return
+
+    from app.services.analytics_service import AnalyticsService
+
+    analytics = AnalyticsService(session)
+    metrics = await analytics.get_retention_metrics()
+    cohorts = await analytics.get_cohort_stats(days=7)
+    avg_deposit = await analytics.get_average_deposit()
+
+    # Build text
+    text = (
+        f"📈 *Retention-метрики*\n\n"
+        f"👥 *Активные пользователи:*\n"
+        f"• DAU (24ч): *{metrics['dau']}* ({metrics['dau_rate']}%)\n"
+        f"• WAU (7д): *{metrics['wau']}* ({metrics['wau_rate']}%)\n"
+        f"• MAU (30д): *{metrics['mau']}* ({metrics['mau_rate']}%)\n"
+        f"• Всего: *{metrics['total_users']}*\n\n"
+        f"📊 *Stickiness (DAU/MAU):* `{metrics['stickiness']}%`\n\n"
+        f"💰 *Депозиты:*\n"
+        f"• Средний чек: *{avg_deposit['avg_deposit']:.2f} USDT*\n"
+        f"• Конверсия в депозит: *{avg_deposit['deposit_rate']}%*\n\n"
+        f"📅 *Когорты (последние 7 дней):*\n"
+    )
+
+    for cohort in cohorts:
+        text += (
+            f"• {cohort['date']}: {cohort['registered']} рег → "
+            f"{cohort['deposited']} деп ({cohort['conversion_rate']}%)\n"
+        )
+
+    await message.answer(text, parse_mode="Markdown")
+
+
+@router.message(Command("dashboard"))
+async def cmd_dashboard(
+    message: Message,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """
+    Quick dashboard with 24h metrics for admins.
+    Usage: /dashboard
+    """
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        await message.answer("❌ Эта функция доступна только администраторам")
+        return
+
+    from datetime import UTC, datetime, timedelta
+    from sqlalchemy import select, func, and_
+    from app.models.user import User
+    from app.models.deposit import Deposit
+    from app.models.transaction import Transaction
+    from app.models.enums import TransactionStatus, TransactionType
+
+    cutoff_24h = datetime.now(UTC) - timedelta(hours=24)
+
+    # New users in 24h
+    stmt = select(func.count(User.id)).where(User.created_at >= cutoff_24h)
+    result = await session.execute(stmt)
+    new_users_24h = result.scalar() or 0
+
+    # New deposits in 24h
+    stmt = select(func.count(Deposit.id), func.coalesce(func.sum(Deposit.amount), 0)).where(
+        and_(
+            Deposit.created_at >= cutoff_24h,
+            Deposit.status == "ACTIVE",
+        )
+    )
+    result = await session.execute(stmt)
+    row = result.one()
+    deposits_24h_count = row[0] or 0
+    deposits_24h_amount = float(row[1] or 0)
+
+    # Withdrawals in 24h
+    stmt = select(func.count(Transaction.id), func.coalesce(func.sum(Transaction.amount), 0)).where(
+        and_(
+            Transaction.created_at >= cutoff_24h,
+            Transaction.transaction_type == TransactionType.WITHDRAWAL.value,
+            Transaction.status == TransactionStatus.COMPLETED.value,
+        )
+    )
+    result = await session.execute(stmt)
+    row = result.one()
+    withdrawals_24h_count = row[0] or 0
+    withdrawals_24h_amount = float(row[1] or 0)
+
+    # Pending withdrawals
+    stmt = select(func.count(Transaction.id)).where(
+        and_(
+            Transaction.transaction_type == TransactionType.WITHDRAWAL.value,
+            Transaction.status == TransactionStatus.PENDING.value,
+        )
+    )
+    result = await session.execute(stmt)
+    pending_withdrawals = result.scalar() or 0
+
+    # Fraud alerts (users with risk_score > 50)
+    # Simplified - count banned users as proxy
+    stmt = select(func.count(User.id)).where(User.is_banned == True)
+    result = await session.execute(stmt)
+    fraud_alerts = result.scalar() or 0
+
+    # 📊 Text-based charts
+    def make_bar(value: float, max_val: float, length: int = 10) -> str:
+        if max_val == 0: return "░" * length
+        filled = int((value / max_val) * length)
+        return "█" * filled + "░" * (length - filled)
+
+    chart = ""
+    # Example chart: Deposits vs Withdrawals
+    max_vol = max(deposits_24h_amount, withdrawals_24h_amount)
+    if max_vol > 0:
+        dep_bar = make_bar(deposits_24h_amount, max_vol)
+        wd_bar = make_bar(withdrawals_24h_amount, max_vol)
+        chart = (
+            f"\n📈 *Объем за 24ч:*\n"
+            f"📥 Деп: `{dep_bar}` {int(deposits_24h_amount)}$\n"
+            f"📤 Выв: `{wd_bar}` {int(withdrawals_24h_amount)}$\n"
+        )
+
+    text = (
+        f"📊 *Дашборд (за 24ч)*\n\n"
+        f"👥 Новых пользователей: *{new_users_24h}*\n"
+        f"💰 Депозитов: *{deposits_24h_count}* ({deposits_24h_amount:.2f} USDT)\n"
+        f"💸 Выводов: *{withdrawals_24h_count}* ({withdrawals_24h_amount:.2f} USDT)\n"
+        f"⏳ Ожидают одобрения: *{pending_withdrawals}*\n"
+        f"🚨 Заблокировано: *{fraud_alerts}*\n"
+        f"{chart}\n"
+        f"_Обновлено: {datetime.now(UTC).strftime('%H:%M UTC')}_"
+    )
+
+    await message.answer(text, parse_mode="Markdown")
 
 
 @router.message(F.text == "📊 Статистика")
@@ -429,7 +584,10 @@ async def handle_admin_stats(
     await message.answer(
         text,
         parse_mode="Markdown",
-        reply_markup=admin_keyboard(is_super_admin=is_super_admin),
+        reply_markup=admin_keyboard(
+        is_super_admin=is_super_admin,
+        is_extended_admin=admin.is_extended_admin if admin else False
+    ),
     )
 
 
@@ -543,7 +701,10 @@ async def handle_admin_withdrawals(
     await message.answer(
         text,
         parse_mode="Markdown",
-        reply_markup=admin_keyboard(is_super_admin=is_super_admin),
+        reply_markup=admin_keyboard(
+        is_super_admin=is_super_admin,
+        is_extended_admin=admin.is_extended_admin if admin else False
+    ),
     )
 
 
@@ -584,3 +745,50 @@ async def handle_admin_management(
     from bot.handlers.admin.admins import show_admin_management
     
     await show_admin_management(message, session, **data)
+
+
+@router.message(Command("export"))
+async def cmd_export_users(
+    message: Message,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """
+    Export all users to CSV file for admins.
+    Usage: /export
+    """
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        await message.answer("❌ Эта функция доступна только администраторам")
+        return
+
+    from aiogram.enums import ChatAction
+    from aiogram.types import BufferedInputFile
+    from app.services.financial_report_service import FinancialReportService
+
+    # Send typing indicator
+    await message.bot.send_chat_action(
+        chat_id=message.chat.id,
+        action=ChatAction.UPLOAD_DOCUMENT
+    )
+
+    try:
+        report_service = FinancialReportService(session)
+        csv_data = await report_service.export_all_users_csv()
+        
+        # Create file
+        file_bytes = csv_data.encode('utf-8-sig')  # BOM for Excel compatibility
+        file = BufferedInputFile(
+            file_bytes,
+            filename=f"users_export_{datetime.now(UTC).strftime('%Y%m%d_%H%M')}.csv"
+        )
+        
+        await message.answer_document(
+            file,
+            caption="📊 *Экспорт пользователей*\n\nФайл содержит данные всех пользователей.",
+            parse_mode="Markdown"
+        )
+        
+    except Exception as e:
+        logger.error(f"Error exporting users: {e}")
+        await message.answer("❌ Ошибка при экспорте пользователей.")

@@ -45,6 +45,9 @@ class UserNotificationSettings(Base):
     withdrawal_notifications: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True
     )
+    roi_notifications: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
     marketing_notifications: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
@@ -74,5 +77,6 @@ class UserNotificationSettings(Base):
             f"<UserNotificationSettings(id={self.id}, user_id={self.user_id}, "
             f"deposit={self.deposit_notifications}, "
             f"withdrawal={self.withdrawal_notifications}, "
+            f"roi={self.roi_notifications}, "
             f"marketing={self.marketing_notifications})>"
         )
