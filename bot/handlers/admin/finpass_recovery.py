@@ -109,6 +109,17 @@ async def handle_view_request(
     await show_request_details(message, session, state, request_id)
 
 
+def escape_markdown(text: str) -> str:
+    """Escape special Markdown characters in user input."""
+    if not text:
+        return ""
+    # Escape Markdown special chars: _ * [ ] ( ) ~ ` > # + - = | { } . !
+    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    for char in special_chars:
+        text = text.replace(char, f'\\{char}')
+    return text
+
+
 async def show_request_details(
     message: Message,
     session: AsyncSession,
@@ -133,19 +144,22 @@ async def show_request_details(
         user = await user_service.get_user_by_id(request.user_id)
 
         if user:
-            username = user.username or str(user.telegram_id)
+            username = escape_markdown(user.username) if user.username else str(user.telegram_id)
             user_label = f"{username} (ID: {user.id})"
-            telegram_link = f"TG: `{user.telegram_id}`"
+            telegram_link = f"TG: {user.telegram_id}"
         else:
             user_label = f"ID: {request.user_id}"
             telegram_link = "TG: Неизвестно"
 
+        # Escape user-provided reason to prevent Markdown parsing errors
+        safe_reason = escape_markdown(request.reason or "Не указана")
+
         text = (
-            f"🔑 **Запрос на восстановление #{request.id}**\n\n"
+            f"🔑 *Запрос на восстановление #{request.id}*\n\n"
             f"👤 Пользователь: {user_label}\n"
             f"📱 {telegram_link}\n"
             f"📅 Создан: {request.created_at.strftime('%d.%m.%Y %H:%M')}\n\n"
-            f"📝 **Причина:**\n{request.reason}\n\n"
+            f"📝 *Причина:*\n{safe_reason}\n\n"
             "Выберите действие:"
         )
 
