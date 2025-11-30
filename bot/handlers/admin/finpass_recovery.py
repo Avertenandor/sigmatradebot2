@@ -8,6 +8,7 @@ import re
 from typing import Any
 
 from aiogram import F, Router
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from loguru import logger
@@ -26,7 +27,7 @@ from bot.states.admin import AdminFinpassRecoveryStates
 router = Router()
 
 
-@router.message(F.text == "🔑 Восстановление пароля")
+@router.message(StateFilter("*"), F.text == "🔑 Восстановление пароля")
 async def show_recovery_requests(
     message: Message,
     session: AsyncSession,
@@ -88,7 +89,7 @@ async def show_recovery_requests(
     )
 
 
-@router.message(AdminFinpassRecoveryStates.viewing_list, F.text.regexp(r'^🔑 Запрос #(\d+)'))
+@router.message(StateFilter("*"), F.text.regexp(r'^🔑 Запрос #(\d+)'))
 async def handle_view_request(
     message: Message,
     session: AsyncSession,
@@ -103,7 +104,7 @@ async def handle_view_request(
     match = re.search(r'#(\d+)', message.text)
     if not match:
         return
-    
+
     request_id = int(match.group(1))
     await show_request_details(message, session, state, request_id)
 
@@ -320,7 +321,7 @@ async def reject_request_action(
         await message.answer(f"❌ Ошибка при отклонении: {e}")
 
 
-@router.message(AdminFinpassRecoveryStates.viewing_request, F.text == "◀️ Назад к списку")
+@router.message(StateFilter("*"), F.text == "◀️ Назад к списку")
 async def back_to_list_action(
     message: Message,
     session: AsyncSession,
