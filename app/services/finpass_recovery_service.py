@@ -37,10 +37,11 @@ class FinancialRecoveryStatus(StrEnum):
     SENT = "sent"
 
 
+# Active statuses that block new requests (NOT including SENT - that's completed)
 ACTIVE_USER_STATUSES: tuple[FinancialRecoveryStatus, ...] = (
+    FinancialRecoveryStatus.PENDING,
     FinancialRecoveryStatus.IN_REVIEW,
     FinancialRecoveryStatus.APPROVED,
-    FinancialRecoveryStatus.SENT,
 )
 
 
