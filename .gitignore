@@ -75,6 +75,20 @@ temp/
 *.bak
 *.swp
 fix_*.py
+
+# Archive folder for old/trash files
+archive/
+
+# Temporary git scripts
+git_*.py
+*_output.txt
+
+# === BRANCH: code-only-no-docs ===
+# Documentation (excluded for clean code branch)
+# docs/
+
+# DEV_LOG.md - development journal (contains session details)
+# DEV_LOG.md
 # Temporary planning documents in root (should not be committed)
 # Note: docs/ folder may contain legitimate planning documents
 /FIX_*.md
