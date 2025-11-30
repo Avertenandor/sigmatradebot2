@@ -115,46 +115,55 @@ async def show_request_details(
     request_id: int,
 ) -> None:
     """Show request details and action buttons."""
-    recovery_service = FinpassRecoveryService(session)
-    request = await recovery_service.get_request_by_id(request_id)
-    
-    if not request:
+    try:
+        recovery_service = FinpassRecoveryService(session)
+        request = await recovery_service.get_request_by_id(request_id)
+
+        if not request:
+            await message.answer(
+                f"❌ Запрос #{request_id} не найден.",
+                reply_markup=get_admin_keyboard_from_data({}),
+            )
+            # Try to reload list
+            await show_recovery_requests(message, session, state)
+            return
+
+        user_service = UserService(session)
+        user = await user_service.get_user_by_id(request.user_id)
+
+        if user:
+            username = user.username or str(user.telegram_id)
+            user_label = f"{username} (ID: {user.id})"
+            telegram_link = f"TG: `{user.telegram_id}`"
+        else:
+            user_label = f"ID: {request.user_id}"
+            telegram_link = "TG: Неизвестно"
+
+        text = (
+            f"🔑 **Запрос на восстановление #{request.id}**\n\n"
+            f"👤 Пользователь: {user_label}\n"
+            f"📱 {telegram_link}\n"
+            f"📅 Создан: {request.created_at.strftime('%d.%m.%Y %H:%M')}\n\n"
+            f"📝 **Причина:**\n{request.reason}\n\n"
+            "Выберите действие:"
+        )
+
+        await state.update_data(current_request_id=request_id)
+        await state.set_state(AdminFinpassRecoveryStates.viewing_request)
+
         await message.answer(
-            f"❌ Запрос #{request_id} не найден.",
+            text,
+            parse_mode="Markdown",
+            reply_markup=admin_finpass_request_actions_keyboard(),
+        )
+
+    except Exception as e:
+        logger.error(f"Error showing request details for #{request_id}: {e}")
+        await message.answer(
+            "❌ Произошла ошибка при загрузке данных запроса.\n"
+            "Попробуйте еще раз или вернитесь к списку.",
             reply_markup=get_admin_keyboard_from_data({}),
         )
-        # Try to reload list
-        await show_recovery_requests(message, session, state)
-        return
-
-    user_service = UserService(session)
-    user = await user_service.get_user_by_id(request.user_id)
-    
-    if user:
-        username = user.username or str(user.telegram_id)
-        user_label = f"{username} (ID: {user.id})"
-        telegram_link = f"TG: `{user.telegram_id}`"
-    else:
-        user_label = f"ID: {request.user_id}"
-        telegram_link = "TG: Неизвестно"
-
-    text = (
-        f"🔑 **Запрос на восстановление #{request.id}**\n\n"
-        f"👤 Пользователь: {user_label}\n"
-        f"📱 {telegram_link}\n"
-        f"📅 Создан: {request.created_at.strftime('%d.%m.%Y %H:%M')}\n\n"
-        f"📝 **Причина:**\n{request.reason}\n\n"
-        "Выберите действие:"
-    )
-
-    await state.update_data(current_request_id=request_id)
-    await state.set_state(AdminFinpassRecoveryStates.viewing_request)
-
-    await message.answer(
-        text,
-        parse_mode="Markdown",
-        reply_markup=admin_finpass_request_actions_keyboard(),
-    )
 
 
 @router.message(AdminFinpassRecoveryStates.viewing_request, F.text == "✅ Одобрить запрос")

@@ -144,7 +144,7 @@ async def process_recovery_reason(
     **data: Any,
 ) -> None:
     """
-    Process recovery reason.
+    Process recovery reason - show confirmation before creating request.
 
     Args:
         message: Telegram message
@@ -153,7 +153,7 @@ async def process_recovery_reason(
         state: FSM state
         **data: Handler data
     """
-    # Check if message is a menu button or cancel - if so, clear state
+    from bot.keyboards.reply import finpass_recovery_confirm_keyboard
     from bot.utils.menu_buttons import is_menu_button
 
     is_admin = data.get("is_admin", False)
@@ -185,6 +185,93 @@ async def process_recovery_reason(
         )
         return
 
+    # Save reason to state and ask for confirmation
+    await state.update_data(reason=reason)
+    await state.set_state(FinpassRecoveryStates.waiting_for_confirmation)
+
+    text = (
+        "📋 **Проверьте вашу заявку:**\n\n"
+        f"📝 **Причина:**\n{reason}\n\n"
+        "⚠️ **Напоминание:**\n"
+        "• После отправки заявки выплаты будут заблокированы\n"
+        "• Администратор рассмотрит запрос вручную\n"
+        "• Разблокировка произойдет при первом выводе с новым паролем\n\n"
+        "Нажмите **✅ Отправить заявку** для подтверждения:"
+    )
+
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=finpass_recovery_confirm_keyboard(),
+    )
+
+
+@router.message(FinpassRecoveryStates.waiting_for_confirmation)
+async def process_recovery_confirmation(
+    message: Message,
+    session: AsyncSession,
+    user: User,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """
+    Process confirmation and create the recovery request.
+
+    Args:
+        message: Telegram message
+        session: Database session
+        user: Current user
+        state: FSM state
+        **data: Handler data
+    """
+    from bot.utils.menu_buttons import is_menu_button
+
+    is_admin = data.get("is_admin", False)
+
+    # Handle cancel
+    if (
+        is_menu_button(message.text)
+        or message.text == "❌ Отменить"
+        or message.text == "❌ Отмена"
+    ):
+        await state.clear()
+        blacklist_entry = None
+        try:
+            from app.repositories.blacklist_repository import BlacklistRepository
+            blacklist_repo = BlacklistRepository(session)
+            blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
+        except Exception:
+            pass
+        await message.answer(
+            "❌ Восстановление пароля отменено.",
+            reply_markup=main_menu_reply_keyboard(
+                user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+            ),
+        )
+        return
+
+    # Handle confirm
+    if message.text != "✅ Отправить заявку":
+        await message.answer(
+            "❌ Пожалуйста, используйте кнопки ниже:\n"
+            "• **✅ Отправить заявку** — подтвердить\n"
+            "• **❌ Отменить** — отменить",
+            parse_mode="Markdown",
+        )
+        return
+
+    # Get reason from state
+    state_data = await state.get_data()
+    reason = state_data.get("reason", "")
+
+    if not reason:
+        await state.clear()
+        await message.answer(
+            "❌ Ошибка: причина не найдена. Попробуйте заново.",
+            reply_markup=main_menu_reply_keyboard(user=user, is_admin=is_admin),
+        )
+        return
+
     # Create recovery request
     recovery_service = FinpassRecoveryService(session)
 
@@ -204,13 +291,16 @@ async def process_recovery_reason(
             blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
         except Exception:
             pass
-        
+
         await message.answer(
-            "✅ **Запрос на восстановление пароля создан!**\n\n"
-            f"ID запроса: #{request.id}\n"
-            f"Статус: {request.status}\n\n"
-            "Администратор рассмотрит ваш запрос в ближайшее время.\n"
-            "Вы получите уведомление о решении.",
+            "✅ **Заявка на восстановление пароля отправлена!**\n\n"
+            f"🔢 Номер заявки: **#{request.id}**\n\n"
+            "📬 Что дальше:\n"
+            "• Администратор рассмотрит вашу заявку\n"
+            "• Вы получите уведомление с новым паролем\n"
+            "• После получения пароля — сделайте вывод для разблокировки\n\n"
+            "⏱ Обычно рассмотрение занимает до 24 часов.",
+            parse_mode="Markdown",
             reply_markup=main_menu_reply_keyboard(
                 user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
             ),
@@ -229,10 +319,10 @@ async def process_recovery_reason(
                     message.bot,
                     admin_ids,
                     f"🔐 **Новый запрос на восстановление пароля**\n\n"
-                    f"Пользователь: {username_or_id}\n"
-                    f"ID запроса: #{request.id}\n"
-                    f"Причина: {reason[:100]}...\n\n"
-                    f"Для рассмотрения используйте админ панель.",
+                    f"👤 Пользователь: {username_or_id}\n"
+                    f"🔢 ID запроса: #{request.id}\n"
+                    f"📝 Причина: {reason[:100]}{'...' if len(reason) > 100 else ''}\n\n"
+                    f"👉 Для рассмотрения: Админ-панель → 🔑 Восстановление пароля",
                 )
             except Exception as e:
                 logger.error(f"Failed to notify admins: {e}")
@@ -240,7 +330,8 @@ async def process_recovery_reason(
     except ValueError as e:
         await message.answer(
             f"❌ Ошибка: {e}\n\n"
-            "Попробуйте позже или обратитесь в поддержку."
+            "Попробуйте позже или обратитесь в поддержку.",
+            reply_markup=main_menu_reply_keyboard(user=user, is_admin=is_admin),
         )
 
     await state.clear()

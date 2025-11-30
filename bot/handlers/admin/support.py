@@ -7,6 +7,7 @@ Manages technical support tickets for administrators.
 from typing import Any
 
 from aiogram import F, Router
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from loguru import logger
@@ -28,7 +29,7 @@ router = Router(name="admin_support")
 from bot.utils.admin_utils import clear_state_preserve_admin_token
 
 
-@router.message(F.text == "🆘 Техподдержка")
+@router.message(StateFilter("*"), F.text == "🆘 Техподдержка")
 async def handle_admin_support_menu(
     message: Message,
     state: FSMContext,
@@ -55,7 +56,7 @@ async def handle_admin_support_menu(
     )
 
 
-@router.message(F.text == "📋 Список обращений")
+@router.message(StateFilter("*"), F.text == "📋 Список обращений")
 async def handle_list_tickets(
     message: Message,
     session: AsyncSession,
@@ -104,7 +105,7 @@ async def handle_list_tickets(
     )
 
 
-@router.message(F.text == "📊 Статистика")
+@router.message(StateFilter("*"), F.text == "📊 Статистика")
 async def handle_support_stats(
     message: Message,
     session: AsyncSession,
@@ -135,7 +136,7 @@ async def handle_support_stats(
     )
 
 
-@router.message(F.text == "🙋‍♂️ Мои задачи")
+@router.message(StateFilter("*"), F.text == "🙋‍♂️ Мои задачи")
 async def handle_my_tasks(
     message: Message,
     session: AsyncSession,
@@ -184,7 +185,7 @@ async def handle_my_tasks(
     )
 
 
-@router.message(F.text == "◀️ Назад к списку")
+@router.message(StateFilter("*"), F.text == "◀️ Назад к списку")
 async def back_to_list(
     message: Message,
     session: AsyncSession,
