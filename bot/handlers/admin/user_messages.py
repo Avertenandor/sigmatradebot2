@@ -51,9 +51,13 @@ async def show_user_messages_menu(
 
 Здесь вы можете просмотреть текстовые сообщения, отправленные пользователями боту.
 
-Введите Telegram ID пользователя для просмотра его сообщений.
+🔍 **Поиск пользователя:**
+• Telegram ID: `1040687384`
+• Username: `@username`
+• ID пользователя: `123`
+• Кошелек: `0x...`
 
-_Например: 1040687384_
+_Введите любой из этих идентификаторов:_
     """.strip()
 
     await message.answer(
@@ -80,7 +84,7 @@ async def process_user_id_for_messages(
         await message.answer("❌ Эта функция доступна только администраторам")
         return
 
-    # Parse telegram_id
+    # Parse telegram_id or username
     
     # Breakout for financial reports (navigation fix)
     if message.text and "Финансовая" in message.text:
@@ -89,24 +93,60 @@ async def process_user_id_for_messages(
         await show_financial_list(message, session, state, **data)
         return
 
-    try:
-        telegram_id = int(message.text.strip())
-    except ValueError:
+    # Check for cancel/back
+    if message.text in ("◀️ Назад в админ-панель", "❌ Отмена"):
+        await state.clear()
         await message.answer(
-            "❌ Неверный формат. Введите числовой Telegram ID.\n\n"
-            "_Например: 1040687384_",
+            "👑 **Панель администратора**\n\nВыберите действие:",
             parse_mode="Markdown",
+            reply_markup=get_admin_keyboard_from_data(data),
         )
         return
 
-    # Check if user exists
     user_service = UserService(session)
-    user = await user_service.get_user_by_telegram_id(telegram_id)
+    user = None
+    telegram_id = None
+    search_query = message.text.strip()
 
-    if not user:
+    # Try to find user by different methods
+    if search_query.startswith("@"):
+        # Search by username
+        username = search_query.lstrip("@")
+        user = await user_service.find_by_username(username)
+        if user:
+            telegram_id = user.telegram_id
+    elif search_query.startswith("0x") and len(search_query) == 42:
+        # Search by wallet
+        user = await user_service.get_by_wallet(search_query)
+        if user:
+            telegram_id = user.telegram_id
+    else:
+        # Try as numeric ID
+        try:
+            numeric_id = int(search_query)
+            # Try as telegram_id first
+            user = await user_service.get_user_by_telegram_id(numeric_id)
+            if user:
+                telegram_id = user.telegram_id
+            else:
+                # Try as user_id
+                user = await user_service.get_by_id(numeric_id)
+                if user:
+                    telegram_id = user.telegram_id
+        except ValueError:
+            # Try as username without @
+            user = await user_service.find_by_username(search_query)
+            if user:
+                telegram_id = user.telegram_id
+
+    if not user or not telegram_id:
         await message.answer(
-            f"⚠️ Пользователь с ID `{telegram_id}` не найден в базе.\n\n"
-            f"Попробуйте другой ID или вернитесь назад.",
+            f"⚠️ Пользователь по запросу `{search_query}` не найден.\n\n"
+            f"Попробуйте:\n"
+            f"• Telegram ID (число)\n"
+            f"• @username\n"
+            f"• ID пользователя (число)\n"
+            f"• Адрес кошелька (0x...)",
             parse_mode="Markdown",
             reply_markup=get_admin_keyboard_from_data(data),
         )
@@ -330,6 +370,96 @@ async def show_messages_page(
     logger.info(
         f"Admin {admin.id} viewed page {page} of messages "
         f"for user {telegram_id}"
+    )
+
+
+@router.message(
+    AdminUserMessagesStates.viewing_messages,
+    F.text == "🔍 Другой пользователь"
+)
+async def search_another_user(
+    message: Message,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """Search for another user's messages."""
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        await message.answer("❌ Доступ запрещен")
+        return
+
+    await state.set_state(AdminUserMessagesStates.waiting_for_user_id)
+    await message.answer(
+        "🔍 **Поиск сообщений пользователя**\n\n"
+        "Введите Telegram ID, @username или ID пользователя:\n\n"
+        "_Например: 1040687384 или @username_",
+        parse_mode="Markdown",
+        reply_markup=get_admin_keyboard_from_data(data),
+    )
+
+
+@router.message(
+    AdminUserMessagesStates.viewing_messages,
+    F.text == "📊 Статистика"
+)
+async def show_messages_stats(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """Show statistics for current user's messages."""
+    is_admin = data.get("is_admin", False)
+    admin: Admin | None = data.get("admin")
+
+    if not is_admin or not admin:
+        await message.answer("❌ Доступ запрещен")
+        return
+
+    state_data = await state.get_data()
+    telegram_id = state_data.get("telegram_id")
+
+    if not telegram_id:
+        await message.answer("❌ Ошибка: не найден ID пользователя")
+        return
+
+    # Get user info
+    user_service = UserService(session)
+    user = await user_service.get_user_by_telegram_id(telegram_id)
+
+    # Get message stats
+    msg_service = UserMessageLogService(session)
+    stats = await msg_service.get_user_message_stats(telegram_id)
+
+    username = user.username if user else "N/A"
+    text = (
+        f"📊 **Статистика сообщений**\n\n"
+        f"👤 Пользователь: @{username}\n"
+        f"🆔 Telegram ID: `{telegram_id}`\n\n"
+        f"📝 Всего сообщений: **{stats.get('total', 0)}**\n"
+        f"📅 За сегодня: **{stats.get('today', 0)}**\n"
+        f"📆 За неделю: **{stats.get('week', 0)}**\n"
+        f"📆 За месяц: **{stats.get('month', 0)}**\n\n"
+        f"🕒 Первое сообщение: {stats.get('first_message', 'N/A')}\n"
+        f"🕒 Последнее сообщение: {stats.get('last_message', 'N/A')}\n"
+    )
+
+    is_super_admin = data.get("is_super_admin", False)
+    total = state_data.get("total", 0)
+    page = state_data.get("page", 0)
+    page_size = state_data.get("page_size", 50)
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+    has_prev = page > 0
+    has_next = page < total_pages - 1
+
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=user_messages_navigation_keyboard(
+            has_prev=has_prev,
+            has_next=has_next,
+            is_super_admin=is_super_admin,
+        ),
     )
 
 

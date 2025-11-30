@@ -1097,16 +1097,22 @@ def user_messages_navigation_keyboard(
     # Navigation row
     nav_buttons = []
     if has_prev:
-        nav_buttons.append(KeyboardButton(text="⬅ Предыдущая страница"))
+        nav_buttons.append(KeyboardButton(text="⬅️ Предыдущая страница"))
     if has_next:
-        nav_buttons.append(KeyboardButton(text="➡ Следующая страница"))
+        nav_buttons.append(KeyboardButton(text="➡️ Следующая страница"))
     
     if nav_buttons:
         builder.row(*nav_buttons)
     
+    # Action buttons
+    builder.row(
+        KeyboardButton(text="🔍 Другой пользователь"),
+        KeyboardButton(text="📊 Статистика"),
+    )
+    
     # Delete button (only for super admin)
     if is_super_admin:
-        builder.row(KeyboardButton(text="🗑️ Удалить все сообщения"))
+        builder.row(KeyboardButton(text="🗑 Удалить все сообщения"))
     
     # Back button
     builder.row(KeyboardButton(text="◀️ Назад в админ-панель"))
