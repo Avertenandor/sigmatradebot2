@@ -75,8 +75,8 @@ class OperationRateLimiter:
         Check if user can create withdrawal request.
 
         Limits:
-        - 10 requests per day
-        - 3 requests per hour
+        - 20 requests per day
+        - 10 requests per hour
 
         Args:
             telegram_id: Telegram user ID
@@ -88,27 +88,27 @@ class OperationRateLimiter:
             return True, None  # No Redis, allow
 
         try:
-            # Check daily limit (10 per day)
+            # Check daily limit (20 per day)
             daily_key = f"op_limit:withdraw:day:{telegram_id}"
             daily_count_str = await self.redis_client.get(daily_key)
             daily_count = int(daily_count_str) if daily_count_str else 0
 
-            if daily_count >= 10:
+            if daily_count >= 20:
                 return (
                     False,
-                    "Превышен дневной лимит заявок на вывод (10/день). "
+                    "Превышен дневной лимит заявок на вывод (20/день). "
                     "Попробуйте завтра.",
                 )
 
-            # Check hourly limit (3 per hour)
+            # Check hourly limit (10 per hour)
             hourly_key = f"op_limit:withdraw:hour:{telegram_id}"
             hourly_count_str = await self.redis_client.get(hourly_key)
             hourly_count = int(hourly_count_str) if hourly_count_str else 0
 
-            if hourly_count >= 3:
+            if hourly_count >= 10:
                 return (
                     False,
-                    "Превышен часовой лимит заявок на вывод (3/час). "
+                    "Превышен часовой лимит заявок на вывод (10/час). "
                     "Попробуйте позже.",
                 )
 
