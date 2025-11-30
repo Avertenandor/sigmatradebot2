@@ -222,6 +222,7 @@ async def main() -> None:  # noqa: C901
     from bot.handlers import (
         account_recovery,
         appeal,
+        calculator,
         contact_update,
         deposit,
         finpass_recovery,
