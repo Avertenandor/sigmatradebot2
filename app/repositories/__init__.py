@@ -20,6 +20,9 @@ from app.repositories.deposit_repository import DepositRepository
 from app.repositories.deposit_reward_repository import (
     DepositRewardRepository,
 )
+from app.repositories.deposit_level_version_repository import (
+    DepositLevelVersionRepository,
+)
 from app.repositories.failed_notification_repository import (
     FailedNotificationRepository,
 )
@@ -75,6 +78,7 @@ __all__ = [
     # Core
     "UserRepository",
     "DepositRepository",
+    "DepositLevelVersionRepository",
     "TransactionRepository",
     "ReferralRepository",
     "UserNotificationSettingsRepository",

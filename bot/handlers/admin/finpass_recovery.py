@@ -19,6 +19,7 @@ from bot.keyboards.reply import (
     admin_finpass_request_actions_keyboard,
     admin_finpass_request_list_keyboard,
     admin_keyboard,
+    get_admin_keyboard_from_data,
 )
 from bot.states.admin import AdminFinpassRecoveryStates
 
@@ -54,7 +55,7 @@ async def show_recovery_requests(
             "🔑 **Запросы на восстановление пароля**\n\n"
             "Нет ожидающих запросов.",
             parse_mode="Markdown",
-            reply_markup=admin_keyboard(),
+            reply_markup=get_admin_keyboard_from_data(data),
         )
         await state.clear()
         return
@@ -120,7 +121,7 @@ async def show_request_details(
     if not request:
         await message.answer(
             f"❌ Запрос #{request_id} не найден.",
-            reply_markup=admin_keyboard(), # Fallback
+            reply_markup=get_admin_keyboard_from_data({}),
         )
         # Try to reload list
         await show_recovery_requests(message, session, state)
@@ -239,7 +240,7 @@ async def approve_request_action(
         await message.answer(
             f"✅ Запрос #{request_id} успешно одобрен.\n"
             f"Новый пароль сгенерирован и отправлен пользователю.",
-            reply_markup=admin_keyboard(), # Or return to list? Let's return to list.
+            reply_markup=get_admin_keyboard_from_data(data),
         )
         # Return to list to process next
         await show_recovery_requests(message, session, state, **data)

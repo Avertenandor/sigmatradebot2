@@ -58,9 +58,9 @@ class MetricsMonitorService:
         withdrawals_last_hour = await self._get_withdrawals_in_period(
             hour_ago, now
         )
-        withdrawal_amount_last_hour = sum(
-            float(w.amount) for w in withdrawals_last_hour
-        )
+        withdrawal_amount_last_hour = float(sum(
+            w.amount for w in withdrawals_last_hour
+        ))
 
         # Rejected withdrawals
         rejected_withdrawals = await self.transaction_repo.find_by(

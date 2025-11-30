@@ -96,19 +96,21 @@ class DatabaseMiddleware(BaseMiddleware):
                                 user_language = await get_user_language(
                                     lang_session, event.from_user.id
                                 )
-                        except Exception:
+                        except Exception as e:
+                            logger.warning(f"Failed to get user language from DB: {e}")
                             pass
                     _ = get_translator(user_language)
                     await event.answer(_("errors.database_unavailable"))
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Failed to send database_unavailable message: {e}")
                     pass
             return None
         
         # Provide session factory, not live session
         data["session_factory"] = self.session_pool
         
-        # For backward compatibility during migration, also provide session
-        # TODO: Remove after full migration to session_factory pattern
+        # For backward compatibility, also provide session
+        # NOTE: Keep until all handlers migrate to session_factory pattern
         try:
             async with self.session_pool() as session:
                 data["session"] = session
@@ -160,8 +162,9 @@ class DatabaseMiddleware(BaseMiddleware):
                                         user_language = await get_user_language(
                                             lang_session, event.from_user.id
                                         )
-                                except Exception:
+                                except Exception as e:
                                     # If we can't get language, use default
+                                    logger.warning(f"Failed to get user language during error handling: {e}")
                                     pass
                             
                             _ = get_translator(user_language)

@@ -260,9 +260,8 @@ class BlockchainService:
         tolerance_percent: float,
     ) -> dict[str, Any] | None:
         """Internal method to search blockchain history."""
-        from decimal import Decimal
 
-        web3 = await self._provider_manager.get_web3()
+        web3 = await self.provider_manager.get_web3()
         usdt_contract = web3.eth.contract(
             address=self.usdt_contract_address, abi=USDT_ABI
         )
@@ -362,7 +361,7 @@ class BlockchainService:
 
         Args:
             to_address: Recipient wallet address
-            amount_usdt: Amount in USDT
+            amount_usdt: Amount in USDT (Decimal)
             max_retries: Maximum retry attempts
 
         Returns:
@@ -388,7 +387,7 @@ class BlockchainService:
 
         Args:
             to_address: Recipient address
-            amount_usdt: Amount in USDT
+            amount_usdt: Amount in USDT (Decimal)
 
         Returns:
             Dict with gas_limit, gas_price_gwei, total_cost_bnb

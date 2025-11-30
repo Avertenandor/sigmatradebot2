@@ -4,6 +4,7 @@ Deposit handler.
 Handles deposit creation flow.
 """
 
+import re
 from decimal import Decimal
 from typing import Any
 
@@ -45,21 +46,11 @@ def extract_level_from_button(text: str) -> int:
     return 1  # Default to level 1 if not found
 
 
+# Regex pattern for deposit level buttons with dynamic amounts
+# Matches: "💰 Пополнить Level N (X USDT)" or "✅ Level N (X USDT) - Активен"
+# or "🔒 Level N (X USDT) - ..." for blocked levels
 @router.message(
-    F.text.in_(
-        [
-            "💰 Пополнить Level 1 (10 USDT)",
-            "💰 Пополнить Level 2 (50 USDT)",
-            "💰 Пополнить Level 3 (100 USDT)",
-            "💰 Пополнить Level 4 (150 USDT)",
-            "💰 Пополнить Level 5 (300 USDT)",
-            "✅ Level 1 (10 USDT) - Активен",
-            "✅ Level 2 (50 USDT) - Активен",
-            "✅ Level 3 (100 USDT) - Активен",
-            "✅ Level 4 (150 USDT) - Активен",
-            "✅ Level 5 (300 USDT) - Активен",
-        ]
-    )
+    F.text.regexp(r"^(💰 Пополнить Level [1-5] \(\d+ USDT\)|✅ Level [1-5] \(\d+ USDT\) - Активен|🔒 Level [1-5] \(\d+ USDT\) - .+)$")
 )
 async def select_deposit_level(
     message: Message,
@@ -193,8 +184,13 @@ async def select_deposit_level(
     
     text += (
         f"📝 *Следующий шаг:*\n"
-        f"Отправьте {expected_amount} USDT на адрес кошелька проекта:\n\n"
+        f"Отправьте *ровно {expected_amount} USDT* на адрес:\n\n"
         f"`{system_wallet}`\n\n"
+        f"⚠️ **ВАЖНО:**\n"
+        f"• Сеть: **BSC (BEP-20)**\n"
+        f"• Используйте личный кошелек (MetaMask, Trust Wallet)\n"
+        f"• 🚫 Не используйте внутренние переводы бирж (Internal Transfer)\n"
+        f"• 💡 Комиссию сети (~0.10$) оплачиваете вы отдельно\n\n"
         "После отправки введите hash транзакции:"
     )
 
@@ -267,31 +263,38 @@ async def process_tx_hash(
             await message.answer("❌ Системная ошибка.")
             await state.clear()
             return
-        
+
         from app.services.deposit_validation_service import (
             DepositValidationService,
         )
+
         validation_service = DepositValidationService(session)
         can_purchase, error_msg = await validation_service.can_purchase_level(
             user.id, level
         )
-        
+
         if not can_purchase:
             await message.answer(
                 f"❌ {error_msg}\n\nПопробуйте выбрать другой уровень."
             )
             await state.clear()
             return
-        
+
         deposit_service = DepositService(session)
         redis_client = data.get("redis_client")
-        deposit = await deposit_service.create_deposit(
-            user_id=user.id,
-            level=level,
-            amount=expected_amount,
-            tx_hash=tx_hash,
-            redis_client=redis_client,
-        )
+        try:
+            deposit = await deposit_service.create_deposit(
+                user_id=user.id,
+                level=level,
+                amount=expected_amount,
+                tx_hash=tx_hash,
+                redis_client=redis_client,
+            )
+        except ValueError as exc:
+            # R17-3: Show controlled business errors (including emergency stop)
+            await message.answer(str(exc))
+            await state.clear()
+            return
     else:
         # NEW pattern: short transaction for validation and creation
         async with session_factory() as session:
@@ -303,23 +306,29 @@ async def process_tx_hash(
                 can_purchase, error_msg = await validation_service.can_purchase_level(
                     user.id, level
                 )
-                
+
                 if not can_purchase:
                     await message.answer(
                         f"❌ {error_msg}\n\nПопробуйте выбрать другой уровень."
                     )
                     await state.clear()
                     return
-                
+
                 deposit_service = DepositService(session)
                 redis_client = data.get("redis_client")
-                deposit = await deposit_service.create_deposit(
-                    user_id=user.id,
-                    level=level,
-                    amount=expected_amount,
-                    tx_hash=tx_hash,
-                    redis_client=redis_client,
-                )
+                try:
+                    deposit = await deposit_service.create_deposit(
+                        user_id=user.id,
+                        level=level,
+                        amount=expected_amount,
+                        tx_hash=tx_hash,
+                        redis_client=redis_client,
+                    )
+                except ValueError as exc:
+                    # R17-3: Show controlled business errors (including emergency stop)
+                    await message.answer(str(exc))
+                    await state.clear()
+                    return
         # Transaction closed here
 
     logger.info(
@@ -356,6 +365,9 @@ async def process_tx_hash(
         f"Отправьте {expected_amount} USDT на адрес:\n"
         f"`{system_wallet}`\n\n"
         f"🌐 **Сеть:** BSC (BEP-20)\n"
+        f"⚠️ **ВАЖНО:**\n"
+        f"• Используйте личный кошелек (MetaMask, Trust Wallet)\n"
+        f"• 🚫 Не используйте внутренние переводы бирж\n\n"
         f"⏱ После отправки депозит будет автоматически активирован "
         f"после подтверждения транзакции (обычно 1-3 минуты).\n\n"
         f"📊 **Проверить транзакцию:**\n"
@@ -363,11 +375,20 @@ async def process_tx_hash(
     )
 
     is_admin = data.get("is_admin", False)
+    
+    # Get blacklist entry with proper session handling
     from app.repositories.blacklist_repository import BlacklistRepository
-    blacklist_repo = BlacklistRepository(session)
     blacklist_entry = None
-    if user:
+    if user and session_factory:
+        async with session_factory() as fresh_session:
+            blacklist_repo = BlacklistRepository(fresh_session)
+            blacklist_entry = await blacklist_repo.find_by_telegram_id(
+                user.telegram_id
+            )
+    elif user and data.get("session"):
+        blacklist_repo = BlacklistRepository(data.get("session"))
         blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
+    
     await message.answer(
         text,
         parse_mode="Markdown",

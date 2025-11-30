@@ -1,4 +1,4 @@
-﻿"""
+"""
 Reply keyboards.
 
 Reply keyboard builders for main navigation.
@@ -101,7 +101,7 @@ def main_menu_reply_keyboard(
             KeyboardButton(text="📜 История"),
         )
         builder.row(
-            KeyboardButton(text="✅ Пройти верификацию"),
+            KeyboardButton(text="🔐 Получить финпароль"),
         )
         builder.row(
             KeyboardButton(text="🔑 Восстановить финпароль"),
@@ -113,15 +113,19 @@ def main_menu_reply_keyboard(
             builder.row(
                 KeyboardButton(text="👑 Админ-панель"),
             )
-            # Add master key management button for super admin (telegram_id: 1040687384)
-            # This button is accessible WITHOUT master key authentication
+            
+            # Add master key management button for super admin
+            from app.config.settings import settings
+            admin_ids = settings.get_admin_ids()
+            is_super_admin_id = telegram_id and admin_ids and telegram_id == admin_ids[0]
+            
             logger.info(f"[KEYBOARD] AFTER admin panel button, before master key check")
             logger.info(
                 f"[KEYBOARD] Checking master key button: "
                 f"telegram_id={telegram_id}, type={type(telegram_id)}, "
-                f"equals={telegram_id == 1040687384}"
+                f"is_super_admin_id={is_super_admin_id}"
             )
-            if telegram_id == 1040687384:
+            if is_super_admin_id:
                 logger.info(
                     f"[KEYBOARD] Adding master key management button "
                     f"for super admin {telegram_id}"
@@ -132,10 +136,10 @@ def main_menu_reply_keyboard(
             else:
                 logger.info(
                     f"[KEYBOARD] NOT adding master key button: "
-                    f"telegram_id={telegram_id} != 1040687384"
+                    f"telegram_id={telegram_id} != {admin_ids[0] if admin_ids else 'None'}"
                 )
-        else:
-            logger.info(f"[KEYBOARD] NOT adding admin panel button (is_admin={is_admin}) for user {telegram_id}")
+        
+        # Log for non-admin case is handled by the if block above
 
     keyboard = builder.as_markup(resize_keyboard=True)
     logger.info(f"[KEYBOARD] Keyboard created for user {telegram_id}, buttons count: {len(keyboard.keyboard)}")
@@ -364,19 +368,28 @@ def contact_input_keyboard() -> ReplyKeyboardMarkup:
 
 def get_admin_keyboard_from_data(data: dict) -> ReplyKeyboardMarkup:
     """
-    Get admin keyboard with correct is_super_admin flag from handler data.
+    Get admin keyboard using role flags from handler data.
 
     Args:
-        data: Handler data dict
+        data: Handler data dict. Expected keys:
+            - is_super_admin: bool
+            - is_extended_admin: bool
 
     Returns:
-        ReplyKeyboardMarkup with admin options
+        ReplyKeyboardMarkup with admin options filtered by role.
     """
     is_super_admin = data.get("is_super_admin", False)
-    return admin_keyboard(is_super_admin=is_super_admin)
+    is_extended_admin = data.get("is_extended_admin", False)
+    return admin_keyboard(
+        is_super_admin=is_super_admin,
+        is_extended_admin=is_extended_admin,
+    )
 
 
-def admin_keyboard(is_super_admin: bool = False) -> ReplyKeyboardMarkup:
+def admin_keyboard(
+    is_super_admin: bool = False,
+    is_extended_admin: bool = False,
+) -> ReplyKeyboardMarkup:
     """
     Admin panel reply keyboard.
 
@@ -384,19 +397,23 @@ def admin_keyboard(is_super_admin: bool = False) -> ReplyKeyboardMarkup:
         is_super_admin: Whether current admin is super admin
 
     Returns:
-        ReplyKeyboardMarkup with admin options
+        ReplyKeyboardMarkup with admin options, filtered by role:
+        - basic admin (no extended/super flags) → только статистика
+        - extended admin → полный набор, кроме управления админами/мастер-ключом
+        - super admin → полный набор, включая управление админами/мастер-ключом
     """
     builder = ReplyKeyboardBuilder()
 
-    builder.row(
-        KeyboardButton(text="📊 Статистика"),
-    )
-    builder.row(
-        KeyboardButton(text="👥 Управление пользователями"),
-    )
-    builder.row(
-        KeyboardButton(text="💸 Заявки на вывод"),
-    )
+    # Basic admin: только просмотр статистики (см. SCENARIOS_FRAMEWORK 9.5.1)
+    if not is_extended_admin and not is_super_admin:
+        builder.row(KeyboardButton(text="📊 Статистика"))
+        builder.row(KeyboardButton(text="◀️ Главное меню"))
+        return builder.as_markup(resize_keyboard=True)
+
+    # Extended / super admin: полный набор админских разделов
+    builder.row(KeyboardButton(text="📊 Статистика"))
+    builder.row(KeyboardButton(text="👥 Управление пользователями"))
+    builder.row(KeyboardButton(text="💸 Заявки на вывод"))
     builder.row(
         KeyboardButton(text="📢 Рассылка"),
         KeyboardButton(text="🆘 Техподдержка"),
@@ -409,29 +426,18 @@ def admin_keyboard(is_super_admin: bool = False) -> ReplyKeyboardMarkup:
         KeyboardButton(text="🚫 Управление черным списком"),
         KeyboardButton(text="🔑 Восстановление пароля"),
     )
-    builder.row(
-        KeyboardButton(text="💰 Управление депозитами"),
-    )
-    builder.row(
-        KeyboardButton(text="📝 Просмотр сообщений пользователей"),
-    )
-    builder.row(
-        KeyboardButton(text="💰 Финансовая отчётность"),
-    )
-    
-    # Add admin management button only for super_admin
+    builder.row(KeyboardButton(text="💰 Управление депозитами"))
+    builder.row(KeyboardButton(text="🚨 Аварийные стопы"))
+    builder.row(KeyboardButton(text="📝 Просмотр сообщений пользователей"))
+    builder.row(KeyboardButton(text="💰 Финансовая отчётность"))
+
+    # Дополнительные разделы только для super_admin
     if is_super_admin:
-        builder.row(
-            KeyboardButton(text="👥 Управление админами"),
-        )
-        # Master key management - only for specific super admin (checked in handler)
-        builder.row(
-            KeyboardButton(text="🔑 Управление мастер-ключом"),
-        )
-    
-    builder.row(
-        KeyboardButton(text="◀️ Главное меню"),
-    )
+        builder.row(KeyboardButton(text="👥 Управление админами"))
+        # Master key management - фактическая проверка делается в хэндлере
+        builder.row(KeyboardButton(text="🔑 Управление мастер-ключом"))
+
+    builder.row(KeyboardButton(text="◀️ Главное меню"))
 
     return builder.as_markup(resize_keyboard=True)
 
@@ -1079,19 +1085,19 @@ def user_messages_navigation_keyboard(
     # Navigation row
     nav_buttons = []
     if has_prev:
-        nav_buttons.append(KeyboardButton(text=" Предыдущая страница"))
+        nav_buttons.append(KeyboardButton(text="⬅ Предыдущая страница"))
     if has_next:
-        nav_buttons.append(KeyboardButton(text=" Следующая страница"))
+        nav_buttons.append(KeyboardButton(text="➡ Следующая страница"))
     
     if nav_buttons:
         builder.row(*nav_buttons)
     
     # Delete button (only for super admin)
     if is_super_admin:
-        builder.row(KeyboardButton(text=" Удалить все сообщения"))
+        builder.row(KeyboardButton(text="🗑️ Удалить все сообщения"))
     
     # Back button
-    builder.row(KeyboardButton(text=" Назад в админ-панель"))
+    builder.row(KeyboardButton(text="◀️ Назад в админ-панель"))
     
     return builder.as_markup(resize_keyboard=True)
 

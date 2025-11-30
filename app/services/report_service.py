@@ -175,11 +175,11 @@ class ReportService:
             ("📊 Статистика депозитов", ""),
             ("Всего депозитов", len(deposits)),
             ("Активных депозитов", len([d for d in deposits if d.status == TransactionStatus.CONFIRMED.value and not d.is_roi_completed])),
-            ("Общая сумма депозитов", sum(float(d.amount) for d in deposits)),
+            ("Общая сумма депозитов", float(sum(d.amount for d in deposits))),
             ("", ""),
             ("🎁 Реферальная статистика", ""),
             ("Всего начислений", len(earnings)),
-            ("Общая сумма начислений", sum(float(e.amount) for e in earnings)),
+            ("Общая сумма начислений", float(sum(e.amount for e in earnings))),
         ]
 
         for row in data:

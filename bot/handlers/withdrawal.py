@@ -73,8 +73,28 @@ async def show_withdrawal_menu(
 ) -> None:
     """Show withdrawal menu."""
     await state.clear()
+
+    session = data.get("session")
+    min_amount = "0.20"  # Default fallback
+    
+    if session:
+        try:
+            withdrawal_service = WithdrawalService(session)
+            min_val = await withdrawal_service.get_min_withdrawal_amount()
+            min_amount = f"{min_val:.2f}"
+        except Exception:
+            pass
+
+    text = (
+        f"💸 *Вывод средств*\n\n"
+        f"ℹ️ Вывод возможен по накоплению *{min_amount} USDT* прибыли.\n"
+        f"_Это сделано, чтобы не нагружать выплатную систему, "
+        f"а также не переплачивать комиссии за транзакции._\n\n"
+        f"Выберите действие:"
+    )
+
     await message.answer(
-        "💸 *Вывод средств*\n\nВыберите действие:",
+        text,
         reply_markup=withdrawal_keyboard(),
         parse_mode="Markdown",
     )
@@ -356,9 +376,14 @@ async def process_financial_password(
         elif transaction:
             if is_auto:
                 await message.answer(
-                    f"✅ Заявка #{transaction.id} принята!\n"
-                    f"⚡️ Автоматическая выплата одобрена. Средства будут отправлены в ближайшее время.",
-                    reply_markup=main_menu_reply_keyboard(user=user) # Assuming verified user
+                    f"✅ *Заявка #{transaction.id} принята!*\n\n"
+                    f"💰 Сумма: *{transaction.amount} USDT*\n"
+                    f"💳 Кошелек: `{transaction.to_address[:10]}...{transaction.to_address[-6:]}`\n\n"
+                    f"⚡️ *Автоматическая выплата одобрена*\n"
+                    f"Средства поступят в течение 1-5 минут.\n\n"
+                    f"📊 Статус: '📜 История выводов'",
+                    parse_mode="Markdown",
+                    reply_markup=main_menu_reply_keyboard(user=user)
                 )
                 # Trigger background task
                 asyncio.create_task(
@@ -370,9 +395,13 @@ async def process_financial_password(
                 )
             else:
                 await message.answer(
-                    f"✅ Заявка #{transaction.id} создана!\n"
-                    f"Сумма: {transaction.amount} USDT\n"
-                    f"Ожидайте подтверждения администратора.",
+                    f"✅ *Заявка #{transaction.id} создана!*\n\n"
+                    f"💰 Сумма: *{transaction.amount} USDT*\n"
+                    f"💳 Кошелек: `{transaction.to_address[:10]}...{transaction.to_address[-6:]}`\n\n"
+                    f"⏱ *Время обработки:* до 24 часов\n"
+                    f"📊 Статус можно проверить в '📜 История выводов'\n\n"
+                    f"ℹ️ Заявки обрабатываются вручную для вашей безопасности.",
+                    parse_mode="Markdown",
                     reply_markup=main_menu_reply_keyboard(user=user)
                 )
         else:

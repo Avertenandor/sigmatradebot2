@@ -79,9 +79,15 @@ async def show_main_menu(
     # Escape username for Markdown
     safe_username = escape_markdown(user.username) if user.username else _('common.user')
     
+    # Get balance for quick view
+    user_service = UserService(session)
+    balance = await user_service.get_user_balance(user.id)
+    available = balance.get('available_balance', 0) if balance else 0
+    
     text = (
         f"{_('menu.main')}\n\n"
-        f"{_('common.welcome_user', username=safe_username)}\n\n"
+        f"{_('common.welcome_user', username=safe_username)}\n"
+        f"💰 Баланс: `{available:.2f} USDT`\n\n"
         f"{_('common.choose_action')}"
     )
 
@@ -299,9 +305,17 @@ async def show_withdrawal_menu(
     user_service = UserService(session)
     balance = await user_service.get_user_balance(user.id)
 
+    # Get min withdrawal amount
+    from app.services.withdrawal_service import WithdrawalService
+    withdrawal_service = WithdrawalService(session)
+    min_amount = await withdrawal_service.get_min_withdrawal_amount()
+
     text = (
         f"💸 *Вывод средств*\n\n"
-        f"Доступно для вывода: `{balance['available_balance']:.2f} USDT`\n\n"
+        f"Доступно для вывода: `{balance['available_balance']:.2f} USDT`\n"
+        f"💰 *Минимальная сумма:* `{min_amount} USDT`\n\n"
+        f"ℹ️ _Вывод возможен по накоплению {min_amount} USDT прибыли, "
+        f"чтобы не нагружать выплатную систему и не переплачивать комиссии._\n\n"
         f"Выберите действие:"
     )
 
@@ -514,7 +528,7 @@ async def show_my_profile(
     
     # Add warning for unverified users
     if not user.is_verified:
-        text += "⚠ Без верификации вывод средств недоступен\n\n"
+        text += "⚠️ *Вывод недоступен* — нужен финпароль (кнопка '🔐 Получить финпароль')\n\n"
     
     text += (
         f"{account_status}\n\n"
@@ -642,7 +656,8 @@ async def start_registration(
         "Для начала работы необходимо пройти регистрацию.\n\n"
         "📝 **Шаг 1:** Введите ваш BSC (BEP-20) адрес кошелька\n"
         "Формат: `0x...` (42 символа)\n\n"
-        "❗️ **Внимание:** убедитесь, что адрес указан правильно!"
+        "⚠️ **КРИТИЧНО:** Указывайте только **ЛИЧНЫЙ** кошелек (Trust Wallet, MetaMask).\n"
+        "🚫 **НЕ указывайте** адрес биржи (Binance, Bybit), иначе выплаты могут быть утеряны!"
     )
     
     from aiogram.types import ReplyKeyboardRemove

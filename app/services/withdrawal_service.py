@@ -115,20 +115,27 @@ class WithdrawalService:
         Returns:
             Tuple of (transaction, error_message, is_auto_approved)
         """
-        # R17-3: Check emergency stop
-        if settings.emergency_stop_withdrawals:
-            logger.warning(
-                f"Withdrawal blocked by emergency stop for user {user_id}"
-            )
-            return None, (
-                "⚠️ Временная приостановка выводов из-за технических работ.\n\n"
-                "Ваши средства в безопасности, выводы будут доступны после "
-                "восстановления.\n\n"
-                "Следите за обновлениями в нашем канале."
-            ), False
-
         # Load global settings
         global_settings = await self.settings_repo.get_settings()
+
+        # R17-3: Check emergency stop (DB flag or static config flag)
+        if (
+            settings.emergency_stop_withdrawals
+            or getattr(global_settings, "emergency_stop_withdrawals", False)
+        ):
+            logger.warning(
+                "Withdrawal blocked by emergency stop for user %s", user_id
+            )
+            return (
+                None,
+                (
+                    "⚠️ Временная приостановка выводов из-за технических работ.\n\n"
+                    "Ваши средства в безопасности, выводы будут доступны после "
+                    "восстановления.\n\n"
+                    "Следите за обновлениями в нашем канале."
+                ),
+                False,
+            )
         min_amount = global_settings.min_withdrawal_amount
 
         # Validate amount
@@ -497,7 +504,7 @@ class WithdrawalService:
                 return False, "Нельзя одобрить собственную инициацию", None
 
             transaction_id = escrow.operation_data.get("transaction_id")
-            withdrawal_amount = float(escrow.operation_data.get("amount", 0))
+            withdrawal_amount = Decimal(str(escrow.operation_data.get("amount", 0)))
             to_address = escrow.operation_data.get("to_address")
 
             if not transaction_id or not to_address:

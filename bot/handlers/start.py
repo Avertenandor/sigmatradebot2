@@ -260,7 +260,8 @@ async def cmd_start(
         "Для начала работы необходимо пройти регистрацию.\n\n"
         "📝 **Шаг 1:** Введите ваш BSC (BEP-20) адрес кошелька\n"
         "Формат: `0x...` (42 символа)\n\n"
-        "❗️ **Внимание:** убедитесь, что адрес указан правильно!"
+        "⚠️ **КРИТИЧНО:** Указывайте только **ЛИЧНЫЙ** кошелек (Trust Wallet, MetaMask).\n"
+        "🚫 **НЕ указывайте** адрес биржи (Binance, Bybit), иначе выплаты могут быть утеряны!"
     )
 
     if referrer_telegram_id:
@@ -284,7 +285,8 @@ async def cmd_start(
     if user:
         try:
             user_language = await get_user_language(session, user.id)
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to get user language, using default: {e}")
             pass
     _ = get_translator(user_language)
     
@@ -350,8 +352,8 @@ async def process_wallet(
         if user:
             try:
                 user_language = await get_user_language(session, user.id)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to get user language, using default: {e}")
         _ = get_translator(user_language)
         
         await message.answer(

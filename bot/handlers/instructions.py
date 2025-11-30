@@ -133,7 +133,8 @@ async def show_instructions(
             "блоков\n\n"
         "⚠️ *Важно:*\n"
         "• Отправляйте только USDT (BEP-20) на BSC сети!\n"
-        "• Не отправляйте токены других сетей (ERC-20, TRC-20)\n"
+        "• Используйте личный кошелек (MetaMask, Trust Wallet)\n"
+        "• 🚫 Не используйте вывод с бирж (Internal Transfer)\n"
         "• Убедитесь, что сумма точно совпадает с уровнем депозита\n"
         "• Сохраните hash транзакции для отслеживания\n\n"
         "*📋 Правила работы системы депозитов:*\n\n"
@@ -159,8 +160,14 @@ async def show_instructions(
         f"BSCScan: https://bscscan.com/address/{settings.system_wallet_address}"
     )
 
+    # Get actual level statuses for deposit keyboard
+    from app.services.deposit_validation_service import DepositValidationService
+    
+    validation_service = DepositValidationService(session)
+    levels_status = await validation_service.get_available_levels(user.id)
+    
     await message.answer(
         instructions_text,
         parse_mode="Markdown",
-        reply_markup=deposit_keyboard(),
+        reply_markup=deposit_keyboard(levels_status=levels_status),
     )

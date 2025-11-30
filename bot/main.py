@@ -243,6 +243,7 @@ async def main() -> None:  # noqa: C901
         broadcast,
         deposit_management,
         deposit_settings,
+        emergency,  # R17-3: Emergency stop controls
         finpass_recovery as admin_finpass,
         panel,
         roi_corridor,
@@ -333,6 +334,8 @@ async def main() -> None:  # noqa: C901
     admin_support.router.callback_query.middleware(admin_auth_middleware)
     user_messages.router.message.middleware(admin_auth_middleware)
     user_messages.router.callback_query.middleware(admin_auth_middleware)
+    emergency.router.message.middleware(admin_auth_middleware)
+    emergency.router.callback_query.middleware(admin_auth_middleware)
     
     dp.include_router(wallet_key_setup.router)
     dp.include_router(financials.router)  # MUST be before panel.router to catch "💰 Финансовая отчётность"
@@ -352,6 +355,7 @@ async def main() -> None:  # noqa: C901
     dp.include_router(admins.router)
     dp.include_router(admin_support.router)
     dp.include_router(user_messages.router)
+    dp.include_router(emergency.router)  # R17-3: Emergency stop controls
     
     # Fallback handler for orphaned states (must be BEFORE debug_unhandled)
     from bot.handlers import fallback

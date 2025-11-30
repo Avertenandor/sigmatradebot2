@@ -17,6 +17,7 @@ from app.services.user_message_log_service import UserMessageLogService
 from app.services.user_service import UserService
 from bot.keyboards.reply import (
     admin_keyboard,
+    get_admin_keyboard_from_data,
     user_messages_navigation_keyboard,
 )
 from bot.states.admin import AdminUserMessagesStates
@@ -55,13 +56,10 @@ async def show_user_messages_menu(
 _Например: 1040687384_
     """.strip()
 
-    # Get admin status for keyboard
-    is_super_admin = data.get("is_super_admin", False)
-
     await message.answer(
         text,
         parse_mode="Markdown",
-        reply_markup=admin_keyboard(is_super_admin=is_super_admin),
+        reply_markup=get_admin_keyboard_from_data(data),
     )
     await state.set_state(AdminUserMessagesStates.waiting_for_user_id)
     logger.info(f"Admin {admin.id} opened user messages menu")
@@ -106,12 +104,11 @@ async def process_user_id_for_messages(
     user = await user_service.get_user_by_telegram_id(telegram_id)
 
     if not user:
-        is_super_admin = data.get("is_super_admin", False)
         await message.answer(
             f"⚠️ Пользователь с ID `{telegram_id}` не найден в базе.\n\n"
             f"Попробуйте другой ID или вернитесь назад.",
             parse_mode="Markdown",
-            reply_markup=admin_keyboard(is_super_admin=is_super_admin),
+            reply_markup=get_admin_keyboard_from_data(data),
         )
         return
 
@@ -126,13 +123,12 @@ async def process_user_id_for_messages(
     )
 
     if not messages:
-        is_super_admin = data.get("is_super_admin", False)
         await message.answer(
             f"📝 **Сообщения пользователя {user.username or telegram_id}**\n\n"
             f"Пользователь еще не отправлял текстовых сообщений боту.\n\n"
             f"_Логируются только текстовые сообщения, не кнопки._",
             parse_mode="Markdown",
-            reply_markup=admin_keyboard(is_super_admin=is_super_admin),
+            reply_markup=get_admin_keyboard_from_data(data),
         )
         await state.clear()
         return
@@ -380,7 +376,7 @@ async def delete_user_messages(
         f"✅ Все сообщения пользователя `{telegram_id}` удалены.\n\n"
         f"Удалено: {count} сообщений",
         parse_mode="Markdown",
-        reply_markup=admin_keyboard(is_super_admin=is_super_admin),
+        reply_markup=get_admin_keyboard_from_data(data),
     )
     logger.warning(
         f"Admin {admin.id} deleted {count} messages for user {telegram_id}"
@@ -399,11 +395,9 @@ async def back_to_admin_panel_from_messages(
     """Return to admin panel from message viewing."""
     await state.clear()
 
-    is_super_admin = data.get("is_super_admin", False)
-
     await message.answer(
         "👑 **Панель администратора**\n\n"
         "Выберите действие:",
         parse_mode="Markdown",
-        reply_markup=admin_keyboard(is_super_admin=is_super_admin),
+        reply_markup=get_admin_keyboard_from_data(data),
     )
