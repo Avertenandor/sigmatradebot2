@@ -373,7 +373,7 @@ async def process_financial_password(
                 f"❌ {error}",
                 reply_markup=withdrawal_keyboard(),
             )
-        el        if transaction:
+        elif transaction:
             if is_auto:
                 await message.answer(
                     f"✅ *Заявка #{transaction.id} принята!*\n\n"
