@@ -2,6 +2,7 @@
 Calculator handler.
 
 Provides ROI calculator for users to estimate earnings.
+Uses dynamic rates from DepositVersion in database.
 """
 
 from decimal import Decimal
@@ -11,6 +12,7 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from bot.keyboards.reply import main_menu_reply_keyboard
@@ -25,34 +27,52 @@ class CalculatorStates(StatesGroup):
     waiting_for_amount = State()
 
 
-# Deposit levels and amounts
-DEPOSIT_LEVELS = {
-    1: {"amount": 50, "roi_percent": 1.117, "roi_cap": 500},
-    2: {"amount": 100, "roi_percent": 1.117, "roi_cap": None},
-    3: {"amount": 150, "roi_percent": 1.117, "roi_cap": None},
-    4: {"amount": 200, "roi_percent": 1.117, "roi_cap": None},
-    5: {"amount": 300, "roi_percent": 1.117, "roi_cap": None},
-}
+async def get_deposit_versions(session: AsyncSession) -> dict:
+    """Get deposit versions from database."""
+    from app.repositories.deposit_version_repository import DepositVersionRepository
+    
+    repo = DepositVersionRepository(session)
+    versions = await repo.get_active_versions()
+    
+    result = {}
+    for v in versions:
+        result[v.level] = {
+            "amount": float(v.amount),
+            "roi_percent": float(v.roi_percent),
+            "roi_cap": float(v.roi_cap) if v.roi_cap else None,
+        }
+    return result
 
 
 @router.message(F.text == "📊 Калькулятор")
 async def show_calculator(
     message: Message,
     state: FSMContext,
+    session: AsyncSession,
     **data: Any,
 ) -> None:
-    """Show calculator menu."""
+    """Show calculator menu with dynamic levels from DB."""
     await state.clear()
+
+    # Get levels from database
+    levels = await get_deposit_versions(session)
+    
+    if not levels:
+        await message.answer(
+            "❌ Уровни депозитов не настроены. Обратитесь в поддержку."
+        )
+        return
+
+    levels_text = ""
+    for lvl in sorted(levels.keys()):
+        info = levels[lvl]
+        cap_info = f" (ROI cap {int(info['roi_cap'])}%)" if info["roi_cap"] else ""
+        levels_text += f"• Level {lvl}: {int(info['amount'])} USDT{cap_info}\n"
 
     text = (
         "📊 *Калькулятор доходности*\n\n"
         "Введите сумму депозита (USDT) для расчёта:\n\n"
-        "💡 *Доступные уровни:*\n"
-        "• Level 1: 50 USDT (ROI cap 500%)\n"
-        "• Level 2: 100 USDT\n"
-        "• Level 3: 150 USDT\n"
-        "• Level 4: 200 USDT\n"
-        "• Level 5: 300 USDT\n\n"
+        f"💡 *Доступные уровни:*\n{levels_text}\n"
         "Введите сумму или нажмите '📊 Главное меню' для выхода:"
     )
 
@@ -64,11 +84,10 @@ async def show_calculator(
 async def process_calculator_amount(
     message: Message,
     state: FSMContext,
+    session: AsyncSession,
     **data: Any,
 ) -> None:
-    """Process calculator amount input."""
-    user: User | None = data.get("user")
-
+    """Process calculator amount input with dynamic rates from DB."""
     # Check for menu button
     if is_menu_button(message.text or ""):
         await state.clear()
@@ -86,29 +105,36 @@ async def process_calculator_amount(
         )
         return
 
+    # Get levels from database
+    levels = await get_deposit_versions(session)
+    if not levels:
+        await message.answer("❌ Уровни депозитов не настроены.")
+        await state.clear()
+        return
+
     # Find matching level
     level = None
-    for lvl, info in DEPOSIT_LEVELS.items():
-        if amount == Decimal(str(info["amount"])):
+    for lvl, info in levels.items():
+        if float(amount) == info["amount"]:
             level = lvl
             break
 
     if not level:
         # Find closest level
         closest_level = min(
-            DEPOSIT_LEVELS.keys(),
-            key=lambda x: abs(DEPOSIT_LEVELS[x]["amount"] - float(amount)),
+            levels.keys(),
+            key=lambda x: abs(levels[x]["amount"] - float(amount)),
         )
         await message.answer(
             f"⚠️ Сумма {amount} USDT не соответствует ни одному уровню.\n\n"
             f"Ближайший уровень: Level {closest_level} "
-            f"({DEPOSIT_LEVELS[closest_level]['amount']} USDT)\n\n"
+            f"({int(levels[closest_level]['amount'])} USDT)\n\n"
             "Введите точную сумму уровня депозита."
         )
         return
 
     # Calculate projections
-    level_info = DEPOSIT_LEVELS[level]
+    level_info = levels[level]
     daily_roi = float(amount) * level_info["roi_percent"] / 100
     weekly_roi = daily_roi * 7
     monthly_roi = daily_roi * 30
@@ -118,7 +144,7 @@ async def process_calculator_amount(
         max_roi = float(amount) * level_info["roi_cap"] / 100
         days_to_cap = int(max_roi / daily_roi) if daily_roi > 0 else 0
         cap_text = (
-            f"\n🎯 *ROI Cap:* {level_info['roi_cap']}%\n"
+            f"\n🎯 *ROI Cap:* {int(level_info['roi_cap'])}%\n"
             f"💰 Максимум: *{max_roi:.2f} USDT*\n"
             f"📅 Достижение: ~{days_to_cap} дней"
         )
@@ -128,7 +154,7 @@ async def process_calculator_amount(
     text = (
         f"📊 *Калькулятор: Level {level}*\n\n"
         f"💵 Депозит: *{amount} USDT*\n"
-        f"📈 ROI: *{level_info['roi_percent']}%* в день\n\n"
+        f"📈 ROI: *{level_info['roi_percent']:.3f}%* в день\n\n"
         f"*Прогноз заработка:*\n"
         f"• За день: *{daily_roi:.2f} USDT*\n"
         f"• За неделю: *{weekly_roi:.2f} USDT*\n"

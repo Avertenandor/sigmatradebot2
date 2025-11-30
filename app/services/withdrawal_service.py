@@ -10,7 +10,7 @@ from decimal import Decimal
 from typing import Any
 
 from loguru import logger
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -213,6 +213,19 @@ class WithdrawalService:
                     return None, (
                         f"Недостаточно средств. Доступно: "
                         f"{available_balance:.2f} USDT"
+                    ), False
+
+                # R-NEW: Check daily withdrawal limit (= daily ROI)
+                daily_limit_check = await self._check_daily_withdrawal_limit(
+                    user_id, amount
+                )
+                if daily_limit_check["exceeded"]:
+                    return None, (
+                        f"❌ Превышен дневной лимит вывода!\n\n"
+                        f"💰 Ваш ROI за сегодня: *{daily_limit_check['daily_roi']:.2f} USDT*\n"
+                        f"💸 Уже выведено сегодня: *{daily_limit_check['withdrawn_today']:.2f} USDT*\n"
+                        f"📊 Доступно для вывода: *{daily_limit_check['remaining']:.2f} USDT*\n\n"
+                        f"_Лимит обновляется в 00:00 UTC._"
                     ), False
 
                 # Deduct balance BEFORE creating transaction
@@ -604,6 +617,68 @@ class WithdrawalService:
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def _check_daily_withdrawal_limit(
+        self, user_id: int, requested_amount: Decimal
+    ) -> dict:
+        """
+        Check if withdrawal exceeds daily limit (= daily ROI).
+
+        Args:
+            user_id: User ID
+            requested_amount: Requested withdrawal amount
+
+        Returns:
+            Dict with exceeded, daily_roi, withdrawn_today, remaining
+        """
+        from datetime import UTC, datetime, timedelta
+        from app.models.reward import Reward
+        from app.repositories.deposit_repository import DepositRepository
+
+        today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+
+        # Calculate today's ROI (sum of rewards accrued today)
+        stmt = select(func.coalesce(func.sum(Reward.reward_amount), Decimal("0"))).where(
+            Reward.user_id == user_id,
+            Reward.created_at >= today_start,
+        )
+        result = await self.session.execute(stmt)
+        daily_roi = result.scalar() or Decimal("0")
+
+        # If no ROI today, calculate expected daily ROI from active deposits
+        if daily_roi == Decimal("0"):
+            deposit_repo = DepositRepository(self.session)
+            active_deposits = await deposit_repo.get_active_deposits(user_id)
+            for deposit in active_deposits:
+                if deposit.deposit_version and deposit.deposit_version.roi_percent:
+                    daily_roi += (deposit.amount * deposit.deposit_version.roi_percent) / 100
+
+        # Get today's completed withdrawals
+        stmt = select(func.coalesce(func.sum(Transaction.amount), Decimal("0"))).where(
+            Transaction.user_id == user_id,
+            Transaction.type == TransactionType.WITHDRAWAL.value,
+            Transaction.status.in_([
+                TransactionStatus.COMPLETED.value,
+                TransactionStatus.PROCESSING.value,
+                TransactionStatus.PENDING.value,
+            ]),
+            Transaction.created_at >= today_start,
+        )
+        result = await self.session.execute(stmt)
+        withdrawn_today = result.scalar() or Decimal("0")
+
+        # Calculate remaining
+        remaining = max(daily_roi - withdrawn_today, Decimal("0"))
+
+        # Check if exceeded
+        exceeded = (withdrawn_today + requested_amount) > daily_roi and daily_roi > Decimal("0")
+
+        return {
+            "exceeded": exceeded,
+            "daily_roi": float(daily_roi),
+            "withdrawn_today": float(withdrawn_today),
+            "remaining": float(remaining),
+        }
 
     async def _freeze_pending_withdrawals(self, user_id: int) -> None:
         """Freeze pending withdrawals for user."""

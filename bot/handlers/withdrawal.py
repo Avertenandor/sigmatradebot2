@@ -398,12 +398,12 @@ async def process_financial_password(
                     await state.clear()
                     return
 
-                # Verify password
-                from app.utils.security import verify_password
-                if not verify_password(password, current_user.financial_password):
-                    # Increment failed attempts... (omitted for brevity, assume implemented in UserService or here)
-                    # For now just return error
-                    error = "Неверный финансовый пароль"
+                # Verify password with rate limiting
+                is_valid, rate_error = await user_service.verify_financial_password(
+                    current_user.id, password
+                )
+                if not is_valid:
+                    error = rate_error or "Неверный финансовый пароль"
                 else:
                     # Proceed
                     state_data = await state.get_data()

@@ -132,6 +132,14 @@ class User(Base):
         String(10), nullable=True, default="ru", index=True
     )
 
+    # Rate limiting for financial password
+    finpass_attempts: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    finpass_locked_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
