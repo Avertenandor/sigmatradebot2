@@ -73,8 +73,28 @@ async def show_withdrawal_menu(
 ) -> None:
     """Show withdrawal menu."""
     await state.clear()
+
+    session = data.get("session")
+    min_amount = "0.20"  # Default fallback
+    
+    if session:
+        try:
+            withdrawal_service = WithdrawalService(session)
+            min_val = await withdrawal_service.get_min_withdrawal_amount()
+            min_amount = f"{min_val:.2f}"
+        except Exception:
+            pass
+
+    text = (
+        f"💸 *Вывод средств*\n\n"
+        f"ℹ️ Вывод возможен по накоплению *{min_amount} USDT* прибыли.\n"
+        f"_Это сделано, чтобы не нагружать выплатную систему, "
+        f"а также не переплачивать комиссии за транзакции._\n\n"
+        f"Выберите действие:"
+    )
+
     await message.answer(
-        "💸 *Вывод средств*\n\nВыберите действие:",
+        text,
         reply_markup=withdrawal_keyboard(),
         parse_mode="Markdown",
     )
