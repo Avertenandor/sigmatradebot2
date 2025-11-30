@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = '20251130_finpass_rl'
-down_revision = '20251129_000001_add_emergency_stops_to_global_settings'
+down_revision = '20251129_add_emergency_stops_to_global_settings'
 branch_labels = None
 depends_on = None
 
