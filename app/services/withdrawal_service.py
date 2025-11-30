@@ -665,7 +665,7 @@ class WithdrawalService:
             Transaction.user_id == user_id,
             Transaction.type == TransactionType.WITHDRAWAL.value,
             Transaction.status.in_([
-                TransactionStatus.COMPLETED.value,
+                TransactionStatus.CONFIRMED.value,
                 TransactionStatus.PROCESSING.value,
                 TransactionStatus.PENDING.value,
             ]),

@@ -112,7 +112,7 @@ class TransactionRepository(BaseRepository[Transaction]):
             .where(Transaction.type == TransactionType.WITHDRAWAL.value)
             .where(
                 or_(
-                    Transaction.status == TransactionStatus.COMPLETED.value,
+                    Transaction.status == TransactionStatus.CONFIRMED.value,
                     Transaction.status == TransactionStatus.PENDING.value,
                     Transaction.status == TransactionStatus.PROCESSING.value,
                 )
@@ -146,7 +146,7 @@ class TransactionRepository(BaseRepository[Transaction]):
             .where(Transaction.created_at >= today_start)
             .where(
                 or_(
-                    Transaction.status == TransactionStatus.COMPLETED.value,
+                    Transaction.status == TransactionStatus.CONFIRMED.value,
                     Transaction.status == TransactionStatus.PENDING.value,
                     Transaction.status == TransactionStatus.PROCESSING.value,
                 )
