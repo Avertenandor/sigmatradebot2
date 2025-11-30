@@ -144,8 +144,8 @@ async def withdraw_all(
         )
         return
 
-    # Save amount and ask for CONFIRMATION first
-    await state.update_data(amount=amount)
+    # Save amount and ask for CONFIRMATION first (convert Decimal to str for JSON)
+    await state.update_data(amount=str(amount))
     await state.set_state(WithdrawalStates.waiting_for_confirmation)
 
     text = (
@@ -318,7 +318,8 @@ async def process_withdrawal_amount(
         )
         return
 
-    await state.update_data(amount=amount)
+    # Convert Decimal to str for JSON serialization in FSM state
+    await state.update_data(amount=str(amount))
 
     text = (
         f"💸 Вывод средств\n\n"

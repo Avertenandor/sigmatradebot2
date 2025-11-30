@@ -5,10 +5,10 @@ Catches unhandled exceptions and notifies admins.
 """
 
 import traceback
-from typing import Any, Awaitable, Callable, Dict
+from typing import Any, Awaitable, Callable
 
 from aiogram import BaseMiddleware, Bot
-from aiogram.types import ErrorEvent, TelegramObject, Update
+from aiogram.types import TelegramObject
 from loguru import logger
 
 from app.config.settings import settings
@@ -21,9 +21,9 @@ class ErrorHandlerMiddleware(BaseMiddleware):
 
     async def __call__(
         self,
-        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]],
         event: TelegramObject,
-        data: Dict[str, Any],
+        data: dict[str, Any],
     ) -> Any:
         """Execute middleware."""
         try:
@@ -32,27 +32,29 @@ class ErrorHandlerMiddleware(BaseMiddleware):
             # Log error
             logger.exception(f"Unhandled exception: {e}")
             
-            # Notify super admin if configured
-            # Assuming bot instance is in data or accessible
-            bot: Bot = data.get("bot")
-            if bot and settings.super_admin_id:
+            # Get admin IDs from settings
+            admin_ids = settings.get_admin_ids()
+            
+            # Notify first admin if configured
+            bot: Bot | None = data.get("bot")
+            if bot and admin_ids:
                 try:
-                    error_trace = traceback.format_exc()[-1000:]  # Last 1000 chars
+                    error_trace = traceback.format_exc()[-800:]  # Last 800 chars
                     text = (
                         f"🚨 **CRITICAL ERROR**\n\n"
-                        f"Exception: `{type(e).__name__}: {e}`\n"
-                        f"Update: `{event}`\n\n"
-                        f"Traceback:\n`{error_trace}`"
+                        f"Exception: `{type(e).__name__}`\n"
+                        f"Message: `{str(e)[:200]}`\n\n"
+                        f"Traceback:\n```\n{error_trace}\n```"
                     )
+                    # Notify first admin
                     await bot.send_message(
-                        chat_id=settings.super_admin_id,
-                        text=text[:4096],  # Telegram limit
+                        chat_id=admin_ids[0],
+                        text=text[:4096],
                         parse_mode="Markdown",
                     )
                 except Exception as notify_error:
                     logger.error(f"Failed to notify admin: {notify_error}")
             
-            # Re-raise to let aiogram know or handle gracefully?
-            # Usually we swallow to prevent crash, but log it.
+            # Return None to prevent crash
             return None
 
