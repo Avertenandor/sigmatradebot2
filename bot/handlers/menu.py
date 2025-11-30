@@ -79,9 +79,15 @@ async def show_main_menu(
     # Escape username for Markdown
     safe_username = escape_markdown(user.username) if user.username else _('common.user')
     
+    # Get balance for quick view
+    user_service = UserService(session)
+    balance = await user_service.get_user_balance(user.id)
+    available = balance.get('available_balance', 0) if balance else 0
+    
     text = (
         f"{_('menu.main')}\n\n"
-        f"{_('common.welcome_user', username=safe_username)}\n\n"
+        f"{_('common.welcome_user', username=safe_username)}\n"
+        f"💰 Баланс: `{available:.2f} USDT`\n\n"
         f"{_('common.choose_action')}"
     )
 
@@ -522,7 +528,7 @@ async def show_my_profile(
     
     # Add warning for unverified users
     if not user.is_verified:
-        text += "⚠ Без верификации вывод средств недоступен\n\n"
+        text += "⚠️ *Вывод недоступен* — нужен финпароль (кнопка '🔐 Получить финпароль')\n\n"
     
     text += (
         f"{account_status}\n\n"

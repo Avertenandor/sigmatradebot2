@@ -373,12 +373,17 @@ async def process_financial_password(
                 f"❌ {error}",
                 reply_markup=withdrawal_keyboard(),
             )
-        elif transaction:
+        el        if transaction:
             if is_auto:
                 await message.answer(
-                    f"✅ Заявка #{transaction.id} принята!\n"
-                    f"⚡️ Автоматическая выплата одобрена. Средства будут отправлены в ближайшее время.",
-                    reply_markup=main_menu_reply_keyboard(user=user) # Assuming verified user
+                    f"✅ *Заявка #{transaction.id} принята!*\n\n"
+                    f"💰 Сумма: *{transaction.amount} USDT*\n"
+                    f"💳 Кошелек: `{transaction.to_address[:10]}...{transaction.to_address[-6:]}`\n\n"
+                    f"⚡️ *Автоматическая выплата одобрена*\n"
+                    f"Средства поступят в течение 1-5 минут.\n\n"
+                    f"📊 Статус: '📜 История выводов'",
+                    parse_mode="Markdown",
+                    reply_markup=main_menu_reply_keyboard(user=user)
                 )
                 # Trigger background task
                 asyncio.create_task(
@@ -390,9 +395,13 @@ async def process_financial_password(
                 )
             else:
                 await message.answer(
-                    f"✅ Заявка #{transaction.id} создана!\n"
-                    f"Сумма: {transaction.amount} USDT\n"
-                    f"Ожидайте подтверждения администратора.",
+                    f"✅ *Заявка #{transaction.id} создана!*\n\n"
+                    f"💰 Сумма: *{transaction.amount} USDT*\n"
+                    f"💳 Кошелек: `{transaction.to_address[:10]}...{transaction.to_address[-6:]}`\n\n"
+                    f"⏱ *Время обработки:* до 24 часов\n"
+                    f"📊 Статус можно проверить в '📜 История выводов'\n\n"
+                    f"ℹ️ Заявки обрабатываются вручную для вашей безопасности.",
+                    parse_mode="Markdown",
                     reply_markup=main_menu_reply_keyboard(user=user)
                 )
         else:

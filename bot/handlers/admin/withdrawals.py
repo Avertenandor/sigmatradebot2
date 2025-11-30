@@ -72,6 +72,15 @@ async def handle_pending_withdrawals(
                 and withdrawal.user.username
             ):
                 text += f"📱 @{withdrawal.user.username}\n"
+            
+            # Show user history stats
+            if hasattr(withdrawal, "user") and withdrawal.user:
+                user_service = UserService(session)
+                user_balance = await user_service.get_user_balance(withdrawal.user_id)
+                if user_balance:
+                    total_dep = user_balance.get('total_deposits', 0)
+                    total_wd = user_balance.get('total_withdrawals', 0)
+                    text += f"📊 История: депозиты {format_usdt(total_dep)}, выводы {format_usdt(total_wd)}\n"
 
             text += f"💳 Кошелек: `{withdrawal.to_address}`\n"
             text += f"📅 Дата: {date}\n\n"
