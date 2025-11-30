@@ -20,7 +20,11 @@ from app.models.transaction import Transaction # For auto-payout
 from app.models.enums import TransactionStatus # For auto-payout
 from app.services.user_service import UserService
 from app.services.withdrawal_service import WithdrawalService
-from bot.keyboards.reply import main_menu_reply_keyboard, withdrawal_keyboard
+from bot.keyboards.reply import (
+    finpass_input_keyboard,
+    main_menu_reply_keyboard,
+    withdrawal_keyboard,
+)
 from bot.states.withdrawal import WithdrawalStates
 from bot.utils.menu_buttons import is_menu_button
 
@@ -188,10 +192,10 @@ async def confirm_withdrawal(
         text = (
             f"💸 *Вывод средств*\n\n"
             f"Сумма к выводу: *{amount} USDT*\n\n"
-            f"Для подтверждения введите ваш финансовый пароль:"
+            f"🔐 Введите ваш финансовый пароль:"
         )
 
-        await message.answer(text, reply_markup=ReplyKeyboardRemove(), parse_mode="Markdown")
+        await message.answer(text, reply_markup=finpass_input_keyboard(), parse_mode="Markdown")
         await state.set_state(WithdrawalStates.waiting_for_financial_password)
     
     elif answer in ("нет", "no", "н", "n", "отмена", "cancel"):
@@ -322,12 +326,12 @@ async def process_withdrawal_amount(
     await state.update_data(amount=str(amount))
 
     text = (
-        f"💸 Вывод средств\n\n"
-        f"Сумма: {amount} USDT\n\n"
-        f"Для подтверждения введите ваш финансовый пароль:"
+        f"💸 *Вывод средств*\n\n"
+        f"Сумма: *{amount} USDT*\n\n"
+        f"🔐 Введите ваш финансовый пароль:"
     )
 
-    await message.answer(text)
+    await message.answer(text, reply_markup=finpass_input_keyboard(), parse_mode="Markdown")
     await state.set_state(WithdrawalStates.waiting_for_financial_password)
 
 
@@ -342,6 +346,15 @@ async def process_financial_password(
     if not user:
         await message.answer("❌ Ошибка: пользователь не найден")
         await state.clear()
+        return
+    
+    # Handle cancel button
+    if (message.text or "").strip() == "❌ Отменить вывод":
+        await state.clear()
+        await message.answer(
+            "❌ Вывод отменён.",
+            reply_markup=withdrawal_keyboard(),
+        )
         return
     
     if is_menu_button(message.text or ""):

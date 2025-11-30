@@ -252,6 +252,20 @@ def withdrawal_keyboard() -> ReplyKeyboardMarkup:
     return builder.as_markup(resize_keyboard=True)
 
 
+def finpass_input_keyboard() -> ReplyKeyboardMarkup:
+    """
+    Keyboard for financial password input with cancel button.
+
+    Returns:
+        ReplyKeyboardMarkup with cancel option
+    """
+    builder = ReplyKeyboardBuilder()
+    builder.row(
+        KeyboardButton(text="❌ Отменить вывод"),
+    )
+    return builder.as_markup(resize_keyboard=True)
+
+
 def referral_keyboard() -> ReplyKeyboardMarkup:
     """
     Referral menu reply keyboard.
