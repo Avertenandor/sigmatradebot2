@@ -879,12 +879,17 @@ async def process_password_confirmation(
         ),
     )
 
-    # Ask if user wants to provide contacts (optional)
+    # Ask if user wants to provide contacts (optional but recommended)
     from bot.keyboards.reply import contacts_choice_keyboard
 
     await message.answer(
-        "📝 **Опционально:** Вы можете оставить контакты для связи "
-        "(телефон и/или email). Это необязательно.\n\n"
+        "📝 **Рекомендуем оставить контакты!**\n\n"
+        "🔒 **Зачем это нужно?**\n"
+        "Если ваш Telegram-аккаунт будет угнан или заблокирован, "
+        "мы сможем связаться с вами и помочь восстановить доступ к средствам.\n\n"
+        "⚠️ **Важно:** Указывайте *реальные* данные!\n"
+        "• Телефон: ваш действующий номер\n"
+        "• Email: почта, к которой у вас есть доступ\n\n"
         "Хотите оставить контакты?",
         parse_mode="Markdown",
         reply_markup=contacts_choice_keyboard(),
@@ -902,22 +907,27 @@ async def handle_contacts_choice(
     """Handle contacts choice during registration."""
     if message.text == "✅ Да, оставить контакты":
         await message.answer(
-            "📞 Введите номер телефона "
-            "(или отправьте /skip чтобы пропустить):",
+            "📞 **Введите номер телефона**\n\n"
+            "Формат: `+7XXXXXXXXXX` или `+380XXXXXXXXX`\n"
+            "(международный формат с кодом страны)\n\n"
+            "Или отправьте /skip чтобы пропустить:",
+            parse_mode="Markdown",
         )
         await state.set_state(RegistrationStates.waiting_for_phone)
     elif message.text == "⏭ Пропустить":
         await message.answer(
-            "✅ Контакты пропущены. Вы можете добавить их позже "
-            "в настройках профиля.",
+            "✅ Контакты пропущены.\n\n"
+            "⚠️ Рекомендуем добавить их позже в настройках профиля "
+            "для защиты вашего аккаунта.",
         )
         await state.clear()
     else:
         # If user sent something else, show menu again
         from bot.keyboards.reply import contacts_choice_keyboard
         await message.answer(
-            "📝 **Опционально:** Вы можете оставить контакты для связи "
-            "(телефон и/или email). Это необязательно.\n\n"
+            "📝 **Рекомендуем оставить контакты!**\n\n"
+            "🔒 Если ваш Telegram будет угнан, мы сможем помочь "
+            "восстановить доступ к средствам.\n\n"
             "Хотите оставить контакты?",
             parse_mode="Markdown",
             reply_markup=contacts_choice_keyboard(),
@@ -967,25 +977,47 @@ async def process_phone(
 
     phone = message.text.strip() if message.text else ""
 
-    # Basic phone validation (can be improved)
-    if phone and len(phone) < 5:
+    # Strict phone validation
+    import re
+    # Remove spaces, dashes, parentheses
+    phone_clean = re.sub(r'[\s\-\(\)]', '', phone)
+    
+    # Must start with + and contain only digits after
+    phone_pattern = r'^\+\d{10,15}$'
+    if phone and not re.match(phone_pattern, phone_clean):
         await message.answer(
-            "❌ Неверный формат телефона!\n\n"
-            "Введите корректный номер или /skip чтобы пропустить:"
+            "❌ **Неверный формат телефона!**\n\n"
+            "Введите номер в международном формате:\n"
+            "• `+7XXXXXXXXXX` (Россия)\n"
+            "• `+380XXXXXXXXX` (Украина)\n"
+            "• `+375XXXXXXXXX` (Беларусь)\n\n"
+            "Или отправьте /skip чтобы пропустить:",
+            parse_mode="Markdown",
         )
         return
+    
+    # Normalize phone
+    phone = phone_clean if phone else ""
 
     await state.update_data(phone=phone if phone else None)
     await state.set_state(RegistrationStates.waiting_for_email)
 
     if phone:
         await message.answer(
-            "✅ Телефон сохранен!\n\n"
-            "📧 Введите email (или отправьте /skip чтобы пропустить):",
+            "✅ Телефон сохранён!\n\n"
+            "📧 **Введите email**\n\n"
+            "Формат: `example@mail.com`\n"
+            "(реальный адрес, к которому у вас есть доступ)\n\n"
+            "Или отправьте /skip чтобы пропустить:",
+            parse_mode="Markdown",
         )
     else:
         await message.answer(
-            "📧 Введите email (или отправьте /skip чтобы пропустить):",
+            "📧 **Введите email**\n\n"
+            "Формат: `example@mail.com`\n"
+            "(реальный адрес, к которому у вас есть доступ)\n\n"
+            "Или отправьте /skip чтобы пропустить:",
+            parse_mode="Markdown",
         )
 
 
@@ -1025,13 +1057,20 @@ async def process_email(
     if message.text and message.text.strip().lower() in skip_commands:
         email = None
     else:
-        email = message.text.strip() if message.text else None
+        email = message.text.strip().lower() if message.text else None
 
-        # Basic email validation
-        if email and ("@" not in email or "." not in email):
+        # Strict email validation
+        import re
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if email and not re.match(email_pattern, email):
             await message.answer(
-                "❌ Неверный формат email!\n\n"
-                "Введите корректный email или /skip чтобы пропустить:"
+                "❌ **Неверный формат email!**\n\n"
+                "Введите корректный адрес, например:\n"
+                "• `user@gmail.com`\n"
+                "• `name@mail.ru`\n"
+                "• `example@yandex.ru`\n\n"
+                "Или отправьте /skip чтобы пропустить:",
+                parse_mode="Markdown",
             )
             return
 
