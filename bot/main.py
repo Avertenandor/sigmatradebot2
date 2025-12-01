@@ -71,6 +71,10 @@ from bot.middlewares.redis_middleware import (
 from bot.middlewares.request_id import RequestIDMiddleware  # noqa: E402
 
 
+# Global bot instance for external access (e.g. from services)
+bot_instance: Bot | None = None
+
+
 async def main() -> None:  # noqa: C901
     """Initialize and run the bot."""
     # Configure logger
@@ -144,12 +148,14 @@ async def main() -> None:  # noqa: C901
         redis_client = None
 
     # Initialize bot
+    global bot_instance
     bot = Bot(
         token=settings.telegram_bot_token,
         default=DefaultBotProperties(
             parse_mode=ParseMode.MARKDOWN,
         ),
     )
+    bot_instance = bot
 
     # Initialize dispatcher with Redis storage
     dp = Dispatcher(storage=storage)

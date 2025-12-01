@@ -181,10 +181,7 @@ async def _show_transaction_history(
             )
             text += f"   📅 {date}\n"
 
-            if (
-                tx.tx_hash
-                and tx.status == TransactionStatus.CONFIRMED
-            ):
+            if tx.tx_hash:
                 short_hash = format_transaction_hash(tx.tx_hash)
                 text += f"   🔗 TX: `{short_hash}`\n"
 

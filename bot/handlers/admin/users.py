@@ -614,6 +614,8 @@ async def handle_profile_history(
         }
         status = status_map.get(tx.status, "❓")
         text += f"{status} `{tx.created_at.strftime('%d.%m %H:%M')}`: {tx.type} **{tx.amount} USDT**\n"
+        if tx.tx_hash:
+            text += f"   🔗 `{tx.tx_hash}`\n"
         
     await message.answer(text, parse_mode="Markdown")
 
