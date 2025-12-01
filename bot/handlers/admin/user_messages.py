@@ -21,6 +21,7 @@ from bot.keyboards.reply import (
     user_messages_navigation_keyboard,
 )
 from bot.states.admin import AdminUserMessagesStates
+from bot.utils.admin_utils import clear_state_preserve_admin_token
 
 router = Router(name="admin_user_messages")
 
@@ -44,7 +45,7 @@ async def show_user_messages_menu(
         await message.answer("❌ Эта функция доступна только администраторам")
         return
 
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
 
     text = """
 📝 **Просмотр сообщений пользователей**
@@ -88,14 +89,14 @@ async def process_user_id_for_messages(
     
     # Breakout for financial reports (navigation fix)
     if message.text and "Финансовая" in message.text:
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         from bot.handlers.admin.financials import show_financial_list
         await show_financial_list(message, session, state, **data)
         return
 
     # Check for cancel/back
     if message.text in ("◀️ Назад в админ-панель", "❌ Отмена"):
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer(
             "👑 **Панель администратора**\n\nВыберите действие:",
             parse_mode="Markdown",
@@ -170,7 +171,7 @@ async def process_user_id_for_messages(
             parse_mode="Markdown",
             reply_markup=get_admin_keyboard_from_data(data),
         )
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
 
     # Format messages
@@ -500,7 +501,7 @@ async def delete_user_messages(
     count = await msg_service.delete_all_messages(telegram_id)
     await session.commit()
 
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
 
     await message.answer(
         f"✅ Все сообщения пользователя `{telegram_id}` удалены.\n\n"
@@ -523,7 +524,7 @@ async def back_to_admin_panel_from_messages(
     **data: Any,
 ) -> None:
     """Return to admin panel from message viewing."""
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
 
     await message.answer(
         "👑 **Панель администратора**\n\n"

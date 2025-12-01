@@ -138,11 +138,8 @@ async def handle_master_key_input(
         # Clean up
         await state.update_data(auth_redirect_message=None)
         
-        # Determine handler based on text
-        # We need to simulate the button press
-        message.text = redirect_message_text
-        
-        # Route to specific handlers manually if possible
+        # Route to specific handlers manually based on saved text
+        # Note: Don't modify message.text - aiogram Message objects are frozen
         if redirect_message_text == "🆘 Техподдержка":
             from bot.handlers.admin.support import handle_admin_support_menu
             await handle_admin_support_menu(message, state, **data)
@@ -188,6 +185,9 @@ async def handle_master_key_input(
              from bot.handlers.admin.financials import show_financial_list
              await show_financial_list(message, session, state, **data)
              return
+        elif redirect_message_text == "👑 Админ-панель":
+             # Just continue to show admin panel below
+             pass
     
     await state.set_state(None)  # Clear state
 
@@ -334,7 +334,8 @@ async def handle_back_to_main_menu(
     user: User | None = data.get("user")
     
     if state:
-        await clear_state_preserve_admin_token(state)
+        # Force clear state AND session token to require master key on next entry
+        await state.clear()
     
     # Remove 'user' and 'state' from data to avoid duplicate arguments
     safe_data = {k: v for k, v in data.items() if k not in ('user', 'state')}
@@ -661,51 +662,15 @@ async def handle_admin_withdrawals(
     session: AsyncSession,
     **data: Any,
 ) -> None:
-    """Handle pending withdrawals list (admin only)"""
+    """Redirect to withdrawals submenu with full functionality."""
     is_admin = data.get("is_admin", False)
     if not is_admin:
         await message.answer("❌ Эта функция доступна только администраторам")
         return
     
-    from app.services.withdrawal_service import WithdrawalService
-    
-    withdrawal_service = WithdrawalService(session)
-    
-    try:
-        pending_withdrawals = await withdrawal_service.get_pending_withdrawals()
-        
-        if not pending_withdrawals:
-            text = "💸 **Заявки на вывод**\n\nНет ожидающих заявок на вывод."
-        else:
-            text = f"💸 **Заявки на вывод**\n\nОжидающих заявок: {len(pending_withdrawals)}\n\n"
-            for withdrawal in pending_withdrawals[:10]:
-                text += (
-                    f"• ID: {withdrawal.id}\n"
-                    f"  Пользователь: {withdrawal.user_id}\n"
-                    f"  Сумма: {format_usdt(withdrawal.amount)} USDT\n"
-                    f"  Адрес: `{withdrawal.wallet_address}`\n\n"
-                )
-            
-            if len(pending_withdrawals) > 10:
-                text += f"... и еще {len(pending_withdrawals) - 10} заявок"
-    except Exception as e:
-        logger.error(f"Error getting pending withdrawals: {e}")
-        text = "❌ Ошибка при получении списка заявок на вывод."
-    
-    # Get admin and super_admin status
-    telegram_id = message.from_user.id if message.from_user else None
-    admin, is_super_admin = await get_admin_and_super_status(
-        session, telegram_id, data
-    )
-
-    await message.answer(
-        text,
-        parse_mode="Markdown",
-        reply_markup=admin_keyboard(
-        is_super_admin=is_super_admin,
-        is_extended_admin=admin.is_extended_admin if admin else False
-    ),
-    )
+    # Redirect to the detailed withdrawals handler
+    from bot.handlers.admin.withdrawals import handle_pending_withdrawals
+    await handle_pending_withdrawals(message, session, **data)
 
 
 # Broadcast handler is now in broadcast.py as @router.message(F.text == "📢 Рассылка")

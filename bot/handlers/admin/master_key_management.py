@@ -25,6 +25,7 @@ from app.services.admin_service import AdminService
 from app.services.admin_log_service import AdminLogService
 from bot.keyboards.reply import master_key_management_reply_keyboard, main_menu_reply_keyboard
 from bot.states.admin import AdminMasterKeyStates
+from bot.utils.admin_utils import clear_state_preserve_admin_token
 
 # SUPER_ADMIN_TELEGRAM_ID - only this user can manage master keys
 SUPER_ADMIN_TELEGRAM_ID = 1040687384
@@ -114,7 +115,7 @@ async def show_master_key_menu(
         )
         return
     
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
     
     # Check if master key exists
     has_master_key = admin.master_key is not None and admin.master_key != ""
@@ -288,13 +289,13 @@ async def process_confirmation(
     
     if not is_super_admin(telegram_id):
         await message.answer("❌ Доступ запрещен")
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
     
     if message.text and message.text.strip().upper() == "ПОДТВЕРЖДАЮ":
         await regenerate_master_key(message, session, state, **data)
     else:
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer(
             "❌ Генерация нового ключа отменена.\n\n"
             "Ваш текущий ключ остался без изменений.",
@@ -322,10 +323,10 @@ async def regenerate_master_key(
     
     if not is_super_admin(telegram_id):
         await message.answer("❌ Доступ запрещен")
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
     
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
     
     admin_service = AdminService(session)
     admin = await admin_service.get_admin_by_telegram_id(telegram_id)
@@ -424,7 +425,7 @@ async def back_to_main_menu(
     if not is_super_admin(telegram_id):
         return  # Let other handlers process this
     
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
     
     user = data.get("user")
     blacklist_entry = data.get("blacklist_entry")

@@ -98,7 +98,7 @@ def main_menu_reply_keyboard(
         )
         builder.row(
             KeyboardButton(text="📖 Инструкции"),
-            KeyboardButton(text="📜 История"),
+            KeyboardButton(text="📜 История операций"),
         )
         builder.row(
             KeyboardButton(text="📊 Калькулятор"),
@@ -497,10 +497,8 @@ def admin_withdrawals_keyboard() -> ReplyKeyboardMarkup:
         KeyboardButton(text="⏳ Ожидающие выводы"),
     )
     builder.row(
-        KeyboardButton(text="✅ Одобренные выводы"),
-    )
-    builder.row(
-        KeyboardButton(text="❌ Отклоненные выводы"),
+        KeyboardButton(text="📋 Одобренные выводы"),
+        KeyboardButton(text="🚫 Отклоненные выводы"),
     )
     builder.row(
         KeyboardButton(text="⚙️ Настройки выплат"),
@@ -509,6 +507,85 @@ def admin_withdrawals_keyboard() -> ReplyKeyboardMarkup:
         KeyboardButton(text="👑 Админ-панель"),
     )
 
+    return builder.as_markup(resize_keyboard=True)
+
+
+def withdrawal_list_keyboard(
+    withdrawals: list,
+    page: int = 1,
+    total_pages: int = 1,
+) -> ReplyKeyboardMarkup:
+    """
+    Keyboard with withdrawal buttons for admin selection.
+
+    Args:
+        withdrawals: List of Transaction objects (pending withdrawals)
+        page: Current page
+        total_pages: Total pages
+
+    Returns:
+        ReplyKeyboardMarkup with withdrawal buttons
+    """
+    from bot.utils.formatters import format_usdt
+
+    builder = ReplyKeyboardBuilder()
+    
+    # Withdrawal buttons (1 per row for clarity)
+    for wd in withdrawals:
+        amount_str = format_usdt(wd.amount)
+        user_label = f"ID:{wd.user_id}"
+        if hasattr(wd, "user") and wd.user and wd.user.username:
+            user_label = f"@{wd.user.username}"
+        # Neutral emoji for selection
+        builder.row(
+            KeyboardButton(text=f"💸 #{wd.id} | {amount_str} | {user_label}")
+        )
+
+    # Navigation
+    nav_buttons = []
+    if total_pages > 1:
+        if page > 1:
+            nav_buttons.append(KeyboardButton(text="⬅️ Пред."))
+        if page < total_pages:
+            nav_buttons.append(KeyboardButton(text="След. ➡️"))
+
+    if nav_buttons:
+        builder.row(*nav_buttons)
+
+    builder.row(KeyboardButton(text="◀️ Назад к выводам"))
+
+    return builder.as_markup(resize_keyboard=True)
+
+
+def admin_withdrawal_detail_keyboard() -> ReplyKeyboardMarkup:
+    """
+    Keyboard for viewing a specific withdrawal request details.
+
+    Returns:
+        ReplyKeyboardMarkup with action buttons
+    """
+    builder = ReplyKeyboardBuilder()
+    builder.row(
+        KeyboardButton(text="✅ Одобрить"),
+        KeyboardButton(text="❌ Отклонить")
+    )
+    builder.row(
+        KeyboardButton(text="◀️ Назад к списку"),
+        KeyboardButton(text="👑 Админ-панель")
+    )
+    return builder.as_markup(resize_keyboard=True)
+
+
+def withdrawal_confirm_keyboard(withdrawal_id: int, action: str) -> ReplyKeyboardMarkup:
+    """Keyboard for confirming withdrawal action."""
+    builder = ReplyKeyboardBuilder()
+    action_text = "Одобрить" if action == "approve" else "Отклонить"
+    builder.row(
+        KeyboardButton(text=f"✅ Да, {action_text.lower()} #{withdrawal_id}"),
+    )
+    builder.row(
+        KeyboardButton(text="❌ Нет, отменить"),
+    )
     return builder.as_markup(resize_keyboard=True)
 
 
@@ -963,6 +1040,26 @@ def finpass_recovery_confirm_keyboard() -> ReplyKeyboardMarkup:
     return builder.as_markup(resize_keyboard=True)
 
 
+def transaction_history_type_keyboard() -> ReplyKeyboardMarkup:
+    """
+    Transaction history type selection keyboard.
+    
+    Returns:
+        ReplyKeyboardMarkup with transaction type buttons
+    """
+    builder = ReplyKeyboardBuilder()
+    
+    builder.row(
+        KeyboardButton(text="🔄 Внутренние транзакции"),
+        KeyboardButton(text="🔗 Транзакции в блокчейне"),
+    )
+    builder.row(
+        KeyboardButton(text="📊 Главное меню"),
+    )
+    
+    return builder.as_markup(resize_keyboard=True)
+
+
 def transaction_history_keyboard(
     current_filter: str | None = None,
     has_prev: bool = False,
@@ -1009,6 +1106,7 @@ def transaction_history_keyboard(
         builder.row(*nav_buttons)
 
     builder.row(
+        KeyboardButton(text="◀️ Назад"),
         KeyboardButton(text="📊 Главное меню"),
     )
 

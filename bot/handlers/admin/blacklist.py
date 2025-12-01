@@ -17,6 +17,7 @@ from app.services.blacklist_service import BlacklistService
 from bot.keyboards.reply import admin_blacklist_keyboard, admin_keyboard, cancel_keyboard
 from bot.states.admin import BlacklistStates
 from bot.states.admin_states import AdminStates
+from bot.utils.admin_utils import clear_state_preserve_admin_token
 
 router = Router()
 
@@ -119,7 +120,7 @@ async def process_blacklist_identifier(
 
     # Check if message is a cancel button
     if message.text == "❌ Отмена":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer(
             "❌ Добавление в черный список отменено.",
             reply_markup=admin_blacklist_keyboard(),
@@ -130,7 +131,7 @@ async def process_blacklist_identifier(
     from bot.utils.menu_buttons import is_menu_button
 
     if message.text and is_menu_button(message.text):
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return  # Let menu handlers process this
 
     identifier = message.text.strip()
@@ -190,7 +191,7 @@ async def process_blacklist_reason(
 
     # Check if message is a cancel button
     if message.text == "❌ Отмена":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer(
             "❌ Добавление в черный список отменено.",
             reply_markup=admin_blacklist_keyboard(),
@@ -201,7 +202,7 @@ async def process_blacklist_reason(
     from bot.utils.menu_buttons import is_menu_button
 
     if message.text and is_menu_button(message.text):
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return  # Let menu handlers process this
 
     reason = message.text.strip()
@@ -266,7 +267,7 @@ async def process_blacklist_reason(
             reply_markup=admin_blacklist_keyboard(),
         )
 
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
 
 
 @router.message(F.text == "🗑️ Удалить из черного списка")
@@ -306,7 +307,7 @@ async def process_blacklist_removal(
 
     # Check if message is a cancel button
     if message.text == "❌ Отмена":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer(
             "❌ Удаление из черного списка отменено.",
             reply_markup=admin_blacklist_keyboard(),
@@ -317,7 +318,7 @@ async def process_blacklist_removal(
     from bot.utils.menu_buttons import is_menu_button
 
     if message.text and is_menu_button(message.text):
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return  # Let menu handlers process this
 
     identifier = message.text.strip()
@@ -336,7 +337,7 @@ async def process_blacklist_removal(
                 "Адрес должен начинаться с '0x' и содержать 42 символа.",
                 reply_markup=admin_blacklist_keyboard(),
             )
-            await state.clear()
+            await clear_state_preserve_admin_token(state)
             return
     else:
         try:
@@ -347,7 +348,7 @@ async def process_blacklist_removal(
                 "числовой Telegram ID или BSC адрес (0x...).",
                 reply_markup=admin_blacklist_keyboard(),
             )
-            await state.clear()
+            await clear_state_preserve_admin_token(state)
             return
 
     blacklist_service = BlacklistService(session)
@@ -372,7 +373,7 @@ async def process_blacklist_removal(
             reply_markup=admin_blacklist_keyboard(),
         )
 
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
 
 
 @router.message(F.text.regexp(r'^Просмотр #(\d+)$'))
@@ -520,7 +521,7 @@ async def handle_unban_confirm(
     is_admin = data.get("is_admin", False)
     if not is_admin:
         await message.answer("❌ Эта функция доступна только администраторам")
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
     
     if message.text != "✅ Да":
@@ -529,7 +530,7 @@ async def handle_unban_confirm(
             "❌ Разблокировка отменена.",
             reply_markup=admin_blacklist_keyboard(),
         )
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
     
     state_data = await state.get_data()
@@ -541,7 +542,7 @@ async def handle_unban_confirm(
             "❌ Ошибка: ID записи потерян.",
             reply_markup=admin_blacklist_keyboard(),
         )
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
     
     from app.repositories.blacklist_repository import BlacklistRepository
@@ -556,7 +557,7 @@ async def handle_unban_confirm(
             f"❌ Запись #{entry_id} не найдена.",
             reply_markup=admin_blacklist_keyboard(),
         )
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
     
     # Remove from blacklist
@@ -594,7 +595,7 @@ async def handle_unban_confirm(
             reply_markup=admin_blacklist_keyboard(),
         )
     
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
 
 
 @router.message(F.text == "📝 Редактировать тексты")
@@ -685,11 +686,11 @@ async def handle_save_block_text(
     is_admin = data.get("is_admin", False)
     if not is_admin:
         await message.answer("❌ Эта функция доступна только администраторам")
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
     
     if message.text == "❌ Отмена":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         from bot.keyboards.reply import admin_blacklist_keyboard
         await message.answer(
             "❌ Редактирование отменено.",
@@ -715,7 +716,7 @@ async def handle_save_block_text(
         parse_mode="Markdown",
         reply_markup=admin_blacklist_keyboard(),
     )
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
 
 
 @router.message(F.text == "Изменить текст терминации")
@@ -763,11 +764,11 @@ async def handle_save_terminate_text(
     is_admin = data.get("is_admin", False)
     if not is_admin:
         await message.answer("❌ Эта функция доступна только администраторам")
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
     
     if message.text == "❌ Отмена":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         from bot.keyboards.reply import admin_blacklist_keyboard
         await message.answer(
             "❌ Редактирование отменено.",
@@ -793,7 +794,7 @@ async def handle_save_terminate_text(
         parse_mode="Markdown",
         reply_markup=admin_blacklist_keyboard(),
     )
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
 
 
 @router.message(F.text == "👑 Админ-панель")

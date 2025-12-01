@@ -31,6 +31,7 @@ from bot.keyboards.reply import (
     cancel_keyboard,
 )
 from bot.states.admin import AdminRoiCorridorStates
+from bot.utils.admin_utils import clear_state_preserve_admin_token
 
 router = Router(name="admin_roi_corridor")
 
@@ -791,7 +792,7 @@ async def process_confirmation(
         data: Handler data
     """
     if "Нет" in message.text or "отменить" in message.text.lower():
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer("❌ Изменения отменены.")
         await show_roi_corridor_menu(message, session, **data)
         return
@@ -1157,7 +1158,7 @@ async def process_period_confirmation(
         data: Handler data
     """
     if "Нет" in message.text or "отменить" in message.text.lower():
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer("❌ Изменения отменены.")
         await show_roi_corridor_menu(message, session, **data)
         return

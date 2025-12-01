@@ -71,6 +71,10 @@ from bot.middlewares.redis_middleware import (
 from bot.middlewares.request_id import RequestIDMiddleware  # noqa: E402
 
 
+# Global bot instance for external access (e.g. from services)
+bot_instance: Bot | None = None
+
+
 async def main() -> None:  # noqa: C901
     """Initialize and run the bot."""
     # Configure logger
@@ -144,12 +148,14 @@ async def main() -> None:  # noqa: C901
         redis_client = None
 
     # Initialize bot
+    global bot_instance
     bot = Bot(
         token=settings.telegram_bot_token,
         default=DefaultBotProperties(
             parse_mode=ParseMode.MARKDOWN,
         ),
     )
+    bot_instance = bot
 
     # Initialize dispatcher with Redis storage
     dp = Dispatcher(storage=storage)
@@ -346,9 +352,9 @@ async def main() -> None:  # noqa: C901
     
     dp.include_router(wallet_key_setup.router)
     dp.include_router(financials.router)  # MUST be before panel.router to catch "💰 Финансовая отчётность"
+    dp.include_router(withdrawals.router)  # MUST be before panel.router for withdrawal buttons
     dp.include_router(panel.router)
     dp.include_router(users.router)
-    dp.include_router(withdrawals.router)
     dp.include_router(withdrawal_settings.router)
     dp.include_router(blockchain_settings.router)
     dp.include_router(broadcast.router)

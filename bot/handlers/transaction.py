@@ -18,6 +18,7 @@ from app.services.transaction_service import TransactionService
 from bot.keyboards.reply import (
     main_menu_reply_keyboard,
     transaction_history_keyboard,
+    transaction_history_type_keyboard,
 )
 from bot.utils.formatters import format_transaction_hash, format_usdt, escape_md
 from app.services.report_service import ReportService
@@ -48,7 +49,10 @@ def get_status_emoji(status: TransactionStatus) -> str:
     emoji_map = {
         TransactionStatus.CONFIRMED: "✅",
         TransactionStatus.PENDING: "⏳",
+        TransactionStatus.PROCESSING: "⚡",
         TransactionStatus.FAILED: "❌",
+        TransactionStatus.FROZEN: "❄️",
+        TransactionStatus.PENDING_NETWORK_RECOVERY: "🔧",
     }
     return emoji_map.get(status, "❓")
 
@@ -58,7 +62,10 @@ def get_status_text(status: TransactionStatus) -> str:
     text_map = {
         TransactionStatus.CONFIRMED: "Подтверждено",
         TransactionStatus.PENDING: "В обработке",
+        TransactionStatus.PROCESSING: "Отправляется",
         TransactionStatus.FAILED: "Отклонено",
+        TransactionStatus.FROZEN: "Заморожено",
+        TransactionStatus.PENDING_NETWORK_RECOVERY: "Ожидает сети",
     }
     return text_map.get(status, "Неизвестно")
 
@@ -70,6 +77,7 @@ async def _show_transaction_history(
     user: User,
     filter_type: TransactionType | None = None,
     page: int = 0,
+    filter_blockchain: bool | None = None,
     **data: Any,
 ) -> None:
     """
@@ -82,6 +90,7 @@ async def _show_transaction_history(
         user: Current user
         filter_type: Transaction type filter (None = all)
         page: Page number (0-based)
+        filter_blockchain: Filter by blockchain (True=only hash, False=only internal)
         **data: Additional handler data
     """
     transaction_service = TransactionService(session)
@@ -95,6 +104,7 @@ async def _show_transaction_history(
         limit=TRANSACTIONS_PER_PAGE,
         offset=offset,
         transaction_type=filter_type,
+        filter_blockchain=filter_blockchain,
     )
     transactions = result["transactions"]
     total = result["total"]
@@ -104,7 +114,11 @@ async def _show_transaction_history(
     stats = await transaction_service.get_transaction_stats(user.id)
 
     # Build message text
-    text = "📊 *История транзакций*\n\n"
+    title = "📊 *История транзакций*"
+    if filter_blockchain is not None:
+        title = "🔗 *Транзакции в блокчейне*" if filter_blockchain else "🔄 *Внутренние транзакции*"
+    
+    text = f"{title}\n\n"
 
     # Display filter info
     if filter_type:
@@ -115,48 +129,18 @@ async def _show_transaction_history(
         }
         text += f"🔍 *Фильтр:* {filter_names.get(filter_type, 'Неизвестно')}\n\n"
 
-    # Display statistics
-    text += "*Общая статистика:*\n"
+    # Display statistics (condensed)
     text += (
-        f"💰 Всего депозитов: "
-        f"*{format_usdt(stats['total_deposits'])} USDT* "
-        f"({stats['transaction_count']['deposits']} шт.)\n"
+        f"💰 Депозиты: *{format_usdt(stats['total_deposits'])}* | "
+        f"💸 Выводы: *{format_usdt(stats['total_withdrawals'])}*\n"
+        f"🎁 Реферальные: *{format_usdt(stats['total_referral_earnings'])}*\n\n"
     )
-    text += (
-        f"💸 Всего выведено: "
-        f"*{format_usdt(stats['total_withdrawals'])} USDT* "
-        f"({stats['transaction_count']['withdrawals']} шт.)\n"
-    )
-    text += (
-        f"🎁 Реферальных доходов: "
-        f"*{format_usdt(stats['total_referral_earnings'])} USDT* "
-        f"({stats['transaction_count']['referral_rewards']} шт.)\n\n"
-    )
-
-    if (
-        stats.get("pending_withdrawals", 0) > 0
-        or stats.get("pending_earnings", 0) > 0
-    ):
-        text += "*В обработке:*\n"
-        if stats.get("pending_withdrawals", 0) > 0:
-            text += (
-                f"⏳ Вывод средств: "
-                f"*{format_usdt(stats['pending_withdrawals'])} USDT*\n"
-            )
-        if stats.get("pending_earnings", 0) > 0:
-            text += (
-                f"⏳ Реферальные доходы: "
-                f"*{format_usdt(stats['pending_earnings'])} USDT*\n"
-            )
-        text += "\n"
 
     text += "---\n\n"
 
     # Display transactions
     if not transactions:
-        text += "У вас пока нет транзакций."
-        if filter_type:
-            text += f"\n\nПопробуйте выбрать другой фильтр или '📊 Все транзакции'."
+        text += "У вас пока нет транзакций в этой категории."
     else:
         start_num = offset + 1
         end_num = offset + len(transactions)
@@ -181,10 +165,7 @@ async def _show_transaction_history(
             )
             text += f"   📅 {date}\n"
 
-            if (
-                tx.tx_hash
-                and tx.status == TransactionStatus.CONFIRMED
-            ):
+            if tx.tx_hash and tx.tx_hash.startswith("0x"):
                 short_hash = format_transaction_hash(tx.tx_hash)
                 text += f"   🔗 TX: `{short_hash}`\n"
 
@@ -199,6 +180,7 @@ async def _show_transaction_history(
     await state.update_data(
         transaction_filter=filter_type.value if filter_type else None,
         transaction_page=page,
+        filter_blockchain=filter_blockchain,
     )
 
     # Build keyboard
@@ -209,11 +191,6 @@ async def _show_transaction_history(
         has_next=has_more,
     )
 
-    is_admin = data.get("is_admin", False)
-    from app.repositories.blacklist_repository import BlacklistRepository
-    blacklist_repo = BlacklistRepository(session)
-    blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
-
     await message.answer(
         text,
         parse_mode="Markdown",
@@ -221,24 +198,67 @@ async def _show_transaction_history(
     )
 
 
-@router.message(F.text == "📜 История")
-async def handle_transaction_history(
+@router.message(F.text == "📜 История операций")
+@router.message(F.text == "📜 История")  # Backward compatibility
+@router.message(F.text == "◀️ Назад")  # Handle back button from transaction lists
+async def handle_transaction_history_menu(
+    message: Message,
+    state: FSMContext,
+) -> None:
+    """Show transaction history menu."""
+    # Check if we are coming from "Back" - we might want to clear some state, 
+    # but keeping it is also fine as we re-enter the menu.
+    await message.answer(
+        "Выберите тип транзакций:",
+        reply_markup=transaction_history_type_keyboard(),
+    )
+
+
+@router.message(F.text == "🔄 Внутренние транзакции")
+async def handle_internal_transactions(
     message: Message,
     session: AsyncSession,
     state: FSMContext,
     **data: Any,
 ) -> None:
-    """Show transaction history (first page, all transactions)."""
+    """Show internal transactions."""
     user: User | None = data.get("user")
     if not user:
         await message.answer("Ошибка: пользователь не найден")
         return
 
-    # Reset to first page, all transactions
-    # Remove 'user' from data to avoid duplicate argument
+    # Reset to first page, no type filter, INTERNAL only
     safe_data = {k: v for k, v in data.items() if k not in ('user', 'state', 'session')}
     await _show_transaction_history(
-        message, session, state, user, filter_type=None, page=0, **safe_data
+        message, session, state, user, 
+        filter_type=None, 
+        page=0, 
+        filter_blockchain=False,
+        **safe_data
+    )
+
+
+@router.message(F.text == "🔗 Транзакции в блокчейне")
+async def handle_blockchain_transactions(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """Show blockchain transactions."""
+    user: User | None = data.get("user")
+    if not user:
+        await message.answer("Ошибка: пользователь не найден")
+        return
+
+    # Reset to first page, no type filter, BLOCKCHAIN only
+    safe_data = {k: v for k, v in data.items() if k not in ('user', 'state', 'session')}
+    await _show_transaction_history(
+        message, session, state, user, 
+        filter_type=None, 
+        page=0, 
+        filter_blockchain=True,
+        **safe_data
     )
 
 
@@ -249,17 +269,23 @@ async def handle_all_transactions(
     state: FSMContext,
     **data: Any,
 ) -> None:
-    """Show all transactions (reset filter)."""
+    """Show all transactions (reset filter, keep view mode)."""
     user: User | None = data.get("user")
     if not user:
         await message.answer("Ошибка: пользователь не найден")
         return
 
-    # Reset to first page, all transactions
-    # Remove 'user' from data to avoid duplicate argument
+    # Get current view mode
+    state_data = await state.get_data()
+    filter_blockchain = state_data.get("filter_blockchain")
+
     safe_data = {k: v for k, v in data.items() if k not in ('user', 'state', 'session')}
     await _show_transaction_history(
-        message, session, state, user, filter_type=None, page=0, **safe_data
+        message, session, state, user, 
+        filter_type=None, 
+        page=0, 
+        filter_blockchain=filter_blockchain,
+        **safe_data
     )
 
 
@@ -276,6 +302,10 @@ async def handle_transaction_filter(
         await message.answer("Ошибка: пользователь не найден")
         return
 
+    # Get current view mode
+    state_data = await state.get_data()
+    filter_blockchain = state_data.get("filter_blockchain")
+
     # Map button text to transaction type
     filter_map = {
         "💰 Депозиты": TransactionType.DEPOSIT,
@@ -284,15 +314,14 @@ async def handle_transaction_filter(
     }
 
     filter_type = filter_map.get(message.text)
-    if not filter_type:
-        await message.answer("Ошибка: неизвестный фильтр")
-        return
-
-    # Reset to first page with new filter
-    # Remove 'user' from data to avoid duplicate argument
+    
     safe_data = {k: v for k, v in data.items() if k not in ('user', 'state', 'session')}
     await _show_transaction_history(
-        message, session, state, user, filter_type=filter_type, page=0, **safe_data
+        message, session, state, user, 
+        filter_type=filter_type, 
+        page=0, 
+        filter_blockchain=filter_blockchain,
+        **safe_data
     )
 
 
@@ -309,10 +338,11 @@ async def handle_transaction_pagination(
         await message.answer("Ошибка: пользователь не найден")
         return
 
-    # Get current filter and page from state
+    # Get current state
     state_data = await state.get_data()
     current_filter_str = state_data.get("transaction_filter")
     current_page = state_data.get("transaction_page", 0)
+    filter_blockchain = state_data.get("filter_blockchain")
 
     # Parse filter
     filter_type = None
@@ -328,7 +358,6 @@ async def handle_transaction_pagination(
     else:  # "➡ Следующая страница"
         new_page = current_page + 1
 
-    # Remove 'user' from data to avoid duplicate argument
     safe_data = {k: v for k, v in data.items() if k not in ('user', 'state', 'session')}
     await _show_transaction_history(
         message,
@@ -337,6 +366,7 @@ async def handle_transaction_pagination(
         user,
         filter_type=filter_type,
         page=new_page,
+        filter_blockchain=filter_blockchain,
         **safe_data,
     )
 
@@ -354,7 +384,7 @@ async def handle_export_report(
         await message.answer("Ошибка: пользователь не найден")
         return
 
-    wait_msg =     await message.answer("⏳ Генерирую отчет... Пожалуйста, подождите.")
+    wait_msg = await message.answer("⏳ Генерирую отчет... Пожалуйста, подождите.")
     await message.bot.send_chat_action(message.chat.id, "upload_document")
 
     try:

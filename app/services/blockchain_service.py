@@ -72,8 +72,11 @@ USDT_DECIMALS = 18
 
 # Gas settings for BSC
 # 0.1 Gwei = 100_000_000 Wei (1 Gwei = 10^9 Wei)
-DEFAULT_GAS_PRICE_GWEI = Decimal("0.1")
-DEFAULT_GAS_PRICE_WEI = int(DEFAULT_GAS_PRICE_GWEI * 10**9)  # 100_000_000 Wei
+# User requirement: Max 0.1 Gwei, try lower if possible
+MIN_GAS_PRICE_GWEI = Decimal("0.01")
+MAX_GAS_PRICE_GWEI = Decimal("0.1")
+MIN_GAS_PRICE_WEI = int(MIN_GAS_PRICE_GWEI * 10**9)
+MAX_GAS_PRICE_WEI = int(MAX_GAS_PRICE_GWEI * 10**9)
 
 T = TypeVar("T")
 
@@ -84,6 +87,7 @@ class BlockchainService:
     Full Web3.py implementation with:
     - Dual-Core Engine (QuickNode + NodeReal)
     - Automatic Failover
+    - Smart Gas Management
     - USDT contract interaction
     - Transaction sending
     - Balance checking
@@ -138,6 +142,38 @@ class BlockchainService:
             f"  USDT Contract: {self.usdt_contract_address}\n"
             f"  Wallet: {self.wallet_address if self.wallet_address else 'Not configured'}"
         )
+
+    def get_optimal_gas_price(self, w3: Web3) -> int:
+        """
+        Calculate optimal gas price with Smart Gas strategy.
+        
+        Logic:
+        1. Get current RPC gas price.
+        2. Clamp between MIN (0.1 Gwei) and MAX (5.0 Gwei).
+        
+        Args:
+            w3: Web3 instance
+            
+        Returns:
+            Gas price in Wei
+        """
+        try:
+            rpc_gas = w3.eth.gas_price
+            
+            # Clamp logic
+            final_gas = max(MIN_GAS_PRICE_WEI, min(MAX_GAS_PRICE_WEI, rpc_gas))
+            
+            # Log if capped
+            if rpc_gas > MAX_GAS_PRICE_WEI:
+                logger.warning(
+                    f"Gas price capped! RPC: {rpc_gas/1e9:.2f} Gwei, "
+                    f"Used: {final_gas/1e9:.2f} Gwei"
+                )
+            
+            return int(final_gas)
+        except Exception as e:
+            logger.warning(f"Failed to get gas price, using MIN: {e}")
+            return int(MIN_GAS_PRICE_WEI)
 
     def _init_providers(self) -> None:
         """Initialize Web3 providers based on settings."""
@@ -391,15 +427,16 @@ class BlockchainService:
                 contract = w3.eth.contract(address=self.usdt_contract_address, abi=USDT_ABI)
                 func = contract.functions.transfer(to_address, amount_wei)
                 
-                # Use fixed gas price (0.1 Gwei) instead of dynamic
-                gas_price = DEFAULT_GAS_PRICE_WEI
+                # Use Smart Gas
+                gas_price = self.get_optimal_gas_price(w3)
                 
                 try:
                     gas_est = func.estimate_gas({"from": self.wallet_address})
                 except Exception:
                     gas_est = 100000  # Fallback for USDT transfer
                 
-                nonce = w3.eth.get_transaction_count(self.wallet_address)
+                # Use pending block for better concurrency
+                nonce = w3.eth.get_transaction_count(self.wallet_address, 'pending')
                 
                 txn = func.build_transaction({
                     "from": self.wallet_address,
@@ -443,10 +480,12 @@ class BlockchainService:
             amount_wei = Web3.to_wei(amount, 'ether')
 
             def _send_native(w3: Web3):
-                # Use fixed gas price (0.1 Gwei)
-                gas_price = DEFAULT_GAS_PRICE_WEI
+                # Use Smart Gas
+                gas_price = self.get_optimal_gas_price(w3)
                 gas_limit = 21000  # Standard native transfer gas
-                nonce = w3.eth.get_transaction_count(self.wallet_address)
+                
+                # Use pending block for better concurrency
+                nonce = w3.eth.get_transaction_count(self.wallet_address, 'pending')
 
                 txn = {
                     "to": to_address,
@@ -583,7 +622,7 @@ class BlockchainService:
                 contract = w3.eth.contract(address=self.usdt_contract_address, abi=USDT_ABI)
                 func = contract.functions.transfer(to_address, amount_wei)
                 func_gas = func.estimate_gas({"from": self.wallet_address})
-                price = w3.eth.gas_price
+                price = self.get_optimal_gas_price(w3)
                 return func_gas * price
 
             total_wei = await self._run_async_failover(_est_gas)
