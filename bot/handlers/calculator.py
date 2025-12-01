@@ -29,17 +29,17 @@ class CalculatorStates(StatesGroup):
 
 async def get_deposit_versions(session: AsyncSession) -> dict:
     """Get deposit versions from database."""
-    from app.repositories.deposit_version_repository import DepositVersionRepository
+    from app.repositories.deposit_level_version_repository import DepositLevelVersionRepository
     
-    repo = DepositVersionRepository(session)
-    versions = await repo.get_active_versions()
+    repo = DepositLevelVersionRepository(session)
+    versions = await repo.get_all_active_levels()
     
     result = {}
     for v in versions:
-        result[v.level] = {
+        result[v.level_number] = {
             "amount": v.amount,  # Decimal
             "roi_percent": v.roi_percent,  # Decimal
-            "roi_cap": v.roi_cap,  # Decimal or None
+            "roi_cap": v.roi_cap_percent,  # Decimal or None
         }
     return result
 
