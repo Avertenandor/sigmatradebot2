@@ -98,7 +98,7 @@ def main_menu_reply_keyboard(
         )
         builder.row(
             KeyboardButton(text="📖 Инструкции"),
-            KeyboardButton(text="📜 История"),
+            KeyboardButton(text="📜 История операций"),
         )
         builder.row(
             KeyboardButton(text="📊 Калькулятор"),
@@ -1037,6 +1037,26 @@ def finpass_recovery_confirm_keyboard() -> ReplyKeyboardMarkup:
         KeyboardButton(text="❌ Отменить"),
     )
 
+    return builder.as_markup(resize_keyboard=True)
+
+
+def transaction_history_type_keyboard() -> ReplyKeyboardMarkup:
+    """
+    Transaction history type selection keyboard.
+    
+    Returns:
+        ReplyKeyboardMarkup with transaction type buttons
+    """
+    builder = ReplyKeyboardBuilder()
+    
+    builder.row(
+        KeyboardButton(text="🔄 Внутренние транзакции"),
+        KeyboardButton(text="🔗 Транзакции в блокчейне"),
+    )
+    builder.row(
+        KeyboardButton(text="📊 Главное меню"),
+    )
+    
     return builder.as_markup(resize_keyboard=True)
 
 

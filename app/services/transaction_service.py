@@ -55,6 +55,7 @@ class TransactionService:
         offset: int = 0,
         transaction_type: TransactionType | None = None,
         status: TransactionStatus | None = None,
+        filter_blockchain: bool | None = None,
     ) -> dict:
         """
         Get all transactions for user (deposits, withdrawals, earnings).
@@ -67,6 +68,7 @@ class TransactionService:
             offset: Offset for pagination
             transaction_type: Filter by type (optional)
             status: Filter by status (optional)
+            filter_blockchain: Filter by blockchain presence (True=Only with hash, False=Only without)
 
         Returns:
             Dict with transactions, total, has_more
@@ -93,6 +95,15 @@ class TransactionService:
         ):
             earnings = await self._get_referral_earnings(user_id)
             all_transactions.extend(earnings)
+
+        # Filter by blockchain presence
+        if filter_blockchain is not None:
+            if filter_blockchain:
+                # Only with hash
+                all_transactions = [t for t in all_transactions if t.tx_hash]
+            else:
+                # Only without hash (Internal)
+                all_transactions = [t for t in all_transactions if not t.tx_hash]
 
         # Sort by date (newest first)
         all_transactions.sort(

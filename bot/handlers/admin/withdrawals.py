@@ -475,9 +475,13 @@ async def handle_confirm_withdrawal_action(
             # Notify user
             user = await user_service.find_by_id(withdrawal.user_id)
             if user:
-                await notification_service.notify_withdrawal_processed(
+                logger.info(f"Attempting to notify user {user.id} (TG: {user.telegram_id}) about withdrawal {tx_hash}")
+                notify_result = await notification_service.notify_withdrawal_processed(
                     user.telegram_id, float(withdrawal.amount), tx_hash
                 )
+                logger.info(f"Notification result for user {user.id}: {notify_result}")
+            else:
+                logger.warning(f"User {withdrawal.user_id} not found for notification")
 
             await message.answer(
                 f"✅ **Заявка #{withdrawal_id} одобрена!**\n\n"

@@ -251,6 +251,64 @@ class NotificationService:
             notification_metadata=metadata,
         )
 
+    async def notify_user(
+        self,
+        user_id: int,
+        message: str,
+        critical: bool = False,
+    ) -> bool:
+        """
+        Notify user by database ID (wrapper for send_notification).
+
+        Args:
+            user_id: Database User ID
+            message: Message text
+            critical: Mark as critical
+
+        Returns:
+            True if sent
+        """
+        try:
+            from app.repositories.user_repository import UserRepository
+            user_repo = UserRepository(self.session)
+            user = await user_repo.find_by_id(user_id)
+            
+            if not user or not user.telegram_id:
+                logger.warning(f"Cannot notify user {user_id}: User not found or no telegram_id")
+                return False
+
+            from bot.main import bot_instance
+            from aiogram import Bot
+            from aiogram.client.default import DefaultBotProperties
+            from aiogram.enums import ParseMode
+            from app.config.settings import settings
+
+            bot = bot_instance
+            should_close = False
+
+            if not bot:
+                try:
+                    bot = Bot(
+                        token=settings.telegram_bot_token,
+                        default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN),
+                    )
+                    should_close = True
+                except Exception as e:
+                    logger.error(f"Failed to create fallback bot instance: {e}")
+                    return False
+
+            try:
+                return await self.send_notification(
+                    bot, user.telegram_id, message, critical
+                )
+            finally:
+                if should_close and bot:
+                    await bot.session.close()
+
+        except Exception as e:
+            logger.error(f"Error in notify_user: {e}", exc_info=True)
+            return False
+
     async def notify_admins_new_ticket(
         self, bot: Bot, ticket_id: int
     ) -> None:
