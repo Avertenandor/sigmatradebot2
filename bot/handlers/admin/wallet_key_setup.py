@@ -30,6 +30,7 @@ class WalletSetupStates(StatesGroup):
 
     setting_input_wallet = State()
     setting_output_key = State()
+    setting_derivation_index = State()  # New state for HD Wallet index
     waiting_for_seed = State()
     confirming_input = State()
     confirming_output = State()
@@ -235,10 +236,20 @@ async def process_output_key(message: Message, state: FSMContext):
         try:
             mnemo = Mnemonic("english")
             if mnemo.check(text):
-                Account.enable_unaudited_hdwallet_features()
-                account = Account.from_mnemonic(text)
-                private_key = account.key.hex()[2:] # remove 0x
-                wallet_address = account.address
+                # Valid seed found - ask for derivation index
+                await state.update_data(temp_seed_phrase=text)
+                
+                from bot.keyboards.reply import cancel_keyboard
+                await state.set_state(WalletSetupStates.setting_derivation_index)
+                await message.answer(
+                    "🌱 **Обнаружена Seed-фраза**\n\n"
+                    "Для HD-кошельков (Trust Wallet, Metamask, Ledger) можно выбрать адрес.\n"
+                    "Путь деривации: `m/44'/60'/0'/0/{index}`\n\n"
+                    "🔢 **Введите индекс адреса (обычно 0):**",
+                    parse_mode="Markdown",
+                    reply_markup=cancel_keyboard(),
+                )
+                return
         except Exception:
             pass
 
@@ -250,7 +261,7 @@ async def process_output_key(message: Message, state: FSMContext):
         )
         return
 
-    # Save to state
+    # Save to state (Private Key flow)
     await state.update_data(new_private_key=private_key, new_output_address=wallet_address)
     
     from bot.keyboards.reply import confirmation_keyboard
@@ -266,6 +277,69 @@ async def process_output_key(message: Message, state: FSMContext):
         parse_mode="Markdown",
         reply_markup=confirmation_keyboard(),
     )
+
+
+@router.message(WalletSetupStates.setting_derivation_index)
+async def process_derivation_index(message: Message, state: FSMContext):
+    """Process derivation index for Seed Phrase."""
+    text = message.text.strip()
+    
+    if text == "❌ Отмена":
+        await handle_wallet_menu(message, state)
+        return
+
+    try:
+        index = int(text)
+        if index < 0:
+            raise ValueError
+    except ValueError:
+        await message.answer("❌ Введите положительное число (например, 0):")
+        return
+
+    data = await state.get_data()
+    seed_phrase = data.get("temp_seed_phrase")
+    
+    if not seed_phrase:
+        await message.answer("❌ Ошибка: Seed-фраза потеряна. Начните заново.")
+        await handle_wallet_menu(message, state)
+        return
+
+    try:
+        # Enable HD Wallet features safely
+        if hasattr(Account, "enable_unaudited_hdwallet_features"):
+            try:
+                Account.enable_unaudited_hdwallet_features()
+            except Exception:
+                pass
+        
+        # Derive account
+        # Standard Ethereum/BSC path: m/44'/60'/0'/0/{index}
+        path = f"m/44'/60'/0'/0/{index}"
+        account = Account.from_mnemonic(seed_phrase, account_path=path)
+        
+        private_key = account.key.hex()[2:]  # remove 0x
+        wallet_address = account.address
+        
+        # Save to state
+        await state.update_data(new_private_key=private_key, new_output_address=wallet_address)
+        
+        from bot.keyboards.reply import confirmation_keyboard
+        
+        await state.set_state(WalletSetupStates.confirming_output)
+        await message.answer(
+            f"📤 **Подтверждение ВЫХОДНОГО кошелька**\n\n"
+            f"🌱 Seed-фраза (Index: {index})\n"
+            f"Адрес: `{wallet_address}`\n\n"
+            "✅ Ключ успешно деривирован.\n"
+            "✅ Этот кошелек будет использоваться для выплат.\n\n"
+            "Подтвердить сохранение?",
+            parse_mode="Markdown",
+            reply_markup=confirmation_keyboard(),
+        )
+
+    except Exception as e:
+        await message.answer(f"❌ Ошибка деривации кошелька: {e}")
+        await handle_wallet_menu(message, state)
 
 
 @router.message(WalletSetupStates.confirming_output)
