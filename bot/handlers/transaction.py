@@ -200,11 +200,14 @@ async def _show_transaction_history(
 
 @router.message(F.text == "📜 История операций")
 @router.message(F.text == "📜 История")  # Backward compatibility
+@router.message(F.text == "◀️ Назад")  # Handle back button from transaction lists
 async def handle_transaction_history_menu(
     message: Message,
     state: FSMContext,
 ) -> None:
     """Show transaction history menu."""
+    # Check if we are coming from "Back" - we might want to clear some state, 
+    # but keeping it is also fine as we re-enter the menu.
     await message.answer(
         "Выберите тип транзакций:",
         reply_markup=transaction_history_type_keyboard(),

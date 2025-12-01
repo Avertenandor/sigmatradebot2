@@ -1106,6 +1106,7 @@ def transaction_history_keyboard(
         builder.row(*nav_buttons)
 
     builder.row(
+        KeyboardButton(text="◀️ Назад"),
         KeyboardButton(text="📊 Главное меню"),
     )
 
