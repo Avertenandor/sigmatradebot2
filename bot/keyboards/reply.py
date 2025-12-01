@@ -497,10 +497,6 @@ def admin_withdrawals_keyboard() -> ReplyKeyboardMarkup:
         KeyboardButton(text="⏳ Ожидающие выводы"),
     )
     builder.row(
-        KeyboardButton(text="✅ Одобрить заявку"),
-        KeyboardButton(text="❌ Отклонить заявку"),
-    )
-    builder.row(
         KeyboardButton(text="📋 Одобренные выводы"),
         KeyboardButton(text="🚫 Отклоненные выводы"),
     )
@@ -516,7 +512,6 @@ def admin_withdrawals_keyboard() -> ReplyKeyboardMarkup:
 
 def withdrawal_list_keyboard(
     withdrawals: list,
-    action: str = "approve",
     page: int = 1,
     total_pages: int = 1,
 ) -> ReplyKeyboardMarkup:
@@ -525,7 +520,6 @@ def withdrawal_list_keyboard(
 
     Args:
         withdrawals: List of Transaction objects (pending withdrawals)
-        action: 'approve' or 'reject'
         page: Current page
         total_pages: Total pages
 
@@ -535,16 +529,16 @@ def withdrawal_list_keyboard(
     from bot.utils.formatters import format_usdt
 
     builder = ReplyKeyboardBuilder()
-    action_emoji = "✅" if action == "approve" else "❌"
-
+    
     # Withdrawal buttons (1 per row for clarity)
     for wd in withdrawals:
         amount_str = format_usdt(wd.amount)
         user_label = f"ID:{wd.user_id}"
         if hasattr(wd, "user") and wd.user and wd.user.username:
             user_label = f"@{wd.user.username}"
+        # Neutral emoji for selection
         builder.row(
-            KeyboardButton(text=f"{action_emoji} #{wd.id} | {amount_str} | {user_label}")
+            KeyboardButton(text=f"💸 #{wd.id} | {amount_str} | {user_label}")
         )
 
     # Navigation
@@ -560,6 +554,25 @@ def withdrawal_list_keyboard(
 
     builder.row(KeyboardButton(text="◀️ Назад к выводам"))
 
+    return builder.as_markup(resize_keyboard=True)
+
+
+def admin_withdrawal_detail_keyboard() -> ReplyKeyboardMarkup:
+    """
+    Keyboard for viewing a specific withdrawal request details.
+
+    Returns:
+        ReplyKeyboardMarkup with action buttons
+    """
+    builder = ReplyKeyboardBuilder()
+    builder.row(
+        KeyboardButton(text="✅ Одобрить"),
+        KeyboardButton(text="❌ Отклонить")
+    )
+    builder.row(
+        KeyboardButton(text="◀️ Назад к списку"),
+        KeyboardButton(text="👑 Админ-панель")
+    )
     return builder.as_markup(resize_keyboard=True)
 
 

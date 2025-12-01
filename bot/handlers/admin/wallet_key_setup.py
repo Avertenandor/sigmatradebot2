@@ -295,7 +295,7 @@ async def confirm_output_wallet(message: Message, state: FSMContext):
             "🔄 Бот перезапускается для применения нового ключа...",
             parse_mode="Markdown",
         )
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         os._exit(0)
         
     except Exception as e:

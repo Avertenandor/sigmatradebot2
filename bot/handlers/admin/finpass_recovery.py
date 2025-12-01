@@ -23,6 +23,7 @@ from bot.keyboards.reply import (
     get_admin_keyboard_from_data,
 )
 from bot.states.admin import AdminFinpassRecoveryStates
+from bot.utils.admin_utils import clear_state_preserve_admin_token
 
 router = Router()
 
@@ -58,7 +59,7 @@ async def show_recovery_requests(
             parse_mode="Markdown",
             reply_markup=get_admin_keyboard_from_data(data),
         )
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
 
     # Pagination logic

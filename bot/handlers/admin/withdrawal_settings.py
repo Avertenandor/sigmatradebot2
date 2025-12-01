@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.repositories.global_settings_repository import GlobalSettingsRepository
 from bot.states.admin_withdrawal_settings import AdminWithdrawalSettingsStates
 from bot.keyboards.reply import cancel_keyboard, admin_withdrawals_keyboard
+from bot.utils.admin_utils import clear_state_preserve_admin_token
 
 router = Router()
 
@@ -30,7 +31,7 @@ async def show_withdrawal_settings(
     if not data.get("is_admin"):
         return
 
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
     
     repo = GlobalSettingsRepository(session)
     settings = await repo.get_settings()
@@ -183,7 +184,7 @@ async def set_service_fee(
     state: FSMContext,
 ) -> None:
     if message.text == "❌ Отмена":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer("Отменено", reply_markup=admin_withdrawals_keyboard())
         return
 
@@ -199,7 +200,7 @@ async def set_service_fee(
     await repo.update_settings(withdrawal_service_fee=val)
     
     await message.answer(f"✅ Комиссия сервиса установлена: {val}%", reply_markup=admin_withdrawals_keyboard())
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
     
     settings = await repo.get_settings()
     await _refresh_menu_new_msg(message, settings)
@@ -212,7 +213,7 @@ async def set_min_amount(
     state: FSMContext,
 ) -> None:
     if message.text == "❌ Отмена":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer("Отменено", reply_markup=admin_withdrawals_keyboard())
         return
 
@@ -228,7 +229,7 @@ async def set_min_amount(
     await repo.update_settings(min_withdrawal_amount=val)
     
     await message.answer(f"✅ Минимальный вывод установлен: {val} USDT", reply_markup=admin_withdrawals_keyboard())
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
     
     settings = await repo.get_settings()
     await _refresh_menu_new_msg(message, settings)
@@ -241,7 +242,7 @@ async def set_daily_limit(
     state: FSMContext,
 ) -> None:
     if message.text == "❌ Отмена":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer("Отменено", reply_markup=admin_withdrawals_keyboard())
         return
 
@@ -257,7 +258,7 @@ async def set_daily_limit(
     await repo.update_settings(daily_withdrawal_limit=val)
     
     await message.answer(f"✅ Дневной лимит установлен: {val} USDT", reply_markup=admin_withdrawals_keyboard())
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
     
     settings = await repo.get_settings()
     await _refresh_menu_new_msg(message, settings)

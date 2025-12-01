@@ -26,6 +26,7 @@ from bot.keyboards.reply import (
 )
 from bot.states.admin_states import AdminStates
 from bot.utils.menu_buttons import is_menu_button
+from bot.utils.admin_utils import clear_state_preserve_admin_token
 
 router = Router(name="admin_broadcast")
 
@@ -109,7 +110,7 @@ async def handle_broadcast_message(
 
     # Check if message is a cancel button
     if message.text == "❌ Отмена":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer(
             "❌ Рассылка отменена.",
             reply_markup=get_admin_keyboard_from_data(data),
@@ -118,7 +119,7 @@ async def handle_broadcast_message(
 
     # Check if message is a menu button - if so, clear state and ignore
     if message.text and is_menu_button(message.text):
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return  # Let menu handlers process this
 
     # Determine message type and save to state
@@ -182,7 +183,7 @@ async def handle_button_choice(
         await execute_broadcast(message, state, session, **data)
 
     elif message.text == "❌ Отмена":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer(
             "❌ Рассылка отменена.",
             reply_markup=get_admin_keyboard_from_data(data),
@@ -204,7 +205,7 @@ async def handle_button_link(
 ) -> None:
     """Handle button link input."""
     if message.text == "❌ Отмена":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer(
             "❌ Рассылка отменена.",
             reply_markup=get_admin_keyboard_from_data(data),
@@ -254,7 +255,7 @@ async def execute_broadcast(
 
     if not broadcast_data:
         await message.reply("❌ Ошибка: данные рассылки потеряны")
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
 
     from app.services.broadcast_service import BroadcastService
@@ -294,4 +295,4 @@ async def execute_broadcast(
         )
 
     # Reset state
-    await state.clear()
+    await clear_state_preserve_admin_token(state)

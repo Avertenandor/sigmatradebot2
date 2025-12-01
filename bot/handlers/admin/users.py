@@ -715,7 +715,7 @@ async def handle_block_user_input(  # noqa: C901
         return
 
     if message.text == "❌ Отмена":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer(
             "❌ Блокировка отменена.",
             reply_markup=admin_users_keyboard(),
@@ -723,7 +723,7 @@ async def handle_block_user_input(  # noqa: C901
         return
 
     if message.text and is_menu_button(message.text):
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
 
     from loguru import logger
@@ -758,7 +758,7 @@ async def handle_block_user_input(  # noqa: C901
 
     if not user:
         await message.reply("❌ Пользователь не найден")
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
 
     admin = data.get("admin")
@@ -835,7 +835,7 @@ async def handle_block_user_input(  # noqa: C901
             reply_markup=admin_users_keyboard(),
         )
 
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
 
 
 # Re-use handle_profile_terminate but support direct call with state
@@ -852,7 +852,7 @@ async def handle_terminate_user_input(  # noqa: C901
         return
 
     if message.text == "❌ Отмена":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer(
             "❌ Терминация отменена.",
             reply_markup=admin_users_keyboard(),
@@ -860,7 +860,7 @@ async def handle_terminate_user_input(  # noqa: C901
         return
 
     if message.text and is_menu_button(message.text):
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
 
     from loguru import logger
@@ -894,7 +894,7 @@ async def handle_terminate_user_input(  # noqa: C901
 
     if not user:
         await message.reply("❌ Пользователь не найден")
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
 
     admin = data.get("admin")
@@ -953,7 +953,7 @@ async def handle_terminate_user_input(  # noqa: C901
             reply_markup=admin_users_keyboard(),
         )
 
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
 
 @router.message(F.text == "⚠️ Терминировать аккаунт")
 async def handle_start_terminate_user_direct(

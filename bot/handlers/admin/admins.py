@@ -21,6 +21,7 @@ from bot.keyboards.reply import (
     cancel_keyboard,
 )
 from bot.states.admin import AdminManagementStates
+from bot.utils.admin_utils import clear_state_preserve_admin_token
 
 router = Router(name="admin_admins")
 
@@ -116,12 +117,12 @@ async def handle_admin_telegram_id(
 
     if not is_admin or not admin or not admin.is_super_admin:
         await message.answer("❌ Доступ запрещен")
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
 
     # Check if cancel
     if message.text == "❌ Отмена":
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         await message.answer(
             "❌ Операция отменена.",
             reply_markup=admin_management_keyboard(),
@@ -229,7 +230,7 @@ async def handle_admin_role_selection(
 
     if not telegram_id:
         await message.answer("❌ Ошибка: Telegram ID не найден")
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
 
     # Save role and create admin
@@ -248,11 +249,11 @@ async def handle_admin_role_selection(
         await message.answer(
             f"❌ Ошибка при создании админа: {error or 'Неизвестная ошибка'}"
         )
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
 
     # Clear state
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
 
     logger.info(
         f"Admin {admin.id} created new admin {new_admin.id} "
@@ -462,7 +463,7 @@ async def handle_delete_admin_telegram_id(
 
     if not is_admin or not admin or not admin.is_super_admin:
         await message.answer("❌ Доступ запрещен")
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
 
     telegram_id_str = message.text.strip() if message.text else ""
@@ -490,13 +491,13 @@ async def handle_delete_admin_telegram_id(
         await message.answer(
             f"❌ Админ с Telegram ID {telegram_id} не найден."
         )
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
 
     # Check if trying to delete self
     if admin_to_delete.id == admin.id:
         await message.answer("❌ Нельзя удалить самого себя")
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
 
     # Check if trying to delete last super_admin
@@ -506,7 +507,7 @@ async def handle_delete_admin_telegram_id(
         await message.answer(
             "❌ Нельзя удалить последнего супер-администратора"
         )
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
 
     # Delete admin
@@ -514,7 +515,7 @@ async def handle_delete_admin_telegram_id(
 
     if not deleted:
         await message.answer("❌ Ошибка при удалении админа")
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
 
     # Log admin deletion
@@ -525,7 +526,7 @@ async def handle_delete_admin_telegram_id(
         deleted_admin_telegram_id=telegram_id,
     )
 
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
 
     logger.info(
         f"Admin {admin.id} deleted admin {admin_to_delete.id} "
@@ -631,7 +632,7 @@ async def handle_emergency_block_admin_telegram_id(
 
     if not is_admin or not admin or not admin.is_super_admin:
         await message.answer("❌ Доступ запрещен")
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
 
     telegram_id_str = message.text.strip() if message.text else ""
@@ -657,13 +658,13 @@ async def handle_emergency_block_admin_telegram_id(
         await message.answer(
             f"❌ Админ с Telegram ID {telegram_id} не найден."
         )
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
 
     # Check if trying to block self
     if admin_to_block.id == admin.id:
         await message.answer("❌ Нельзя заблокировать самого себя")
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
 
     # Check if trying to block last super_admin
@@ -673,7 +674,7 @@ async def handle_emergency_block_admin_telegram_id(
         await message.answer(
             "❌ Нельзя заблокировать последнего супер-администратора"
         )
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
         return
 
     # Atomic operation: block and delete
@@ -696,7 +697,7 @@ async def handle_emergency_block_admin_telegram_id(
 
         if not deleted:
             await message.answer("❌ Ошибка при удалении админа")
-            await state.clear()
+            await clear_state_preserve_admin_token(state)
             return
 
         # 3. Ban user if exists
@@ -724,7 +725,7 @@ async def handle_emergency_block_admin_telegram_id(
             },
         )
 
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
 
         from app.utils.security_logging import log_security_event
 
@@ -812,5 +813,5 @@ async def handle_emergency_block_admin_telegram_id(
         await message.answer(
             f"❌ Ошибка при экстренной блокировке: {e}"
         )
-        await state.clear()
+        await clear_state_preserve_admin_token(state)
 

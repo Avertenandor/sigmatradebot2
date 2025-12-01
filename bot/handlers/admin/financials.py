@@ -34,6 +34,7 @@ from bot.keyboards.reply import (
 )
 from bot.utils.formatters import escape_md, format_tx_hash_with_link
 from bot.utils.menu_buttons import is_menu_button
+from bot.utils.admin_utils import clear_state_preserve_admin_token
 
 router = Router()
 
@@ -60,7 +61,7 @@ async def show_financial_list(
     Show paginated list of users with financial summary.
     Entry point for the section.
     """
-    await state.clear()
+    await clear_state_preserve_admin_token(state)
     logger.info(f"[FINANCIALS] Handler triggered by: {message.text}")
     # Проверка прав доступа: любой админ
     # R-NEW: Allow basic admins to view financial reports (per user request)
