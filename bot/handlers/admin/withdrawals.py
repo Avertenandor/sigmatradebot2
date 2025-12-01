@@ -9,6 +9,7 @@ from typing import Any
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
+from loguru import logger
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,7 +21,12 @@ from app.services.blockchain_service import get_blockchain_service
 from app.services.notification_service import NotificationService
 from app.services.user_service import UserService
 from app.services.withdrawal_service import WithdrawalService
-from bot.keyboards.reply import admin_withdrawals_keyboard, admin_keyboard
+from bot.keyboards.reply import (
+    admin_withdrawals_keyboard,
+    admin_keyboard,
+    withdrawal_id_input_keyboard,
+    withdrawal_confirm_keyboard,
+)
 from bot.states.admin_states import AdminStates
 from bot.utils.formatters import format_usdt
 
@@ -475,7 +481,345 @@ async def handle_reject_withdrawal(
         )
 
 
-@router.message(F.text == "✅ Одобренные выводы")
+# ============== BUTTON-BASED APPROVAL/REJECTION ==============
+
+
+@router.message(F.text == "✅ Одобрить заявку")
+async def handle_approve_button(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """Start approval flow - ask for withdrawal ID."""
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        await message.answer("❌ Эта функция доступна только администраторам")
+        return
+
+    await state.set_state(AdminStates.selecting_withdrawal)
+    await state.update_data(withdrawal_action="approve")
+
+    await message.answer(
+        "✅ **Одобрение заявки на вывод**\n\n"
+        "Введите ID заявки, которую хотите одобрить:\n\n"
+        "_Например: 123_",
+        parse_mode="Markdown",
+        reply_markup=withdrawal_id_input_keyboard(),
+    )
+
+
+@router.message(F.text == "❌ Отклонить заявку")
+async def handle_reject_button(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """Start rejection flow - ask for withdrawal ID."""
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        await message.answer("❌ Эта функция доступна только администраторам")
+        return
+
+    await state.set_state(AdminStates.selecting_withdrawal)
+    await state.update_data(withdrawal_action="reject")
+
+    await message.answer(
+        "❌ **Отклонение заявки на вывод**\n\n"
+        "Введите ID заявки, которую хотите отклонить:\n\n"
+        "_Например: 123_",
+        parse_mode="Markdown",
+        reply_markup=withdrawal_id_input_keyboard(),
+    )
+
+
+@router.message(F.text == "◀️ Отмена", AdminStates.selecting_withdrawal)
+@router.message(F.text == "❌ Отменить", AdminStates.confirming_withdrawal_action)
+async def handle_cancel_withdrawal_action(
+    message: Message,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """Cancel withdrawal action and return to menu."""
+    await state.clear()
+    await message.answer(
+        "🔙 Действие отменено.",
+        reply_markup=admin_withdrawals_keyboard(),
+    )
+
+
+@router.message(AdminStates.selecting_withdrawal)
+async def handle_withdrawal_id_input(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """Process withdrawal ID input and show confirmation."""
+    text = message.text.strip() if message.text else ""
+
+    # Validate ID
+    if not text.isdigit():
+        await message.answer(
+            "❌ Неверный формат. Введите числовой ID заявки.\n\n"
+            "_Например: 123_",
+            parse_mode="Markdown",
+            reply_markup=withdrawal_id_input_keyboard(),
+        )
+        return
+
+    withdrawal_id = int(text)
+
+    # Get withdrawal details
+    withdrawal_service = WithdrawalService(session)
+    withdrawal = await withdrawal_service.get_withdrawal_by_id(withdrawal_id)
+
+    if not withdrawal:
+        await message.answer(
+            f"❌ Заявка #{withdrawal_id} не найдена.",
+            reply_markup=withdrawal_id_input_keyboard(),
+        )
+        return
+
+    if withdrawal.status != TransactionStatus.PENDING.value:
+        status_text = {
+            TransactionStatus.CONFIRMED.value: "уже одобрена",
+            TransactionStatus.FAILED.value: "уже отклонена",
+        }.get(withdrawal.status, f"в статусе {withdrawal.status}")
+
+        await message.answer(
+            f"❌ Заявка #{withdrawal_id} {status_text}.",
+            reply_markup=admin_withdrawals_keyboard(),
+        )
+        await state.clear()
+        return
+
+    # Save withdrawal ID and show confirmation
+    fsm_data = await state.get_data()
+    action = fsm_data.get("withdrawal_action", "approve")
+    action_text = "ОДОБРИТЬ" if action == "approve" else "ОТКЛОНИТЬ"
+    action_emoji = "✅" if action == "approve" else "❌"
+
+    await state.update_data(withdrawal_id=withdrawal_id)
+    await state.set_state(AdminStates.confirming_withdrawal_action)
+
+    # Get user info
+    user_service = UserService(session)
+    user = await user_service.find_by_id(withdrawal.user_id)
+    username = f"@{user.username}" if user and user.username else f"ID: {withdrawal.user_id}"
+
+    await message.answer(
+        f"{action_emoji} **Подтверждение: {action_text}**\n\n"
+        f"📝 Заявка: #{withdrawal_id}\n"
+        f"👤 Пользователь: {username}\n"
+        f"💰 Сумма: {format_usdt(withdrawal.amount)} USDT\n"
+        f"💳 Кошелек: `{withdrawal.to_address}`\n\n"
+        f"Вы уверены, что хотите **{action_text.lower()}** эту заявку?",
+        parse_mode="Markdown",
+        reply_markup=withdrawal_confirm_keyboard(),
+    )
+
+
+@router.message(F.text == "✅ Подтвердить", AdminStates.confirming_withdrawal_action)
+async def handle_confirm_withdrawal_action(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """Execute the confirmed withdrawal action."""
+    fsm_data = await state.get_data()
+    action = fsm_data.get("withdrawal_action")
+    withdrawal_id = fsm_data.get("withdrawal_id")
+
+    await state.clear()
+
+    if not withdrawal_id:
+        await message.answer(
+            "❌ Ошибка: ID заявки не найден.",
+            reply_markup=admin_withdrawals_keyboard(),
+        )
+        return
+
+    withdrawal_service = WithdrawalService(session)
+    user_service = UserService(session)
+    notification_service = NotificationService(session)
+    admin: Admin | None = data.get("admin")
+
+    try:
+        withdrawal = await withdrawal_service.get_withdrawal_by_id(withdrawal_id)
+
+        if not withdrawal:
+            await message.answer(
+                f"❌ Заявка #{withdrawal_id} не найдена.",
+                reply_markup=admin_withdrawals_keyboard(),
+            )
+            return
+
+        if action == "approve":
+            # Check maintenance mode
+            from app.config.settings import settings
+
+            if settings.blockchain_maintenance_mode:
+                await message.answer(
+                    "⚠️ **Blockchain в режиме обслуживания**\n\n"
+                    "Операции с блокчейном временно недоступны.",
+                    parse_mode="Markdown",
+                    reply_markup=admin_withdrawals_keyboard(),
+                )
+                return
+
+            # Check dual control
+            withdrawal_amount = float(withdrawal.amount)
+            requires_dual_control = (
+                withdrawal_amount >= settings.dual_control_withdrawal_threshold
+            )
+
+            if requires_dual_control:
+                # Create escrow for dual control
+                from app.repositories.admin_action_escrow_repository import (
+                    AdminActionEscrowRepository,
+                )
+
+                escrow_repo = AdminActionEscrowRepository(session)
+                admin_id = admin.id if admin else None
+
+                existing_escrow = await escrow_repo.get_pending_by_operation(
+                    "WITHDRAWAL_APPROVAL", withdrawal_id
+                )
+
+                if existing_escrow:
+                    if existing_escrow.initiator_admin_id == admin_id:
+                        await message.answer(
+                            f"⚠️ Для вывода {withdrawal_amount} USDT требуется "
+                            "подтверждение второго администратора.\n\n"
+                            f"Escrow #{existing_escrow.id} ожидает подтверждения.",
+                            reply_markup=admin_withdrawals_keyboard(),
+                        )
+                        return
+
+                escrow = await escrow_repo.create(
+                    operation_type="WITHDRAWAL_APPROVAL",
+                    target_id=withdrawal_id,
+                    operation_data={
+                        "transaction_id": withdrawal_id,
+                        "amount": str(withdrawal.amount),
+                        "user_id": withdrawal.user_id,
+                        "to_address": withdrawal.to_address,
+                    },
+                    initiator_admin_id=admin_id,
+                    expires_in_hours=settings.dual_control_escrow_expiry_hours,
+                )
+                await session.commit()
+
+                await message.answer(
+                    f"⚠️ Для вывода {withdrawal_amount} USDT требуется "
+                    "подтверждение второго администратора.\n\n"
+                    f"Escrow #{escrow.id} создан.",
+                    reply_markup=admin_withdrawals_keyboard(),
+                )
+                return
+
+            # Send blockchain transaction
+            blockchain_service = get_blockchain_service()
+            payment_result = await blockchain_service.send_payment(
+                withdrawal.to_address, float(withdrawal.amount)
+            )
+
+            if not payment_result["success"]:
+                error_msg = payment_result.get("error", "Неизвестная ошибка")
+                await message.answer(
+                    f"❌ Ошибка отправки: {error_msg}",
+                    reply_markup=admin_withdrawals_keyboard(),
+                )
+                return
+
+            tx_hash = payment_result["tx_hash"]
+            admin_id = admin.id if admin else None
+            success, error_msg = await withdrawal_service.approve_withdrawal(
+                withdrawal_id, tx_hash, admin_id
+            )
+
+            if not success:
+                await message.answer(
+                    f"❌ Ошибка: {error_msg}",
+                    reply_markup=admin_withdrawals_keyboard(),
+                )
+                return
+
+            # Notify user
+            user = await user_service.find_by_id(withdrawal.user_id)
+            if user:
+                await notification_service.notify_withdrawal_processed(
+                    user.telegram_id, float(withdrawal.amount), tx_hash
+                )
+
+            await message.answer(
+                f"✅ **Заявка #{withdrawal_id} одобрена!**\n\n"
+                f"💰 Сумма: {format_usdt(withdrawal.amount)} USDT\n"
+                f"🔗 TX: `{tx_hash}`\n\n"
+                "Средства отправлены пользователю.",
+                parse_mode="Markdown",
+                reply_markup=admin_withdrawals_keyboard(),
+            )
+
+            # Log action
+            if admin:
+                log_service = AdminLogService(session)
+                await log_service.log_withdrawal_approved(
+                    admin=admin,
+                    withdrawal_id=withdrawal_id,
+                    user_id=withdrawal.user_id,
+                    amount=str(withdrawal.amount),
+                )
+
+        else:  # reject
+            success, error_msg = await withdrawal_service.reject_withdrawal(
+                withdrawal_id
+            )
+
+            if not success:
+                await message.answer(
+                    f"❌ Ошибка: {error_msg}",
+                    reply_markup=admin_withdrawals_keyboard(),
+                )
+                return
+
+            # Notify user
+            user = await user_service.find_by_id(withdrawal.user_id)
+            if user:
+                await notification_service.notify_withdrawal_rejected(
+                    user.telegram_id, float(withdrawal.amount)
+                )
+
+            await message.answer(
+                f"❌ **Заявка #{withdrawal_id} отклонена**\n\n"
+                f"💰 Сумма: {format_usdt(withdrawal.amount)} USDT\n\n"
+                "Средства возвращены на баланс пользователя.",
+                parse_mode="Markdown",
+                reply_markup=admin_withdrawals_keyboard(),
+            )
+
+            # Log action
+            if admin:
+                log_service = AdminLogService(session)
+                await log_service.log_withdrawal_rejected(
+                    admin=admin,
+                    withdrawal_id=withdrawal_id,
+                    user_id=withdrawal.user_id,
+                    reason=None,
+                )
+
+    except Exception as e:
+        logger.error(f"Error processing withdrawal action: {e}")
+        await message.answer(
+            f"❌ Ошибка при обработке: {str(e)}",
+            reply_markup=admin_withdrawals_keyboard(),
+        )
+
+
+@router.message(F.text == "📋 Одобренные выводы")
 async def handle_approved_withdrawals(
     message: Message,
     session: AsyncSession,
@@ -531,7 +875,7 @@ async def handle_approved_withdrawals(
         )
 
 
-@router.message(F.text == "❌ Отклоненные выводы")
+@router.message(F.text == "🚫 Отклоненные выводы")
 async def handle_rejected_withdrawals(
     message: Message,
     session: AsyncSession,

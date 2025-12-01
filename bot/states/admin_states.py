@@ -33,3 +33,7 @@ class AdminStates(StatesGroup):
     # Blacklist notification texts
     awaiting_block_notification_text = State()  # Waiting for block notification text
     awaiting_terminate_notification_text = State()  # Waiting for terminate notification text
+    
+    # Withdrawal management
+    selecting_withdrawal = State()  # Selecting withdrawal ID to manage
+    confirming_withdrawal_action = State()  # Confirming approve/reject

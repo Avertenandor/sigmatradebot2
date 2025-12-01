@@ -497,10 +497,12 @@ def admin_withdrawals_keyboard() -> ReplyKeyboardMarkup:
         KeyboardButton(text="⏳ Ожидающие выводы"),
     )
     builder.row(
-        KeyboardButton(text="✅ Одобренные выводы"),
+        KeyboardButton(text="✅ Одобрить заявку"),
+        KeyboardButton(text="❌ Отклонить заявку"),
     )
     builder.row(
-        KeyboardButton(text="❌ Отклоненные выводы"),
+        KeyboardButton(text="📋 Одобренные выводы"),
+        KeyboardButton(text="🚫 Отклоненные выводы"),
     )
     builder.row(
         KeyboardButton(text="⚙️ Настройки выплат"),
@@ -509,6 +511,23 @@ def admin_withdrawals_keyboard() -> ReplyKeyboardMarkup:
         KeyboardButton(text="👑 Админ-панель"),
     )
 
+    return builder.as_markup(resize_keyboard=True)
+
+
+def withdrawal_id_input_keyboard() -> ReplyKeyboardMarkup:
+    """Keyboard for withdrawal ID input with cancel option."""
+    builder = ReplyKeyboardBuilder()
+    builder.row(KeyboardButton(text="◀️ Отмена"))
+    return builder.as_markup(resize_keyboard=True)
+
+
+def withdrawal_confirm_keyboard() -> ReplyKeyboardMarkup:
+    """Keyboard for confirming withdrawal action."""
+    builder = ReplyKeyboardBuilder()
+    builder.row(
+        KeyboardButton(text="✅ Подтвердить"),
+        KeyboardButton(text="❌ Отменить"),
+    )
     return builder.as_markup(resize_keyboard=True)
 
 
