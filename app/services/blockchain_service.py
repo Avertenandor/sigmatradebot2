@@ -72,8 +72,9 @@ USDT_DECIMALS = 18
 
 # Gas settings for BSC
 # 0.1 Gwei = 100_000_000 Wei (1 Gwei = 10^9 Wei)
-MIN_GAS_PRICE_GWEI = Decimal("0.1")
-MAX_GAS_PRICE_GWEI = Decimal("5.0")
+# User requirement: Max 0.1 Gwei, try lower if possible
+MIN_GAS_PRICE_GWEI = Decimal("0.01")
+MAX_GAS_PRICE_GWEI = Decimal("0.1")
 MIN_GAS_PRICE_WEI = int(MIN_GAS_PRICE_GWEI * 10**9)
 MAX_GAS_PRICE_WEI = int(MAX_GAS_PRICE_GWEI * 10**9)
 
