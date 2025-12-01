@@ -99,11 +99,17 @@ class TransactionService:
         # Filter by blockchain presence
         if filter_blockchain is not None:
             if filter_blockchain:
-                # Only with hash
-                all_transactions = [t for t in all_transactions if t.tx_hash]
+                # Only with hash starting with 0x
+                all_transactions = [
+                    t for t in all_transactions 
+                    if t.tx_hash and t.tx_hash.startswith("0x")
+                ]
             else:
-                # Only without hash (Internal)
-                all_transactions = [t for t in all_transactions if not t.tx_hash]
+                # Only without hash OR with internal hash (not starting with 0x)
+                all_transactions = [
+                    t for t in all_transactions 
+                    if not t.tx_hash or not t.tx_hash.startswith("0x")
+                ]
 
         # Sort by date (newest first)
         all_transactions.sort(

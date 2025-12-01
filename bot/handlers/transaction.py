@@ -49,7 +49,10 @@ def get_status_emoji(status: TransactionStatus) -> str:
     emoji_map = {
         TransactionStatus.CONFIRMED: "✅",
         TransactionStatus.PENDING: "⏳",
+        TransactionStatus.PROCESSING: "⚡",
         TransactionStatus.FAILED: "❌",
+        TransactionStatus.FROZEN: "❄️",
+        TransactionStatus.PENDING_NETWORK_RECOVERY: "🔧",
     }
     return emoji_map.get(status, "❓")
 
@@ -59,7 +62,10 @@ def get_status_text(status: TransactionStatus) -> str:
     text_map = {
         TransactionStatus.CONFIRMED: "Подтверждено",
         TransactionStatus.PENDING: "В обработке",
+        TransactionStatus.PROCESSING: "Отправляется",
         TransactionStatus.FAILED: "Отклонено",
+        TransactionStatus.FROZEN: "Заморожено",
+        TransactionStatus.PENDING_NETWORK_RECOVERY: "Ожидает сети",
     }
     return text_map.get(status, "Неизвестно")
 
@@ -159,7 +165,7 @@ async def _show_transaction_history(
             )
             text += f"   📅 {date}\n"
 
-            if tx.tx_hash:
+            if tx.tx_hash and tx.tx_hash.startswith("0x"):
                 short_hash = format_transaction_hash(tx.tx_hash)
                 text += f"   🔗 TX: `{short_hash}`\n"
 
