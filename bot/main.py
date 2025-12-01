@@ -346,9 +346,9 @@ async def main() -> None:  # noqa: C901
     
     dp.include_router(wallet_key_setup.router)
     dp.include_router(financials.router)  # MUST be before panel.router to catch "💰 Финансовая отчётность"
+    dp.include_router(withdrawals.router)  # MUST be before panel.router for withdrawal buttons
     dp.include_router(panel.router)
     dp.include_router(users.router)
-    dp.include_router(withdrawals.router)
     dp.include_router(withdrawal_settings.router)
     dp.include_router(blockchain_settings.router)
     dp.include_router(broadcast.router)
