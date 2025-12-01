@@ -146,7 +146,7 @@ async def _monitor_stuck_transactions_async() -> dict:
                         if user:
                             await notification_service.send_notification(
                                 bot=bot,
-                                user_id=user.telegram_id,
+                                user_telegram_id=user.telegram_id,
                                 message=(
                                     f"✅ Ваш вывод подтвержден!\n\n"
                                     f"💰 Сумма: {withdrawal.amount} USDT\n"
@@ -182,7 +182,7 @@ async def _monitor_stuck_transactions_async() -> dict:
                         if user:
                             await notification_service.send_notification(
                                 bot=bot,
-                                user_id=user.telegram_id,
+                                user_telegram_id=user.telegram_id,
                                 message=(
                                     f"⚠️ Транзакция вывода не прошла\n\n"
                                     f"💰 Сумма: {withdrawal.amount} USDT\n"
