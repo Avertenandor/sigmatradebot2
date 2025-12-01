@@ -94,14 +94,26 @@ async def _monitor_stuck_transactions_async() -> dict:
         pending = 0
 
         # Get web3 instance from blockchain service
-        web3 = blockchain_service.provider_manager.get_http_web3()
+        web3 = blockchain_service.get_active_web3()
 
         for withdrawal in stuck_withdrawals:
             try:
                 # Check transaction status in blockchain
-                tx_status = await stuck_service.check_transaction_status(
-                    withdrawal.tx_hash, web3
-                )
+                # Use blockchain_service to handle async web3 calls correctly
+                bs_status = await blockchain_service.check_transaction_status(withdrawal.tx_hash)
+                
+                # Map status to format expected by handle_stuck_transaction
+                status_map = {
+                    "confirmed": "confirmed",
+                    "failed": "failed",
+                    "pending": "pending",
+                    "unknown": "error"
+                }
+                
+                tx_status = {
+                    "status": status_map.get(bs_status.get("status"), "error"),
+                    "error": None
+                }
 
                 # Handle based on status
                 result = await stuck_service.handle_stuck_transaction(
