@@ -373,6 +373,19 @@ async def process_wallet(
     # Check if message is a menu button - if so, clear state and ignore
     from bot.utils.menu_buttons import is_menu_button
 
+    # Handle "Регистрация" button specially while in waiting_for_wallet state
+    # This prevents the loop where clicking "Registration" clears state and shows menu again
+    if message.text == "📝 Регистрация":
+        await message.answer(
+            "📝 **Регистрация**\n\n"
+            "Введите ваш BSC (BEP-20) адрес кошелька:\n"
+            "Формат: `0x...` (42 символа)\n\n"
+            "⚠️ Указывайте только **ЛИЧНЫЙ** кошелек (Trust Wallet, MetaMask).\n"
+            "🚫 **НЕ указывайте** адрес биржи!",
+            parse_mode="Markdown",
+        )
+        return
+
     if is_menu_button(message.text):
         logger.debug(
             f"process_wallet: menu button {message.text}, showing main menu"
