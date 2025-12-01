@@ -24,11 +24,13 @@ from app.services.withdrawal_service import WithdrawalService
 from bot.keyboards.reply import (
     admin_withdrawals_keyboard,
     admin_keyboard,
-    withdrawal_id_input_keyboard,
+    withdrawal_list_keyboard,
     withdrawal_confirm_keyboard,
 )
 from bot.states.admin_states import AdminStates
 from bot.utils.formatters import format_usdt
+
+WITHDRAWALS_PER_PAGE = 8
 
 router = Router(name="admin_withdrawals")
 
@@ -484,6 +486,56 @@ async def handle_reject_withdrawal(
 # ============== BUTTON-BASED APPROVAL/REJECTION ==============
 
 
+async def _show_withdrawal_selection(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    action: str,
+    page: int = 1,
+) -> None:
+    """Show list of pending withdrawals as buttons for selection."""
+    withdrawal_service = WithdrawalService(session)
+    pending = await withdrawal_service.get_pending_withdrawals()
+
+    if not pending:
+        await state.clear()
+        await message.answer(
+            "📭 Нет ожидающих заявок на вывод.",
+            reply_markup=admin_withdrawals_keyboard(),
+        )
+        return
+
+    # Pagination
+    total = len(pending)
+    total_pages = (total + WITHDRAWALS_PER_PAGE - 1) // WITHDRAWALS_PER_PAGE
+    page = max(1, min(page, total_pages))
+
+    start_idx = (page - 1) * WITHDRAWALS_PER_PAGE
+    end_idx = start_idx + WITHDRAWALS_PER_PAGE
+    page_withdrawals = pending[start_idx:end_idx]
+
+    action_text = "одобрить" if action == "approve" else "отклонить"
+    action_emoji = "✅" if action == "approve" else "❌"
+
+    await state.set_state(AdminStates.selecting_withdrawal)
+    await state.update_data(withdrawal_action=action, page=page)
+
+    text = (
+        f"{action_emoji} **Выберите заявку для действия: {action_text.upper()}**\n\n"
+        f"📋 Всего заявок: {total}\n"
+        f"📄 Страница: {page}/{total_pages}\n\n"
+        "Нажмите на заявку для выбора:"
+    )
+
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=withdrawal_list_keyboard(
+            page_withdrawals, action, page, total_pages
+        ),
+    )
+
+
 @router.message(F.text == "✅ Одобрить заявку")
 async def handle_approve_button(
     message: Message,
@@ -491,22 +543,13 @@ async def handle_approve_button(
     session: AsyncSession,
     **data: Any,
 ) -> None:
-    """Start approval flow - ask for withdrawal ID."""
+    """Start approval flow - show withdrawal list."""
     is_admin = data.get("is_admin", False)
     if not is_admin:
         await message.answer("❌ Эта функция доступна только администраторам")
         return
 
-    await state.set_state(AdminStates.selecting_withdrawal)
-    await state.update_data(withdrawal_action="approve")
-
-    await message.answer(
-        "✅ **Одобрение заявки на вывод**\n\n"
-        "Введите ID заявки, которую хотите одобрить:\n\n"
-        "_Например: 123_",
-        parse_mode="Markdown",
-        reply_markup=withdrawal_id_input_keyboard(),
-    )
+    await _show_withdrawal_selection(message, session, state, "approve")
 
 
 @router.message(F.text == "❌ Отклонить заявку")
@@ -516,26 +559,17 @@ async def handle_reject_button(
     session: AsyncSession,
     **data: Any,
 ) -> None:
-    """Start rejection flow - ask for withdrawal ID."""
+    """Start rejection flow - show withdrawal list."""
     is_admin = data.get("is_admin", False)
     if not is_admin:
         await message.answer("❌ Эта функция доступна только администраторам")
         return
 
-    await state.set_state(AdminStates.selecting_withdrawal)
-    await state.update_data(withdrawal_action="reject")
-
-    await message.answer(
-        "❌ **Отклонение заявки на вывод**\n\n"
-        "Введите ID заявки, которую хотите отклонить:\n\n"
-        "_Например: 123_",
-        parse_mode="Markdown",
-        reply_markup=withdrawal_id_input_keyboard(),
-    )
+    await _show_withdrawal_selection(message, session, state, "reject")
 
 
-@router.message(F.text == "◀️ Отмена", AdminStates.selecting_withdrawal)
-@router.message(F.text == "❌ Отменить", AdminStates.confirming_withdrawal_action)
+@router.message(F.text == "◀️ Назад к выводам")
+@router.message(F.text == "❌ Нет, отменить", AdminStates.confirming_withdrawal_action)
 async def handle_cancel_withdrawal_action(
     message: Message,
     state: FSMContext,
@@ -544,32 +578,63 @@ async def handle_cancel_withdrawal_action(
     """Cancel withdrawal action and return to menu."""
     await state.clear()
     await message.answer(
-        "🔙 Действие отменено.",
+        "🔙 Возврат в меню выводов.",
         reply_markup=admin_withdrawals_keyboard(),
     )
 
 
-@router.message(AdminStates.selecting_withdrawal)
-async def handle_withdrawal_id_input(
+@router.message(F.text == "⬅️ Пред.", AdminStates.selecting_withdrawal)
+async def handle_prev_page(
     message: Message,
     state: FSMContext,
     session: AsyncSession,
     **data: Any,
 ) -> None:
-    """Process withdrawal ID input and show confirmation."""
-    text = message.text.strip() if message.text else ""
+    """Go to previous page of withdrawals."""
+    fsm_data = await state.get_data()
+    action = fsm_data.get("withdrawal_action", "approve")
+    page = fsm_data.get("page", 1) - 1
+    await _show_withdrawal_selection(message, session, state, action, page)
 
-    # Validate ID
-    if not text.isdigit():
+
+@router.message(F.text == "След. ➡️", AdminStates.selecting_withdrawal)
+async def handle_next_page(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """Go to next page of withdrawals."""
+    fsm_data = await state.get_data()
+    action = fsm_data.get("withdrawal_action", "approve")
+    page = fsm_data.get("page", 1) + 1
+    await _show_withdrawal_selection(message, session, state, action, page)
+
+
+@router.message(
+    F.text.regexp(r"^[✅❌] #(\d+) \|"),
+    AdminStates.selecting_withdrawal,
+)
+async def handle_withdrawal_selection(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """Process withdrawal selection from button and show confirmation."""
+    text = message.text or ""
+
+    # Extract withdrawal ID from button text: "✅ #123 | 100.00 | @user"
+    match = re.match(r"^[✅❌] #(\d+) \|", text)
+    if not match:
         await message.answer(
-            "❌ Неверный формат. Введите числовой ID заявки.\n\n"
-            "_Например: 123_",
-            parse_mode="Markdown",
-            reply_markup=withdrawal_id_input_keyboard(),
+            "❌ Не удалось определить заявку. Попробуйте снова.",
+            reply_markup=admin_withdrawals_keyboard(),
         )
+        await state.clear()
         return
 
-    withdrawal_id = int(text)
+    withdrawal_id = int(match.group(1))
 
     # Get withdrawal details
     withdrawal_service = WithdrawalService(session)
@@ -578,8 +643,9 @@ async def handle_withdrawal_id_input(
     if not withdrawal:
         await message.answer(
             f"❌ Заявка #{withdrawal_id} не найдена.",
-            reply_markup=withdrawal_id_input_keyboard(),
+            reply_markup=admin_withdrawals_keyboard(),
         )
+        await state.clear()
         return
 
     if withdrawal.status != TransactionStatus.PENDING.value:
@@ -595,7 +661,7 @@ async def handle_withdrawal_id_input(
         await state.clear()
         return
 
-    # Save withdrawal ID and show confirmation
+    # Get action and show confirmation
     fsm_data = await state.get_data()
     action = fsm_data.get("withdrawal_action", "approve")
     action_text = "ОДОБРИТЬ" if action == "approve" else "ОТКЛОНИТЬ"
@@ -617,11 +683,14 @@ async def handle_withdrawal_id_input(
         f"💳 Кошелек: `{withdrawal.to_address}`\n\n"
         f"Вы уверены, что хотите **{action_text.lower()}** эту заявку?",
         parse_mode="Markdown",
-        reply_markup=withdrawal_confirm_keyboard(),
+        reply_markup=withdrawal_confirm_keyboard(withdrawal_id, action),
     )
 
 
-@router.message(F.text == "✅ Подтвердить", AdminStates.confirming_withdrawal_action)
+@router.message(
+    F.text.regexp(r"^✅ Да, (одобрить|отклонить) #(\d+)$"),
+    AdminStates.confirming_withdrawal_action,
+)
 async def handle_confirm_withdrawal_action(
     message: Message,
     state: FSMContext,

@@ -514,19 +514,64 @@ def admin_withdrawals_keyboard() -> ReplyKeyboardMarkup:
     return builder.as_markup(resize_keyboard=True)
 
 
-def withdrawal_id_input_keyboard() -> ReplyKeyboardMarkup:
-    """Keyboard for withdrawal ID input with cancel option."""
+def withdrawal_list_keyboard(
+    withdrawals: list,
+    action: str = "approve",
+    page: int = 1,
+    total_pages: int = 1,
+) -> ReplyKeyboardMarkup:
+    """
+    Keyboard with withdrawal buttons for admin selection.
+
+    Args:
+        withdrawals: List of Transaction objects (pending withdrawals)
+        action: 'approve' or 'reject'
+        page: Current page
+        total_pages: Total pages
+
+    Returns:
+        ReplyKeyboardMarkup with withdrawal buttons
+    """
+    from bot.utils.formatters import format_usdt
+
     builder = ReplyKeyboardBuilder()
-    builder.row(KeyboardButton(text="◀️ Отмена"))
+    action_emoji = "✅" if action == "approve" else "❌"
+
+    # Withdrawal buttons (1 per row for clarity)
+    for wd in withdrawals:
+        amount_str = format_usdt(wd.amount)
+        user_label = f"ID:{wd.user_id}"
+        if hasattr(wd, "user") and wd.user and wd.user.username:
+            user_label = f"@{wd.user.username}"
+        builder.row(
+            KeyboardButton(text=f"{action_emoji} #{wd.id} | {amount_str} | {user_label}")
+        )
+
+    # Navigation
+    nav_buttons = []
+    if total_pages > 1:
+        if page > 1:
+            nav_buttons.append(KeyboardButton(text="⬅️ Пред."))
+        if page < total_pages:
+            nav_buttons.append(KeyboardButton(text="След. ➡️"))
+
+    if nav_buttons:
+        builder.row(*nav_buttons)
+
+    builder.row(KeyboardButton(text="◀️ Назад к выводам"))
+
     return builder.as_markup(resize_keyboard=True)
 
 
-def withdrawal_confirm_keyboard() -> ReplyKeyboardMarkup:
+def withdrawal_confirm_keyboard(withdrawal_id: int, action: str) -> ReplyKeyboardMarkup:
     """Keyboard for confirming withdrawal action."""
     builder = ReplyKeyboardBuilder()
+    action_text = "Одобрить" if action == "approve" else "Отклонить"
     builder.row(
-        KeyboardButton(text="✅ Подтвердить"),
-        KeyboardButton(text="❌ Отменить"),
+        KeyboardButton(text=f"✅ Да, {action_text.lower()} #{withdrawal_id}"),
+    )
+    builder.row(
+        KeyboardButton(text="❌ Нет, отменить"),
     )
     return builder.as_markup(resize_keyboard=True)
 
