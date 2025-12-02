@@ -502,15 +502,19 @@ async def handle_admin_stats(
         await message.answer("❌ Эта функция доступна только администраторам")
         return
 
+    from app.services.withdrawal_service import WithdrawalService
+
     user_service = UserService(session)
     deposit_service = DepositService(session)
     referral_service = ReferralService(session)
+    withdrawal_service = WithdrawalService(session)
 
     # Get statistics
     total_users = await user_service.get_total_users()
     verified_users = await user_service.get_verified_users()
     deposit_stats = await deposit_service.get_platform_stats()
     referral_stats = await referral_service.get_platform_referral_stats()
+    withdrawal_stats = await withdrawal_service.get_platform_withdrawal_stats()
 
     # R4-X: Detailed deposit stats
     detailed_deposits = await deposit_service.get_detailed_stats()
@@ -574,7 +578,26 @@ async def handle_admin_stats(
 • Уровень 3: {referral_stats["by_level"].get(3, {}).get("count",
     0)} ({format_usdt(referral_stats["by_level"].get(3, {}).get(
         "earnings", 0))} USDT)
-    """.strip()
+
+**💸 Выводы на кошельки:**
+✅ Выведено: {format_usdt(withdrawal_stats["total_confirmed_amount"])} USDT ({withdrawal_stats["total_confirmed"]} транз.)
+❌ Неудачных: {withdrawal_stats["total_failed"]} ({format_usdt(withdrawal_stats["total_failed_amount"])} USDT)
+"""
+
+    # Add per-user withdrawal details
+    if withdrawal_stats["by_user"]:
+        text += "\n**Детализация выводов:**\n"
+        for wu in withdrawal_stats["by_user"][:10]:
+            wu_username = str(wu["username"] or "Без имени")
+            safe_wu_username = (
+                wu_username.replace("_", "\\_")
+                .replace("*", "\\*")
+                .replace("`", "\\`")
+                .replace("[", "\\[")
+            )
+            text += f"• @{safe_wu_username}: {format_usdt(wu['total_withdrawn'])} USDT\n"
+
+    text = text.strip()
 
     # Get admin and super_admin status
     telegram_id = message.from_user.id if message.from_user else None
