@@ -35,6 +35,7 @@ async def get_all_deposit_levels(session: AsyncSession) -> dict:
     Get ALL deposit levels from database (active and inactive).
     
     Returns dict with level info including is_active status.
+    All Decimal values converted to str for JSON serialization (FSM Redis).
     """
     from app.repositories.deposit_level_version_repository import (
         DepositLevelVersionRepository,
@@ -46,10 +47,11 @@ async def get_all_deposit_levels(session: AsyncSession) -> dict:
     for level_num in range(1, 6):
         version = await repo.get_current_version(level_num)
         if version:
+            # Convert Decimal to str for JSON serialization in FSM
             result[level_num] = {
-                "amount": version.amount,
-                "roi_percent": version.roi_percent,
-                "roi_cap": version.roi_cap_percent,
+                "amount": str(version.amount),
+                "roi_percent": str(version.roi_percent),
+                "roi_cap": version.roi_cap_percent,  # int, OK
                 "is_active": version.is_active,
             }
     
@@ -58,6 +60,7 @@ async def get_all_deposit_levels(session: AsyncSession) -> dict:
 
 def calculator_keyboard(levels: dict) -> any:
     """Create calculator keyboard with level buttons."""
+    from decimal import Decimal as Dec
     from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
     from aiogram.utils.keyboard import ReplyKeyboardBuilder
     
@@ -65,7 +68,7 @@ def calculator_keyboard(levels: dict) -> any:
     
     for level_num in sorted(levels.keys()):
         info = levels[level_num]
-        amount = int(info["amount"])
+        amount = int(Dec(info["amount"]))
         
         if info["is_active"]:
             button_text = f"📊 Level {level_num} ({amount} USDT)"
@@ -113,11 +116,12 @@ async def show_calculator(
     for lvl in sorted(levels.keys()):
         info = levels[lvl]
         status = "✅" if info["is_active"] else "🔒"
-        roi = info["roi_percent"]
+        roi = Decimal(info["roi_percent"])
         cap = info["roi_cap"]
+        amount = Decimal(info["amount"])
         
         levels_text += (
-            f"{status} *Level {lvl}:* {int(info['amount'])} USDT\n"
+            f"{status} *Level {lvl}:* {int(amount)} USDT\n"
             f"   📈 ROI: {format_decimal(roi, 3)}%/день"
         )
         if cap:
@@ -159,8 +163,8 @@ async def show_comparison(
     
     for lvl in sorted(levels.keys()):
         info = levels[lvl]
-        amount = info["amount"]
-        roi = info["roi_percent"]
+        amount = Decimal(info["amount"])
+        roi = Decimal(info["roi_percent"])
         cap = info["roi_cap"]
         is_active = info["is_active"]
         
@@ -234,8 +238,8 @@ async def show_level_details(
         return
     
     info = levels[level_num]
-    amount = info["amount"]
-    roi = info["roi_percent"]
+    amount = Decimal(info["amount"])
+    roi = Decimal(info["roi_percent"])
     cap = info["roi_cap"]
     is_active = info["is_active"]
     
@@ -326,8 +330,8 @@ async def show_locked_level(
         return
     
     info = levels[level_num]
-    amount = info["amount"]
-    roi = info["roi_percent"]
+    amount = Decimal(info["amount"])
+    roi = Decimal(info["roi_percent"])
     cap = info["roi_cap"]
     
     # Calculate projections anyway
