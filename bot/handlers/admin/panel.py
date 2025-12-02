@@ -411,8 +411,10 @@ async def cmd_dashboard(
     from app.models.enums import TransactionStatus, TransactionType
 
     cutoff_24h = datetime.now(UTC) - timedelta(hours=24)
+    # Transaction model uses naive datetime (TIMESTAMP WITHOUT TIME ZONE)
+    cutoff_24h_naive = cutoff_24h.replace(tzinfo=None)
 
-    # New users in 24h
+    # New users in 24h (User model uses timezone-aware datetime)
     stmt = select(func.count(User.id)).where(User.created_at >= cutoff_24h)
     result = await session.execute(stmt)
     new_users_24h = result.scalar() or 0
@@ -429,10 +431,10 @@ async def cmd_dashboard(
     deposits_24h_count = row[0] or 0
     deposits_24h_amount = float(row[1] or 0)
 
-    # Withdrawals in 24h
+    # Withdrawals in 24h (use naive datetime for Transaction model)
     stmt = select(func.count(Transaction.id), func.coalesce(func.sum(Transaction.amount), 0)).where(
         and_(
-            Transaction.created_at >= cutoff_24h,
+            Transaction.created_at >= cutoff_24h_naive,
             Transaction.transaction_type == TransactionType.WITHDRAWAL.value,
             Transaction.status == TransactionStatus.COMPLETED.value,
         )

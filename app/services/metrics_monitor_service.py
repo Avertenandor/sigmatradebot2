@@ -336,11 +336,15 @@ class MetricsMonitorService:
         self, start: datetime, end: datetime
     ) -> list[Transaction]:
         """Get withdrawals in time period."""
+        # Convert to naive datetime for Transaction model (TIMESTAMP WITHOUT TIME ZONE)
+        start_naive = start.replace(tzinfo=None) if start.tzinfo else start
+        end_naive = end.replace(tzinfo=None) if end.tzinfo else end
+        
         stmt = (
             select(Transaction)
             .where(Transaction.type == TransactionType.WITHDRAWAL.value)
-            .where(Transaction.created_at >= start)
-            .where(Transaction.created_at < end)
+            .where(Transaction.created_at >= start_naive)
+            .where(Transaction.created_at < end_naive)
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())

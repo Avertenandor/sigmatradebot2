@@ -134,16 +134,19 @@ class TransactionRepository(BaseRepository[Transaction]):
         Returns:
             Total amount
         """
-        from datetime import datetime, time, UTC
+        from datetime import datetime, UTC
         
         today_start = datetime.now(UTC).replace(
             hour=0, minute=0, second=0, microsecond=0
         )
+        # Convert to naive datetime to match Transaction model's naive DateTime column
+        # This avoids "can't subtract offset-naive and offset-aware datetimes" error
+        today_start_naive = today_start.replace(tzinfo=None)
         
         stmt = (
             select(Transaction)
             .where(Transaction.type == TransactionType.WITHDRAWAL.value)
-            .where(Transaction.created_at >= today_start)
+            .where(Transaction.created_at >= today_start_naive)
             .where(
                 or_(
                     Transaction.status == TransactionStatus.CONFIRMED.value,
