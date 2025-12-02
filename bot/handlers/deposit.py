@@ -50,7 +50,7 @@ def extract_level_from_button(text: str) -> int:
 # Matches: "💰 Пополнить Level N (X USDT)" or "✅ Level N (X USDT) - Активен"
 # or "🔒 Level N (X USDT) - ..." for blocked levels
 @router.message(
-    F.text.regexp(r"^(💰 Пополнить Level [1-5] \(\d+ USDT\)|✅ Level [1-5] \(\d+ USDT\) - Активен|🔒 Level [1-5] \(\d+ USDT\) - .+)$")
+    F.text.regexp(r"^(💰 Пополнить Level [1-5] \([\d\.,]+ USDT\)|✅ Level [1-5] \([\d\.,]+ USDT\) - Активен|🔒 Level [1-5] \([\d\.,]+ USDT\) - .+)$")
 )
 async def select_deposit_level(
     message: Message,
