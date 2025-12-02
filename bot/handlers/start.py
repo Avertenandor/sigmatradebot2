@@ -951,6 +951,14 @@ async def handle_contacts_choice(
     **data: Any,
 ) -> None:
     """Handle contacts choice during registration."""
+    # КРИТИЧНО: обрабатываем /start прямо здесь
+    if message.text and message.text.startswith("/start"):
+        logger.info(
+            "handle_contacts_choice: /start caught, clearing state"
+        )
+        await state.clear()
+        return  # Позволяем CommandStart() обработать это
+    
     if message.text == "✅ Да, оставить контакты":
         await message.answer(
             "📞 **Введите номер телефона**\n\n"
@@ -960,7 +968,10 @@ async def handle_contacts_choice(
             parse_mode="Markdown",
         )
         await state.set_state(RegistrationStates.waiting_for_phone)
-    elif message.text == "⏭ Пропустить":
+    # Нормализуем текст: удаляем FE0F (emoji variation selector)
+    elif message.text and message.text.replace("\ufe0f", "") in (
+        "⏭ Пропустить", "⏭️ Пропустить"
+    ):
         await message.answer(
             "✅ Контакты пропущены.\n\n"
             "⚠️ Рекомендуем добавить их позже в настройках профиля "
