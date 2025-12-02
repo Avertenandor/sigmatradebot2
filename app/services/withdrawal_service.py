@@ -215,18 +215,18 @@ class WithdrawalService:
                         f"{available_balance:.2f} USDT"
                     ), False
 
-                # R-NEW: Check daily withdrawal limit (= daily ROI)
-                daily_limit_check = await self._check_daily_withdrawal_limit(
-                    user_id, amount
-                )
-                if daily_limit_check["exceeded"]:
-                    return None, (
-                        f"❌ Превышен дневной лимит вывода!\n\n"
-                        f"💰 Ваш ROI за сегодня: *{daily_limit_check['daily_roi']:.2f} USDT*\n"
-                        f"💸 Уже выведено сегодня: *{daily_limit_check['withdrawn_today']:.2f} USDT*\n"
-                        f"📊 Доступно для вывода: *{daily_limit_check['remaining']:.2f} USDT*\n\n"
-                        f"_Лимит обновляется в 00:00 UTC._"
-                    ), False
+                # R-NEW: Daily ROI limit disabled by admin request to allow full balance withdrawal
+                # daily_limit_check = await self._check_daily_withdrawal_limit(
+                #    user_id, amount
+                # )
+                # if daily_limit_check["exceeded"]:
+                #    return None, (
+                #        f"❌ Превышен дневной лимит вывода!\n\n"
+                #        f"💰 Ваш ROI за сегодня: *{daily_limit_check['daily_roi']:.2f} USDT*\n"
+                #        f"💸 Уже выведено сегодня: *{daily_limit_check['withdrawn_today']:.2f} USDT*\n"
+                #        f"📊 Доступно для вывода: *{daily_limit_check['remaining']:.2f} USDT*\n\n"
+                #        f"_Лимит обновляется в 00:00 UTC._"
+                #    ), False
 
                 # Calculate Fee
                 service_fee_percent = getattr(global_settings, "withdrawal_service_fee", Decimal("0"))
