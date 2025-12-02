@@ -102,7 +102,7 @@ class DepositRewardRepository(BaseRepository[DepositReward]):
         stmt = (
             select(func.sum(DepositReward.reward_amount))
             .where(DepositReward.user_id == user_id)
-            .where(not DepositReward.paid)
+            .where(DepositReward.paid == False)  # noqa: E712
         )
         result = await self.session.execute(stmt)
         total = result.scalar()
