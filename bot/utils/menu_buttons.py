@@ -22,6 +22,8 @@ MAIN_MENU_BUTTONS = [
     "📝 Регистрация",
     "📊 Главное меню",
     "👑 Админ-панель",
+    "📊 Калькулятор",  # ROI Calculator
+    "📋 Сравнить все уровни",  # Calculator comparison
 ]
 
 # Deposit menu buttons
