@@ -583,3 +583,96 @@ async def _show_withdrawal_history(
 
     # Pagination keyboard would go here (omitted for brevity, assume simple list)
     await message.answer(text, parse_mode="Markdown")
+
+
+@router.message(F.text.regexp(r"^\d+([.,]\d+)?$"))
+async def handle_smart_withdrawal_amount(
+    message: Message,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """
+    Smart handler for numeric input in withdrawal menu context.
+    Allows users to type amount directly without clicking button first.
+    """
+    # Check if user is in withdrawal menu context
+    state_data = await state.get_data()
+    if not state_data.get("in_withdrawal_menu"):
+        # Not in withdrawal context, let other handlers process
+        return
+    
+    user: User | None = data.get("user")
+    if not user:
+        return
+    
+    # Check verification status
+    if not user.is_verified:
+        await message.answer(
+            "❌ Вывод недоступен до верификации!\n\n"
+            "Для вывода средств необходимо пройти верификацию.\n"
+            "Сначала нажмите '🔐 Получить финпароль' в главном меню.",
+            reply_markup=withdrawal_keyboard(),
+        )
+        return
+    
+    session = data.get("session")
+    if not session:
+        await message.answer("❌ Системная ошибка")
+        return
+    
+    # Parse amount
+    try:
+        amount = Decimal((message.text or "").strip().replace(",", "."))
+    except (ValueError, ArithmeticError):
+        await message.answer(
+            "❌ Неверный формат суммы!\n\n"
+            "Введите число, например: 100.50",
+            reply_markup=withdrawal_keyboard(),
+        )
+        return
+    
+    if amount <= 0:
+        await message.answer(
+            "❌ Сумма должна быть больше нуля!",
+            reply_markup=withdrawal_keyboard(),
+        )
+        return
+    
+    # Check minimum withdrawal amount
+    withdrawal_service = WithdrawalService(session)
+    min_amount = await withdrawal_service.get_min_withdrawal_amount()
+    
+    if amount < min_amount:
+        await message.answer(
+            f"❌ Минимальная сумма вывода: {min_amount} USDT",
+            reply_markup=withdrawal_keyboard(),
+        )
+        return
+    
+    # Check balance
+    user_service = UserService(session)
+    balance = await user_service.get_user_balance(user.id)
+    available = Decimal(str(balance["available_balance"]))
+    
+    if amount > available:
+        await message.answer(
+            f"❌ Недостаточно средств!\n\n"
+            f"Доступно: {available:.2f} USDT\n"
+            f"Запрошено: {amount:.2f} USDT",
+            reply_markup=withdrawal_keyboard(),
+        )
+        return
+    
+    # Clear withdrawal menu context and proceed to password confirmation
+    await state.update_data(
+        in_withdrawal_menu=False,
+        withdrawal_amount=str(amount),
+    )
+    await state.set_state(WithdrawalStates.waiting_for_password)
+    
+    await message.answer(
+        f"💸 *Вывод {amount:.2f} USDT*\n\n"
+        f"Введите ваш *финансовый пароль* для подтверждения:",
+        parse_mode="Markdown",
+        reply_markup=finpass_input_keyboard(),
+    )

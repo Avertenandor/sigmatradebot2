@@ -306,6 +306,8 @@ async def show_withdrawal_menu(
             return
     
     await state.clear()
+    # Set context flag for smart number input handling in withdrawal menu
+    await state.update_data(in_withdrawal_menu=True)
 
     user_service = UserService(session)
     balance = await user_service.get_user_balance(user.id)
