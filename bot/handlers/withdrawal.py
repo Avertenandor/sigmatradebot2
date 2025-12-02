@@ -330,7 +330,7 @@ async def process_withdrawal_amount(
         await message.answer("❌ Ошибка: пользователь не найден")
         await state.clear()
         return
-
+    
     session = data.get("session")
     if not session:
         await message.answer("❌ Системная ошибка")

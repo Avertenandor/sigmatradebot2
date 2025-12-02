@@ -9,13 +9,14 @@ from typing import Any
 from aiogram import F, Router
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import BufferedInputFile, Message
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from app.repositories.blacklist_repository import BlacklistRepository
 from app.services.user_service import UserService
+from app.services.report_service import ReportService
 from bot.i18n.loader import get_translator, get_user_language
 from bot.keyboards.reply import (
     deposit_keyboard,
@@ -24,6 +25,7 @@ from bot.keyboards.reply import (
     settings_keyboard,
     withdrawal_keyboard,
     wallet_menu_keyboard,
+    profile_keyboard,
 )
 from bot.states.profile_update import ProfileUpdateStates
 from bot.states.registration import RegistrationStates
@@ -364,6 +366,7 @@ async def show_referral_menu(
 
     from app.config.settings import settings
     from app.services.user_service import UserService
+from app.services.report_service import ReportService
 
     user_service = UserService(session)
     bot_username = settings.telegram_bot_username
@@ -577,7 +580,37 @@ async def show_my_profile(
         f"📅 Дата регистрации: {user.created_at.strftime('%d.%m.%Y')}"
     )
 
-    await message.answer(text, parse_mode="Markdown")
+    await message.answer(text, parse_mode="Markdown", reply_markup=profile_keyboard())
+
+
+@router.message(StateFilter('*'), F.text == "📂 Скачать отчет")
+async def download_report(
+    message: Message,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """Download user report."""
+    user: User | None = data.get("user")
+    if not user:
+        await message.answer("❌ Ошибка: пользователь не найден")
+        return
+
+    status_msg = await message.answer("⏳ Генерирую отчет...")
+
+    try:
+        report_service = ReportService(session)
+        report_bytes = await report_service.generate_user_report(user.id)
+
+        file = BufferedInputFile(report_bytes, filename=f"report_{user.id}.xlsx")
+
+        await message.answer_document(
+            document=file,
+            caption="📊 Ваш полный отчет (профиль, транзакции, депозиты, рефералы)"
+        )
+        await status_msg.delete()
+    except Exception as e:
+        await status_msg.edit_text("❌ Ошибка генерации отчета")
+        logger.error(f"Failed to generate report for user {user.id}: {e}", exc_info=True)
 
 
 @router.message(StateFilter('*'), F.text == "💳 Мой кошелек")
