@@ -12,6 +12,9 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.enums import TransactionStatus
+from app.repositories.deposit_level_version_repository import (
+    DepositLevelVersionRepository,
+)
 from app.repositories.deposit_repository import DepositRepository
 from app.repositories.referral_repository import ReferralRepository
 from app.services.referral_service import ReferralService
@@ -25,15 +28,15 @@ DEPOSIT_LEVELS = {
     5: Decimal("300"),  # 300 USDT
 }
 
-# Partner requirements for each level (from TZ)
-# Level 1: No partners required
-# Level 2+: Minimum 1 active L1 partner
+# Partner requirements for each level
+# DISABLED: No partner requirements anymore
+# Levels are controlled via is_active flag in DepositLevelVersion
 PARTNER_REQUIREMENTS = {
     1: 0,  # No partners required
-    2: 1,  # Minimum 1 active L1 partner
-    3: 1,  # Minimum 1 active L1 partner
-    4: 1,  # Minimum 1 active L1 partner
-    5: 1,  # Minimum 1 active L1 partner
+    2: 0,  # No partners required (was 1)
+    3: 0,  # No partners required (was 1)
+    4: 0,  # No partners required (was 1)
+    5: 0,  # No partners required (was 1)
 }
 
 
@@ -46,6 +49,7 @@ class DepositValidationService:
         self.deposit_repo = DepositRepository(session)
         self.referral_repo = ReferralRepository(session)
         self.referral_service = ReferralService(session)
+        self.version_repo = DepositLevelVersionRepository(session)
 
     async def can_purchase_level(
         self, user_id: int, level: int
@@ -63,6 +67,14 @@ class DepositValidationService:
         # Validate level
         if level not in DEPOSIT_LEVELS:
             return False, f"Неверный уровень депозита: {level}"
+
+        # Check 0: Level must be active (R17-2)
+        level_version = await self.version_repo.get_current_version(level)
+        if level_version and not level_version.is_active:
+            return (
+                False,
+                f"Уровень {level} временно недоступен для покупки.",
+            )
 
         # Check 1: Strict order - must have all previous levels
         if level > 1:

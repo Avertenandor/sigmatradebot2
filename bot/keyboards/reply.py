@@ -209,8 +209,8 @@ def deposit_keyboard(
                 error = level_info.get("error", "")
                 if "необходимо сначала купить" in error:
                     button_text = f"🔒 Level {level} ({amount} USDT) - Нет предыдущего"
-                elif "необходимо минимум" in error:
-                    button_text = f"🔒 Level {level} ({amount} USDT) - Нет партнёров"
+                elif "временно недоступен" in error:
+                    button_text = f"🔒 Level {level} ({amount} USDT) - Закрыт"
                 else:
                     button_text = f"🔒 Level {level} ({amount} USDT) - Недоступен"
         else:
