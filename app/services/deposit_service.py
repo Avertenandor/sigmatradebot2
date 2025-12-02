@@ -206,7 +206,7 @@ class DepositService:
             global_settings = await settings_repo.get_settings()
             
             roi_settings = global_settings.roi_settings or {}
-            accrual_period_hours = int(roi_settings.get("accrual_period_hours", 24))
+            accrual_period_hours = int(roi_settings.get("REWARD_ACCRUAL_PERIOD_HOURS", 6))
             
             # Start cycle immediately or after period?
             # "Установить next_accrual_at = datetime.now(UTC) ... чтобы запустить цикл"

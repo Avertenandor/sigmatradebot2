@@ -139,8 +139,13 @@ async def handle_main_menu(
         )
         return
     logger.info(f"[MENU] Calling show_main_menu for user {user.telegram_id}")
-    # Remove 'user' and 'state' from data to avoid duplicate arguments
-    safe_data = {k: v for k, v in data.items() if k not in ('user', 'state')}
+    
+    # Create safe data copy and remove arguments that are passed positionally
+    safe_data = data.copy()
+    safe_data.pop('user', None)
+    safe_data.pop('state', None)
+    safe_data.pop('session', None)  # session is also passed positionally
+    
     await show_main_menu(message, session, user, state, **safe_data)
 
 
@@ -301,6 +306,8 @@ async def show_withdrawal_menu(
             return
     
     await state.clear()
+    # Set context flag for smart number input handling in withdrawal menu
+    await state.update_data(in_withdrawal_menu=True)
 
     user_service = UserService(session)
     balance = await user_service.get_user_balance(user.id)

@@ -373,6 +373,19 @@ async def process_wallet(
     # Check if message is a menu button - if so, clear state and ignore
     from bot.utils.menu_buttons import is_menu_button
 
+    # Handle "Регистрация" button specially while in waiting_for_wallet state
+    # This prevents the loop where clicking "Registration" clears state and shows menu again
+    if message.text == "📝 Регистрация":
+        await message.answer(
+            "📝 **Регистрация**\n\n"
+            "Введите ваш BSC (BEP-20) адрес кошелька:\n"
+            "Формат: `0x...` (42 символа)\n\n"
+            "⚠️ Указывайте только **ЛИЧНЫЙ** кошелек (Trust Wallet, MetaMask).\n"
+            "🚫 **НЕ указывайте** адрес биржи!",
+            parse_mode="Markdown",
+        )
+        return
+
     if is_menu_button(message.text):
         logger.debug(
             f"process_wallet: menu button {message.text}, showing main menu"
@@ -775,6 +788,7 @@ async def process_password_confirmation(
             return
     else:
         # NEW pattern: short transaction for registration
+        user = None
         try:
             async with session_factory() as session:
                 async with session.begin():
@@ -789,8 +803,32 @@ async def process_password_confirmation(
             # Transaction closed here
         except ValueError as e:
             error_msg = str(e)
+            
+            # FIX: Handle "User already registered" as success (Double Submit race condition)
+            if error_msg == "User already registered":
+                logger.info(
+                    f"Double registration attempt caught for user {message.from_user.id} - checking existing user"
+                )
+                # Try to fetch existing user to confirm it's really them
+                async with session_factory() as session:
+                    user_service = UserService(session)
+                    user = await user_service.get_by_telegram_id(message.from_user.id)
+                
+                if user:
+                    logger.info(
+                        f"User {user.id} found, treating double registration error as success"
+                    )
+                    # Proceed to success flow below
+                else:
+                    # User not found but error says registered? Weird race or different user.
+                    await message.answer(
+                        "❌ Ошибка: Пользователь уже зарегистрирован, но данные не найдены. Обратитесь в поддержку."
+                    )
+                    await state.clear()
+                    return
+
             # Check if it's a blacklist error
-            if error_msg.startswith("BLACKLISTED:"):
+            elif error_msg.startswith("BLACKLISTED:"):
                 action_type = error_msg.split(":")[1]
                 from app.models.blacklist import BlacklistActionType
 
@@ -804,15 +842,23 @@ async def process_password_confirmation(
                     await message.answer(
                         "❌ Ошибка регистрации. Обратитесь в поддержку."
                     )
+                await state.clear()
+                return
             else:
                 await message.answer(
                     f"❌ Ошибка регистрации:\n{error_msg}\n\n"
                     "Попробуйте начать заново: /start"
                 )
-            await state.clear()
-            return
+                await state.clear()
+                return
 
     # Registration successful
+    if not user:
+        # Should not happen if logic above is correct
+        await message.answer("❌ Неизвестная ошибка регистрации.")
+        await state.clear()
+        return
+
     logger.info(
         "User registered successfully",
         extra={

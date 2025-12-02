@@ -27,7 +27,7 @@ def extract_level_from_button(text: str) -> int:
     Extract deposit level from button text.
 
     Args:
-        text: Button text like "💰 Пополнить Level 1 (50 USDT)"
+        text: Button text like "💰 Пополнить Level 1 (10 USDT)"
 
     Returns:
         Level number (1-5)

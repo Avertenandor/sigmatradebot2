@@ -420,7 +420,10 @@ def admin_keyboard(
     # Common buttons for ALL admins (Basic, Extended, Super)
     builder.row(KeyboardButton(text="📊 Статистика"))
     builder.row(KeyboardButton(text="👥 Управление пользователями"))
-    builder.row(KeyboardButton(text="💸 Заявки на вывод"))
+    builder.row(
+        KeyboardButton(text="💸 Заявки на вывод"),
+        KeyboardButton(text="📋 История выводов"),
+    )
     builder.row(
         KeyboardButton(text="📢 Рассылка"),
         KeyboardButton(text="🆘 Техподдержка"),

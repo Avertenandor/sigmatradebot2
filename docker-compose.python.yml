@@ -79,7 +79,7 @@ services:
       context: .
       dockerfile: Dockerfile.python
     container_name: sigmatrade-worker
-    restart: unless-stopped
+    restart: always
     command: worker
     env_file:
       - .env
@@ -97,6 +97,12 @@ services:
       - ./.env:/app/.env
     networks:
       - sigmatrade
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f dramatiq || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     logging:
       driver: "json-file"
       options:
@@ -109,7 +115,7 @@ services:
       context: .
       dockerfile: Dockerfile.python
     container_name: sigmatrade-scheduler
-    restart: unless-stopped
+    restart: always
     command: scheduler
     env_file:
       - .env
@@ -127,6 +133,12 @@ services:
       - ./.env:/app/.env
     networks:
       - sigmatrade
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f scheduler || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     logging:
       driver: "json-file"
       options:
