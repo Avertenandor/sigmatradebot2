@@ -812,3 +812,78 @@ class WithdrawalService:
             "total_failed_amount": failed_row.total,
             "by_user": by_user_list,
         }
+
+    async def get_detailed_withdrawals(
+        self, page: int = 1, per_page: int = 5
+    ) -> dict:
+        """
+        Get detailed withdrawal transactions with pagination.
+
+        Args:
+            page: Page number (1-based)
+            per_page: Items per page
+
+        Returns:
+            Dictionary with withdrawals list and pagination info
+        """
+        from sqlalchemy import func
+
+        from app.models.transaction import Transaction
+        from app.models.user import User
+
+        # Count total confirmed withdrawals
+        count_stmt = (
+            select(func.count(Transaction.id))
+            .where(
+                Transaction.type == "withdrawal",
+                Transaction.status == TransactionStatus.CONFIRMED.value,
+            )
+        )
+        count_result = await self.session.execute(count_stmt)
+        total_count = count_result.scalar() or 0
+
+        # Calculate pagination
+        total_pages = (total_count + per_page - 1) // per_page if total_count > 0 else 1
+        offset = (page - 1) * per_page
+
+        # Get withdrawals with details
+        withdrawals_stmt = (
+            select(
+                User.username,
+                User.telegram_id,
+                Transaction.amount,
+                Transaction.tx_hash,
+                Transaction.created_at,
+            )
+            .join(User, Transaction.user_id == User.id)
+            .where(
+                Transaction.type == "withdrawal",
+                Transaction.status == TransactionStatus.CONFIRMED.value,
+            )
+            .order_by(Transaction.created_at.desc())
+            .offset(offset)
+            .limit(per_page)
+        )
+        result = await self.session.execute(withdrawals_stmt)
+        rows = result.all()
+
+        withdrawals = [
+            {
+                "username": row.username,
+                "telegram_id": row.telegram_id,
+                "amount": row.amount,
+                "tx_hash": row.tx_hash,
+                "created_at": row.created_at,
+            }
+            for row in rows
+        ]
+
+        return {
+            "withdrawals": withdrawals,
+            "page": page,
+            "per_page": per_page,
+            "total_count": total_count,
+            "total_pages": total_pages,
+            "has_prev": page > 1,
+            "has_next": page < total_pages,
+        }

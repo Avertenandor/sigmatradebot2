@@ -584,10 +584,10 @@ async def handle_admin_stats(
 ❌ Неудачных: {withdrawal_stats["total_failed"]} ({format_usdt(withdrawal_stats["total_failed_amount"])} USDT)
 """
 
-    # Add per-user withdrawal details
+    # Add per-user withdrawal summary
     if withdrawal_stats["by_user"]:
-        text += "\n**Детализация выводов:**\n"
-        for wu in withdrawal_stats["by_user"][:10]:
+        text += "\n**По пользователям:**\n"
+        for wu in withdrawal_stats["by_user"][:5]:
             wu_username = str(wu["username"] or "Без имени")
             safe_wu_username = (
                 wu_username.replace("_", "\\_")
@@ -596,6 +596,24 @@ async def handle_admin_stats(
                 .replace("[", "\\[")
             )
             text += f"• @{safe_wu_username}: {format_usdt(wu['total_withdrawn'])} USDT\n"
+
+    # Add detailed withdrawals with tx_hash
+    detailed_wd = await withdrawal_service.get_detailed_withdrawals(page=1, per_page=5)
+    if detailed_wd["withdrawals"]:
+        text += "\n**📋 Детализация (с хешами):**\n"
+        for wd in detailed_wd["withdrawals"]:
+            wd_username = str(wd["username"] or "Без имени")
+            safe_wd_username = (
+                wd_username.replace("_", "\\_")
+                .replace("*", "\\*")
+                .replace("`", "\\`")
+                .replace("[", "\\[")
+            )
+            tx_short = wd["tx_hash"][:10] + "..." if wd["tx_hash"] else "N/A"
+            text += f"• @{safe_wd_username}: {format_usdt(wd['amount'])} | `{tx_short}`\n"
+        
+        if detailed_wd["total_pages"] > 1:
+            text += f"\n_Стр. {detailed_wd['page']}/{detailed_wd['total_pages']}_ | Нажми 📋 для навигации"
 
     text = text.strip()
 
@@ -613,6 +631,115 @@ async def handle_admin_stats(
         is_extended_admin=admin.is_extended_admin if admin else False
     ),
     )
+
+
+@router.message(F.text == "📋 История выводов")
+async def handle_withdrawal_history(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    **data: Any,
+) -> None:
+    """Handle detailed withdrawal history with pagination."""
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+    from app.services.withdrawal_service import WithdrawalService
+
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        await message.answer("❌ Эта функция доступна только администраторам")
+        return
+
+    withdrawal_service = WithdrawalService(session)
+    await show_withdrawal_page(message, withdrawal_service, page=1)
+
+
+async def show_withdrawal_page(
+    message: Message,
+    withdrawal_service,
+    page: int = 1,
+    edit: bool = False,
+) -> None:
+    """Show withdrawal history page."""
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+    detailed = await withdrawal_service.get_detailed_withdrawals(page=page, per_page=5)
+
+    text = "📋 **История выводов на кошельки**\n\n"
+
+    if not detailed["withdrawals"]:
+        text += "_Нет подтверждённых выводов_"
+    else:
+        for wd in detailed["withdrawals"]:
+            wd_username = str(wd["username"] or "Без имени")
+            safe_wd_username = (
+                wd_username.replace("_", "\\_")
+                .replace("*", "\\*")
+                .replace("`", "\\`")
+                .replace("[", "\\[")
+            )
+            tx_hash = wd["tx_hash"] or "N/A"
+            tx_short = tx_hash[:16] + "..." if len(tx_hash) > 16 else tx_hash
+            created = wd["created_at"].strftime("%d.%m %H:%M") if wd["created_at"] else "N/A"
+            
+            text += (
+                f"👤 @{safe_wd_username}\n"
+                f"   💵 {format_usdt(wd['amount'])} USDT\n"
+                f"   🔗 `{tx_short}`\n"
+                f"   📅 {created}\n\n"
+            )
+
+        text += f"_Страница {detailed['page']} из {detailed['total_pages']}_"
+
+    # Build pagination keyboard
+    buttons = []
+    if detailed["has_prev"]:
+        buttons.append(
+            InlineKeyboardButton(
+                text="⬅️ Назад",
+                callback_data=f"wd_page:{page - 1}"
+            )
+        )
+    if detailed["has_next"]:
+        buttons.append(
+            InlineKeyboardButton(
+                text="Вперёд ➡️",
+                callback_data=f"wd_page:{page + 1}"
+            )
+        )
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[buttons] if buttons else [])
+
+    if edit and hasattr(message, "edit_text"):
+        await message.edit_text(text, parse_mode="Markdown", reply_markup=keyboard)
+    else:
+        await message.answer(text, parse_mode="Markdown", reply_markup=keyboard)
+
+
+@router.callback_query(F.data.startswith("wd_page:"))
+async def handle_withdrawal_page_callback(
+    callback: Any,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """Handle withdrawal pagination callback."""
+    from app.services.withdrawal_service import WithdrawalService
+
+    is_admin = data.get("is_admin", False)
+    if not is_admin:
+        await callback.answer("❌ Доступ запрещён", show_alert=True)
+        return
+
+    page = int(callback.data.split(":")[1])
+    withdrawal_service = WithdrawalService(session)
+
+    await show_withdrawal_page(
+        callback.message,
+        withdrawal_service,
+        page=page,
+        edit=True
+    )
+    await callback.answer()
 
 
 @router.message(F.text == "🔐 Управление кошельком")
