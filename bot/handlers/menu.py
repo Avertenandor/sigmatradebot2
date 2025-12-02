@@ -366,7 +366,6 @@ async def show_referral_menu(
 
     from app.config.settings import settings
     from app.services.user_service import UserService
-from app.services.report_service import ReportService
 
     user_service = UserService(session)
     bot_username = settings.telegram_bot_username
