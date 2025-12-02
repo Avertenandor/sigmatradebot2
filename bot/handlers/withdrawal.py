@@ -703,13 +703,14 @@ async def handle_smart_withdrawal_amount(
     # Clear withdrawal menu context and proceed to password confirmation
     await state.update_data(
         in_withdrawal_menu=False,
-        withdrawal_amount=str(amount),
+        amount=str(amount),
     )
-    await state.set_state(WithdrawalStates.waiting_for_password)
+    await state.set_state(WithdrawalStates.waiting_for_financial_password)
     
     await message.answer(
-        f"💸 *Вывод {amount:.2f} USDT*\n\n"
-        f"Введите ваш *финансовый пароль* для подтверждения:",
+        f"💸 *Вывод средств*\n\n"
+        f"Сумма: *{amount:.2f} USDT*\n\n"
+        f"🔐 Введите ваш финансовый пароль:",
         parse_mode="Markdown",
         reply_markup=finpass_input_keyboard(),
     )
