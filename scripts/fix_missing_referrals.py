@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from loguru import logger
 from sqlalchemy import select, text
 
-from app.config.database import get_async_session_factory
+from app.config.database import async_session_maker
 from app.models.referral import Referral
 from app.models.user import User
 
@@ -64,9 +64,7 @@ async def get_referral_chain(session, user_id: int, depth: int = REFERRAL_DEPTH)
 
 async def fix_missing_referrals():
     """Fix missing referral records."""
-    session_factory = get_async_session_factory()
-    
-    async with session_factory() as session:
+    async with async_session_maker() as session:
         # Get all users with referrer_id
         stmt = select(User).where(User.referrer_id.isnot(None))
         result = await session.execute(stmt)
