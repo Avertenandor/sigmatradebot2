@@ -335,6 +335,23 @@ def settings_keyboard(language: str | None = None) -> ReplyKeyboardMarkup:
     return builder.as_markup(resize_keyboard=True)
 
 
+def profile_keyboard() -> ReplyKeyboardMarkup:
+    """
+    Profile menu keyboard.
+
+    Returns:
+        ReplyKeyboardMarkup with profile options
+    """
+    builder = ReplyKeyboardBuilder()
+    builder.row(
+        KeyboardButton(text="📂 Скачать отчет"),
+    )
+    builder.row(
+        KeyboardButton(text="◀️ Назад"),
+    )
+    return builder.as_markup(resize_keyboard=True)
+
+
 def contact_update_menu_keyboard() -> ReplyKeyboardMarkup:
     """
     Contact update menu keyboard.

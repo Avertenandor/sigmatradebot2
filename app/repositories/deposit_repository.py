@@ -69,7 +69,7 @@ class DepositRepository(BaseRepository[Deposit]):
         stmt = (
             select(Deposit)
             .where(Deposit.user_id == user_id)
-            .where(not Deposit.is_roi_completed)
+            .where(Deposit.is_roi_completed == False)  # noqa: E712
             .where(
                 Deposit.status == TransactionStatus.CONFIRMED.value
             )

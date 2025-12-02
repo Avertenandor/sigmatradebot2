@@ -215,18 +215,18 @@ class WithdrawalService:
                         f"{available_balance:.2f} USDT"
                     ), False
 
-                # R-NEW: Check daily withdrawal limit (= daily ROI)
-                daily_limit_check = await self._check_daily_withdrawal_limit(
-                    user_id, amount
-                )
-                if daily_limit_check["exceeded"]:
-                    return None, (
-                        f"❌ Превышен дневной лимит вывода!\n\n"
-                        f"💰 Ваш ROI за сегодня: *{daily_limit_check['daily_roi']:.2f} USDT*\n"
-                        f"💸 Уже выведено сегодня: *{daily_limit_check['withdrawn_today']:.2f} USDT*\n"
-                        f"📊 Доступно для вывода: *{daily_limit_check['remaining']:.2f} USDT*\n\n"
-                        f"_Лимит обновляется в 00:00 UTC._"
-                    ), False
+                # R-NEW: Daily ROI limit disabled by admin request to allow full balance withdrawal
+                # daily_limit_check = await self._check_daily_withdrawal_limit(
+                #    user_id, amount
+                # )
+                # if daily_limit_check["exceeded"]:
+                #    return None, (
+                #        f"❌ Превышен дневной лимит вывода!\n\n"
+                #        f"💰 Ваш ROI за сегодня: *{daily_limit_check['daily_roi']:.2f} USDT*\n"
+                #        f"💸 Уже выведено сегодня: *{daily_limit_check['withdrawn_today']:.2f} USDT*\n"
+                #        f"📊 Доступно для вывода: *{daily_limit_check['remaining']:.2f} USDT*\n\n"
+                #        f"_Лимит обновляется в 00:00 UTC._"
+                #    ), False
 
                 # Calculate Fee
                 service_fee_percent = getattr(global_settings, "withdrawal_service_fee", Decimal("0"))
@@ -637,19 +637,22 @@ class WithdrawalService:
         Returns:
             Dict with exceeded, daily_roi, withdrawn_today, remaining
         """
-        from datetime import UTC, datetime
+        from datetime import UTC, datetime, timezone
 
         from app.models.deposit_reward import DepositReward
         from app.repositories.deposit_repository import DepositRepository
 
-        # Use naive datetime for compatibility with TIMESTAMP WITHOUT TIME ZONE columns
+        # Create timezone-aware datetime for DepositReward.calculated_at (has timezone=True)
         today = datetime.now(UTC).date()
-        today_start = datetime(today.year, today.month, today.day)
+        today_start_aware = datetime(today.year, today.month, today.day, tzinfo=timezone.utc)
+        # Create naive datetime for Transaction.created_at (TIMESTAMP WITHOUT TIME ZONE)
+        today_start_naive = datetime(today.year, today.month, today.day)
 
         # Calculate today's ROI (sum of rewards accrued today)
+        # DepositReward.calculated_at is timezone-aware, use aware datetime
         stmt = select(func.coalesce(func.sum(DepositReward.reward_amount), Decimal("0"))).where(
             DepositReward.user_id == user_id,
-            DepositReward.calculated_at >= today_start,
+            DepositReward.calculated_at >= today_start_aware,
         )
         result = await self.session.execute(stmt)
         daily_roi = result.scalar() or Decimal("0")
@@ -663,6 +666,7 @@ class WithdrawalService:
                     daily_roi += (deposit.amount * deposit.deposit_version.roi_percent) / 100
 
         # Get today's withdrawals (pending, processing, completed)
+        # Transaction.created_at is naive, use naive datetime
         stmt = select(func.coalesce(func.sum(Transaction.amount), Decimal("0"))).where(
             Transaction.user_id == user_id,
             Transaction.type == TransactionType.WITHDRAWAL.value,
@@ -671,7 +675,7 @@ class WithdrawalService:
                 TransactionStatus.PROCESSING.value,
                 TransactionStatus.PENDING.value,
             ]),
-            Transaction.created_at >= today_start,
+            Transaction.created_at >= today_start_naive,
         )
         result = await self.session.execute(stmt)
         withdrawn_today = result.scalar() or Decimal("0")

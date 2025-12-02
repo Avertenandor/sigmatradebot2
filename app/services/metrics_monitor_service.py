@@ -62,12 +62,12 @@ class MetricsMonitorService:
             w.amount for w in withdrawals_last_hour
         ))
 
-        # Rejected withdrawals
-        rejected_withdrawals = await self.transaction_repo.find_by(
-            type=TransactionType.WITHDRAWAL.value,
-            status=TransactionStatus.FAILED.value,
-        )
-        rejected_count = len(rejected_withdrawals) if rejected_withdrawals else 0
+        # Rejected withdrawals (in last hour)
+        rejected_count = len([
+            w for w in withdrawals_last_hour
+            if w.status == TransactionStatus.FAILED.value
+        ])
+        
         total_withdrawals = (
             len(withdrawals_last_hour) if withdrawals_last_hour else 0
         )

@@ -74,7 +74,7 @@ class ReferralEarningRepository(
         stmt = (
             select(func.sum(ReferralEarning.amount))
             .where(ReferralEarning.referral_id == referral_id)
-            .where(not ReferralEarning.paid)
+            .where(ReferralEarning.paid == False)  # noqa: E712
         )
         result = await self.session.execute(stmt)
         total = result.scalar()
@@ -124,7 +124,7 @@ class ReferralEarningRepository(
         stmt = (
             select(ReferralEarning)
             .where(ReferralEarning.referral_id.in_(referral_ids))
-            .where(not ReferralEarning.paid)
+            .where(ReferralEarning.paid == False)  # noqa: E712
             .order_by(ReferralEarning.created_at.desc())
         )
 

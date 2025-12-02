@@ -105,7 +105,7 @@ class FailedNotificationRepository(
 
         stmt = (
             select(FailedNotification)
-            .where(not FailedNotification.resolved)
+            .where(FailedNotification.resolved == False)  # noqa: E712
             .where(FailedNotification.attempt_count < max_attempts)
             # R8-3: Sort by priority (critical first), then by creation time
             .order_by(

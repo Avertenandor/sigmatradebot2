@@ -37,8 +37,8 @@ class PaymentRetryRepository(BaseRepository[PaymentRetry]):
 
         stmt = (
             select(PaymentRetry)
-            .where(not PaymentRetry.resolved)
-            .where(not PaymentRetry.in_dlq)
+            .where(PaymentRetry.resolved == False)  # noqa: E712
+            .where(PaymentRetry.in_dlq == False)  # noqa: E712
             .where(
                 (PaymentRetry.next_retry_at.is_(None))
                 | (PaymentRetry.next_retry_at <= now)
@@ -87,7 +87,7 @@ class PaymentRetryRepository(BaseRepository[PaymentRetry]):
         stmt = (
             select(PaymentRetry)
             .where(PaymentRetry.payment_type == payment_type)
-            .where(not PaymentRetry.resolved)
+            .where(PaymentRetry.resolved == False)  # noqa: E712
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())

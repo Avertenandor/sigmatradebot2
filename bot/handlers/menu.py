@@ -9,13 +9,14 @@ from typing import Any
 from aiogram import F, Router
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import BufferedInputFile, Message
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from app.repositories.blacklist_repository import BlacklistRepository
 from app.services.user_service import UserService
+from app.services.report_service import ReportService
 from bot.i18n.loader import get_translator, get_user_language
 from bot.keyboards.reply import (
     deposit_keyboard,
@@ -24,6 +25,7 @@ from bot.keyboards.reply import (
     settings_keyboard,
     withdrawal_keyboard,
     wallet_menu_keyboard,
+    profile_keyboard,
 )
 from bot.states.profile_update import ProfileUpdateStates
 from bot.states.registration import RegistrationStates
@@ -108,7 +110,13 @@ async def show_main_menu(
     logger.info(f"[MENU] Main menu sent successfully to user {user.telegram_id}")
 
 
-@router.message(F.text.in_({"📊 Главное меню", "⬅ Назад"}))
+@router.message(F.text.in_({
+    "📊 Главное меню",
+    "⬅ Назад",
+    "⏭ Пропустить",  # Registration skip (leftover keyboard)
+    "⏭️ Пропустить",  # Same with FE0F
+    "✅ Да, оставить контакты",  # Registration contacts (leftover keyboard)
+}))
 async def handle_main_menu(
     message: Message,
     session: AsyncSession,
@@ -577,7 +585,37 @@ async def show_my_profile(
         f"📅 Дата регистрации: {user.created_at.strftime('%d.%m.%Y')}"
     )
 
-    await message.answer(text, parse_mode="Markdown")
+    await message.answer(text, parse_mode="Markdown", reply_markup=profile_keyboard())
+
+
+@router.message(StateFilter('*'), F.text == "📂 Скачать отчет")
+async def download_report(
+    message: Message,
+    session: AsyncSession,
+    **data: Any,
+) -> None:
+    """Download user report."""
+    user: User | None = data.get("user")
+    if not user:
+        await message.answer("❌ Ошибка: пользователь не найден")
+        return
+
+    status_msg = await message.answer("⏳ Генерирую отчет...")
+
+    try:
+        report_service = ReportService(session)
+        report_bytes = await report_service.generate_user_report(user.id)
+
+        file = BufferedInputFile(report_bytes, filename=f"report_{user.id}.xlsx")
+
+        await message.answer_document(
+            document=file,
+            caption="📊 Ваш полный отчет (профиль, транзакции, депозиты, рефералы)"
+        )
+        await status_msg.delete()
+    except Exception as e:
+        await status_msg.edit_text("❌ Ошибка генерации отчета")
+        logger.error(f"Failed to generate report for user {user.id}: {e}", exc_info=True)
 
 
 @router.message(StateFilter('*'), F.text == "💳 Мой кошелек")
@@ -683,7 +721,7 @@ async def start_registration(
         "Для начала работы необходимо пройти регистрацию.\n\n"
         "📝 **Шаг 1:** Введите ваш BSC (BEP-20) адрес кошелька\n"
         "Формат: `0x...` (42 символа)\n\n"
-        "⚠️ **КРИТИЧНО:** Указывайте только **ЛИЧНЫЙ** кошелек (Trust Wallet, MetaMask).\n"
+        "⚠️ **КРИТИЧНО:** Указывайте только **ЛИЧНЫЙ** кошелек (Trust Wallet, MetaMask, SafePal или любой холодный кошелек).\n"
         "🚫 **НЕ указывайте** адрес биржи (Binance, Bybit), иначе выплаты могут быть утеряны!"
     )
     

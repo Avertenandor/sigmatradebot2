@@ -31,6 +31,59 @@ from bot.utils.menu_buttons import is_menu_button
 router = Router()
 
 
+async def is_level1_only_user(session: AsyncSession, user_id: int) -> bool:
+    """
+    Check if user has only level 1 deposits (10$ deposits).
+    Level 1 users don't need phone/email verification.
+    
+    Returns:
+        True if user has only level 1 deposits or no deposits
+    """
+    from app.repositories.deposit_repository import DepositRepository
+    
+    deposit_repo = DepositRepository(session)
+    active_deposits = await deposit_repo.get_active_deposits(user_id)
+    
+    if not active_deposits:
+        return True  # No deposits = level 1 eligible
+    
+    # Check if all deposits are level 1
+    return all(d.level == 1 for d in active_deposits)
+
+
+async def check_withdrawal_eligibility(
+    session: AsyncSession, 
+    user: User
+) -> tuple[bool, str | None]:
+    """
+    Check if user can withdraw:
+    - ALL users need financial password (is_verified)
+    - Level 2+ users also need phone OR email
+    
+    Returns:
+        (can_withdraw, error_message)
+    """
+    # Everyone needs financial password
+    if not user.is_verified:
+        return False, (
+            "❌ Для вывода необходим финансовый пароль!\n\n"
+            "Установите финпароль через кнопку '🔐 Получить финпароль' в главном меню."
+        )
+    
+    # Check if level 2+ user needs additional verification
+    is_level1 = await is_level1_only_user(session, user.id)
+    
+    if not is_level1:
+        # Level 2+ needs phone OR email
+        if not user.phone and not user.email:
+            return False, (
+                "❌ Для вывода с депозитами уровня 2+ требуется верификация!\n\n"
+                "Укажите телефон или email через меню '👤 Мой профиль' → '✏️ Редактировать'."
+            )
+    
+    return True, None
+
+
 async def process_auto_payout(
     tx_id: int, 
     amount: Decimal, 
@@ -140,19 +193,15 @@ async def withdraw_all(
         await message.answer("❌ Ошибка: пользователь не найден")
         return
 
-    # Check verification status
-    if not user.is_verified:
-        await message.answer(
-            "❌ Вывод недоступен до верификации!\n\n"
-            "Для вывода средств необходимо пройти верификацию.\n"
-            "Сначала нажмите '✅ Пройти верификацию' в главном меню.",
-            reply_markup=withdrawal_keyboard(),
-        )
-        return
-
     session = data.get("session")
     if not session:
         await message.answer("❌ Системная ошибка")
+        return
+
+    # Check withdrawal eligibility (finpass for all, phone/email for level 2+)
+    can_withdraw, error_msg = await check_withdrawal_eligibility(session, user)
+    if not can_withdraw:
+        await message.answer(error_msg, reply_markup=withdrawal_keyboard(), parse_mode="Markdown")
         return
         
     user_service = UserService(session)
@@ -248,19 +297,15 @@ async def withdraw_amount(
         await message.answer("❌ Ошибка: пользователь не найден")
         return
 
-    # Check verification status
-    if not user.is_verified:
-        await message.answer(
-            "❌ Вывод недоступен до верификации!\n\n"
-            "Для вывода средств необходимо пройти верификацию.\n"
-            "Сначала нажмите '✅ Пройти верификацию' в главном меню.",
-            reply_markup=withdrawal_keyboard(),
-        )
-        return
-
     session = data.get("session")
     if not session:
         await message.answer("❌ Системная ошибка")
+        return
+
+    # Check withdrawal eligibility (finpass for all, phone/email for level 2+)
+    can_withdraw, error_msg = await check_withdrawal_eligibility(session, user)
+    if not can_withdraw:
+        await message.answer(error_msg, reply_markup=withdrawal_keyboard(), parse_mode="Markdown")
         return
 
     withdrawal_service = WithdrawalService(session)
@@ -286,14 +331,16 @@ async def process_withdrawal_amount(
         await state.clear()
         return
     
-    # Check verification status
-    if not user.is_verified:
-        await message.answer(
-            "❌ Вывод недоступен до верификации!\n\n"
-            "Для вывода средств необходимо пройти верификацию.\n"
-            "Сначала нажмите '✅ Пройти верификацию' в главном меню.",
-            reply_markup=withdrawal_keyboard(),
-        )
+    session = data.get("session")
+    if not session:
+        await message.answer("❌ Системная ошибка")
+        await state.clear()
+        return
+    
+    # Check withdrawal eligibility (finpass for all, phone/email for level 2+)
+    can_withdraw, error_msg = await check_withdrawal_eligibility(session, user)
+    if not can_withdraw:
+        await message.answer(error_msg, reply_markup=withdrawal_keyboard(), parse_mode="Markdown")
         await state.clear()
         return
 
@@ -308,12 +355,6 @@ async def process_withdrawal_amount(
             "❌ Неверный формат суммы!\n\n"
             "Введите число, например: 100.50"
         )
-        return
-
-    # Check minimum
-    session = data.get("session")
-    if not session:
-        await message.answer("❌ Системная ошибка")
         return
         
     withdrawal_service = WithdrawalService(session)
@@ -605,19 +646,15 @@ async def handle_smart_withdrawal_amount(
     if not user:
         return
     
-    # Check verification status
-    if not user.is_verified:
-        await message.answer(
-            "❌ Вывод недоступен до верификации!\n\n"
-            "Для вывода средств необходимо пройти верификацию.\n"
-            "Сначала нажмите '🔐 Получить финпароль' в главном меню.",
-            reply_markup=withdrawal_keyboard(),
-        )
-        return
-    
     session = data.get("session")
     if not session:
         await message.answer("❌ Системная ошибка")
+        return
+    
+    # Check withdrawal eligibility (finpass for all, phone/email for level 2+)
+    can_withdraw, error_msg = await check_withdrawal_eligibility(session, user)
+    if not can_withdraw:
+        await message.answer(error_msg, reply_markup=withdrawal_keyboard(), parse_mode="Markdown")
         return
     
     # Parse amount
@@ -666,13 +703,14 @@ async def handle_smart_withdrawal_amount(
     # Clear withdrawal menu context and proceed to password confirmation
     await state.update_data(
         in_withdrawal_menu=False,
-        withdrawal_amount=str(amount),
+        amount=str(amount),
     )
-    await state.set_state(WithdrawalStates.waiting_for_password)
+    await state.set_state(WithdrawalStates.waiting_for_financial_password)
     
     await message.answer(
-        f"💸 *Вывод {amount:.2f} USDT*\n\n"
-        f"Введите ваш *финансовый пароль* для подтверждения:",
+        f"💸 *Вывод средств*\n\n"
+        f"Сумма: *{amount:.2f} USDT*\n\n"
+        f"🔐 Введите ваш финансовый пароль:",
         parse_mode="Markdown",
         reply_markup=finpass_input_keyboard(),
     )
