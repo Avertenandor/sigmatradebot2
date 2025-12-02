@@ -110,7 +110,13 @@ async def show_main_menu(
     logger.info(f"[MENU] Main menu sent successfully to user {user.telegram_id}")
 
 
-@router.message(F.text.in_({"📊 Главное меню", "⬅ Назад"}))
+@router.message(F.text.in_({
+    "📊 Главное меню",
+    "⬅ Назад",
+    "⏭ Пропустить",  # Registration skip (leftover keyboard)
+    "⏭️ Пропустить",  # Same with FE0F
+    "✅ Да, оставить контакты",  # Registration contacts (leftover keyboard)
+}))
 async def handle_main_menu(
     message: Message,
     session: AsyncSession,
