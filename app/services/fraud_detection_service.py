@@ -241,6 +241,8 @@ class FraudDetectionService:
                 continue
 
             cutoff_time = deposit_time + timedelta(hours=24)
+            # Convert to naive datetime for comparison with Transaction.created_at (naive)
+            cutoff_time_naive = cutoff_time.replace(tzinfo=None) if cutoff_time.tzinfo else cutoff_time
 
             withdrawals = await self.transaction_repo.get_by_user(
                 user_id=user_id,
@@ -248,7 +250,7 @@ class FraudDetectionService:
             )
 
             for withdrawal in withdrawals:
-                if withdrawal.created_at <= cutoff_time:
+                if withdrawal.created_at <= cutoff_time_naive:
                     return True
 
         return False
@@ -355,10 +357,12 @@ class FraudDetectionService:
                         deposit_time = deposit.confirmed_at or deposit.created_at
                         if not deposit_time:
                             continue
+                        # Convert to naive for comparison with Transaction.created_at
+                        deposit_time_naive = deposit_time.replace(tzinfo=None) if deposit_time.tzinfo else deposit_time
 
                         for withdrawal in withdrawals:
                             withdrawal_time = withdrawal.created_at
-                            time_diff = (withdrawal_time - deposit_time).total_seconds()
+                            time_diff = (withdrawal_time - deposit_time_naive).total_seconds()
 
                             # If withdrawal within 1 hour of deposit, suspicious
                             if 0 < time_diff < 3600:
