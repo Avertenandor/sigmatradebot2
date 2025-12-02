@@ -554,7 +554,7 @@ async def handle_admin_stats(
             
             text += (
                 f"👤 @{safe_username} (ID: {d['user_id']})\n"
-                f"   💵 Деп: {format_usdt(d['amount'])} | Выплачено: {format_usdt(d['roi_paid'])}\n"
+                f"   💵 Деп: {format_usdt(d['amount'])} | Начислено: {format_usdt(d['roi_paid'])}\n"
                 f"   ⏳ След. нач: {next_accrual}\n\n"
             )
         
