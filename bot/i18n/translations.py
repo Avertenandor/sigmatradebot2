@@ -79,6 +79,28 @@ RU_TRANSLATIONS = {
             "⚠️ Системная ошибка.\n\n"
             "Попробуйте позже или обратитесь в поддержку."
         ),
+        "user_not_found": "❌ Ошибка: пользователь не найден",
+        "invalid_amount": "❌ Неверная сумма",
+        "insufficient_balance": "❌ Недостаточно средств",
+    },
+    "balance": {
+        "available": "💰 Доступный баланс",
+        "total": "💰 Общий баланс",
+        "pending": "⏳ В обработке",
+    },
+    "withdrawal": {
+        "title": "💸 Вывод средств",
+        "amount": "Сумма вывода",
+        "fee": "Комиссия",
+        "success": "✅ Заявка на вывод создана",
+    },
+    "deposit": {
+        "title": "💰 Депозит",
+        "select_level": "Выберите уровень депозита",
+        "success": "✅ Депозит подтверждён",
+    },
+    "welcome": {
+        "message": "📊 *Главное меню*\n\nВыберите действие:",
     },
 }
 
@@ -157,6 +179,28 @@ EN_TRANSLATIONS = {
             "⚠️ System error.\n\n"
             "Please try again later or contact support."
         ),
+        "user_not_found": "❌ Error: user not found",
+        "invalid_amount": "❌ Invalid amount",
+        "insufficient_balance": "❌ Insufficient balance",
+    },
+    "balance": {
+        "available": "💰 Available balance",
+        "total": "💰 Total balance",
+        "pending": "⏳ Pending",
+    },
+    "withdrawal": {
+        "title": "💸 Withdrawal",
+        "amount": "Withdrawal amount",
+        "fee": "Fee",
+        "success": "✅ Withdrawal request created",
+    },
+    "deposit": {
+        "title": "💰 Deposit",
+        "select_level": "Select deposit level",
+        "success": "✅ Deposit confirmed",
+    },
+    "welcome": {
+        "message": "📊 *Main Menu*\n\nChoose an action:",
     },
 }
 

@@ -10,11 +10,11 @@ from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import (
     Boolean,
+    DECIMAL,
     DateTime,
     ForeignKey,
     Index,
     Integer,
-    Numeric,
     String,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -59,7 +59,7 @@ class ReferralEarning(Base):
 
     # Amount
     amount: Mapped[Decimal] = mapped_column(
-        Numeric(precision=18, scale=8), nullable=False
+        DECIMAL(18, 8), nullable=False
     )
 
     # Source transaction (optional)

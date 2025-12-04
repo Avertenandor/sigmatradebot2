@@ -179,58 +179,79 @@ async def process_appeal_text(
     from app.repositories.appeal_repository import AppealRepository
 
     appeal_repo = AppealRepository(session)
-    appeal = await appeal_repo.create(
-        user_id=user.id,
-        blacklist_id=blacklist_entry.id,
-        appeal_text=appeal_text,
-        status=AppealStatus.PENDING,
-    )
 
-    await session.flush()  # Flush to get appeal.id
+    try:
+        appeal = await appeal_repo.create(
+            user_id=user.id,
+            blacklist_id=blacklist_entry.id,
+            appeal_text=appeal_text,
+            status=AppealStatus.PENDING,
+        )
 
-    # Create support ticket for appeal (for admin notification)
-    from app.models.enums import (
-        SupportCategory,
-        SupportTicketPriority,
-        SupportTicketStatus,
-    )
-    from app.repositories.support_ticket_repository import (
-        SupportTicketRepository,
-    )
+        await session.flush()  # Flush to get appeal.id
 
-    ticket_repo = SupportTicketRepository(session)
+        # Create support ticket for appeal (for admin notification)
+        from app.models.enums import (
+            SupportCategory,
+            SupportTicketPriority,
+            SupportTicketStatus,
+        )
+        from app.repositories.support_ticket_repository import (
+            SupportTicketRepository,
+        )
 
-    # Format dates for display
-    blocked_date = blacklist_entry.created_at.strftime('%Y-%m-%d %H:%M:%S')
-    deadline_date = (
-        blacklist_entry.appeal_deadline.strftime('%Y-%m-%d %H:%M:%S')
-        if blacklist_entry.appeal_deadline
-        else 'N/A'
-    )
+        ticket_repo = SupportTicketRepository(session)
 
-    appeal_ticket = await ticket_repo.create(
-        user_id=user.id,
-        category=SupportCategory.OTHER.value,
-        priority=SupportTicketPriority.HIGH.value,
-        status=SupportTicketStatus.OPEN.value,
-        subject=(
-            f"Апелляция по блокировке аккаунта (User ID: "
-            f"{user.id}, Appeal ID: {appeal.id})"
-        ),
-        description=(
-            f"**Апелляция от пользователя:**\n"
-            f"Telegram ID: {user.telegram_id}\n"
-                f"Username: @{user.username or 'N/A'}\n"
-                f"Wallet: {user.wallet_address}\n\n"
-                f"**Текст апелляции:**\n{appeal_text}\n\n"
-                f"**Информация о блокировке:**\n"
-                f"Причина: {blacklist_entry.reason or 'Не указана'}\n"
-                f"Дата блокировки: {blocked_date}\n"
-                f"Срок подачи апелляции: {deadline_date}"
-        ),
-    )
+        # Format dates for display
+        blocked_date = blacklist_entry.created_at.strftime('%Y-%m-%d %H:%M:%S')
+        deadline_date = (
+            blacklist_entry.appeal_deadline.strftime('%Y-%m-%d %H:%M:%S')
+            if blacklist_entry.appeal_deadline
+            else 'N/A'
+        )
 
-    await session.commit()
+        appeal_ticket = await ticket_repo.create(
+            user_id=user.id,
+            category=SupportCategory.OTHER.value,
+            priority=SupportTicketPriority.HIGH.value,
+            status=SupportTicketStatus.OPEN.value,
+            subject=(
+                f"Апелляция по блокировке аккаунта (User ID: "
+                f"{user.id}, Appeal ID: {appeal.id})"
+            ),
+            description=(
+                f"**Апелляция от пользователя:**\n"
+                f"Telegram ID: {user.telegram_id}\n"
+                    f"Username: @{user.username or 'N/A'}\n"
+                    f"Wallet: {user.wallet_address}\n\n"
+                    f"**Текст апелляции:**\n{appeal_text}\n\n"
+                    f"**Информация о блокировке:**\n"
+                    f"Причина: {blacklist_entry.reason or 'Не указана'}\n"
+                    f"Дата блокировки: {blocked_date}\n"
+                    f"Срок подачи апелляции: {deadline_date}"
+            ),
+        )
+
+        await session.commit()
+    except Exception as e:
+        logger.error(
+            f"Error creating appeal or ticket: {e}",
+            extra={
+                "user_id": user.id,
+                "telegram_id": user.telegram_id,
+                "blacklist_id": blacklist_entry.id,
+            },
+        )
+        await session.rollback()
+        is_admin = data.get("is_admin", False)
+        await message.answer(
+            "❌ Ошибка при подаче апелляции. Попробуйте позже или обратитесь в поддержку.",
+            reply_markup=main_menu_reply_keyboard(
+                user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+            ),
+        )
+        await state.clear()
+        return
 
     logger.info(
         "Appeal submitted",

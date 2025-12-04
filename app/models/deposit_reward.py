@@ -10,13 +10,14 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
+    DECIMAL,
     DateTime,
     ForeignKey,
     Index,
     Integer,
-    Numeric,
     String,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -79,15 +80,15 @@ class DepositReward(Base):
         Integer, nullable=False
     )
     deposit_amount: Mapped[Decimal] = mapped_column(
-        Numeric(precision=20, scale=8), nullable=False
+        DECIMAL(18, 8), nullable=False
     )
 
     # Reward calculation
     reward_rate: Mapped[Decimal] = mapped_column(
-        Numeric(precision=10, scale=4), nullable=False
+        DECIMAL(18, 8), nullable=False
     )
     reward_amount: Mapped[Decimal] = mapped_column(
-        Numeric(precision=20, scale=8), nullable=False
+        DECIMAL(18, 8), nullable=False
     )
 
     # Payment tracking
@@ -103,7 +104,7 @@ class DepositReward(Base):
 
     # Timestamps
     calculated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     # updated_at inherited from Base
 

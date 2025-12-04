@@ -47,16 +47,27 @@ class BanMiddleware(BaseMiddleware):
 
         # Check if user is banned or blacklisted
         # (import here to avoid circular dependency)
-        from app.models.blacklist import BlacklistActionType
-        from app.repositories.blacklist_repository import BlacklistRepository
-        from app.repositories.user_repository import UserRepository
+        from app.models.blacklist import Blacklist, BlacklistActionType
+        from app.models.user import User as DbUser
+        from sqlalchemy import select
 
-        user_repo = UserRepository(session)
-        db_user = await user_repo.get_by_telegram_id(user.id)
+        # Single query with LEFT JOIN to get both user and blacklist
+        stmt = (
+            select(DbUser, Blacklist)
+            .outerjoin(Blacklist, DbUser.telegram_id == Blacklist.telegram_id)
+            .where(DbUser.telegram_id == user.id)
+        )
+        result = await session.execute(stmt)
+        row = result.one_or_none()
 
-        # Check blacklist for non-registered users (registration denial)
-        blacklist_repo = BlacklistRepository(session)
-        blacklist_entry = await blacklist_repo.get_by_telegram_id(user.id)
+        if row:
+            db_user, blacklist_entry = row
+        else:
+            # User not registered, check blacklist separately
+            stmt_blacklist = select(Blacklist).where(Blacklist.telegram_id == user.id)
+            result_blacklist = await session.execute(stmt_blacklist)
+            blacklist_entry = result_blacklist.scalar_one_or_none()
+            db_user = None
 
         # Pass blacklist_entry to handlers to avoid repeated queries
         data["blacklist_entry"] = blacklist_entry

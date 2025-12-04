@@ -12,11 +12,11 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
     JSON,
     Boolean,
+    DECIMAL,
     DateTime,
     ForeignKey,
     Index,
     Integer,
-    Numeric,
     String,
     Text,
 )
@@ -80,7 +80,7 @@ class PaymentRetry(Base):
 
     # Payment details
     amount: Mapped[Decimal] = mapped_column(
-        Numeric(precision=18, scale=8), nullable=False
+        DECIMAL(18, 8), nullable=False
     )
     payment_type: Mapped[PaymentType] = mapped_column(
         SQLEnum(PaymentType, native_enum=False),

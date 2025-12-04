@@ -6,6 +6,7 @@ Formats deposit information with corridor and ROI details for users.
 
 from __future__ import annotations
 
+from datetime import timezone
 from decimal import Decimal
 
 from app.models.deposit import Deposit
@@ -61,7 +62,15 @@ async def format_deposit_with_corridor(
     if recent_rewards:
         history_text = "\n\n📜 **История начислений (последние 5):**\n"
         for reward in recent_rewards[:5]:
-            date_str = reward.created_at.strftime("%d.%m.%Y")
+            # Handle timezone for created_at
+            created_at = reward.created_at
+            if created_at is not None:
+                if created_at.tzinfo is None:
+                    created_at = created_at.replace(tzinfo=timezone.utc)
+                date_str = created_at.strftime("%d.%m.%Y")
+            else:
+                date_str = "—"
+
             rate_str = (
                 f"{reward.actual_rate}%"
                 if reward.actual_rate

@@ -138,8 +138,10 @@ async def handle_main_menu(
         await state.clear()
         is_admin = data.get("is_admin", False)
         logger.info(f"[MENU] Fallback menu with is_admin={is_admin}")
+        # R13-3: Use i18n for fallback menu
+        _ = get_translator("ru")  # Default to Russian for fallback
         await message.answer(
-            "📊 *Главное меню*\n\nВыберите действие:",
+            _("welcome.message"),
             reply_markup=main_menu_reply_keyboard(
                 user=None, blacklist_entry=None, is_admin=is_admin
             ),
@@ -504,7 +506,7 @@ async def show_my_profile(
         roi_section = (
             f"\n*🎯 ROI Завершён (Уровень 1):*\n"
             f"✅ Достигнут максимум 500%!\n"
-            f"💰 Получено: {format_usdt(roi_progress.get('roi_paid', 0))}"
+            f"💰 Получено: {format_usdt(roi_progress.get('roi_paid', 0))} "
                 "USDT\n"
             f"📌 Создайте новый депозит чтобы продолжить\n\n"
         )
@@ -1122,94 +1124,6 @@ async def toggle_marketing_notification(
             roi_enabled=getattr(settings, 'roi_notifications', True),
             marketing_enabled=settings.marketing_notifications,
         ),
-    )
-
-
-@router.message(StateFilter('*'), F.text == "🌐 Изменить язык")
-async def show_language_settings(
-    message: Message,
-    session: AsyncSession,
-    state: FSMContext,
-    **data: Any,
-) -> None:
-    """
-    Show language selection menu.
-    
-    Args:
-        message: Telegram message
-        session: Database session
-        state: FSM state
-        **data: Handler data
-    """
-    user: User | None = data.get("user")
-    if not user:
-        await message.answer("❌ Ошибка: пользователь не найден")
-        return
-    
-    await state.clear()
-    
-    # Get current language
-    current_language = await get_user_language(session, user.id)
-    
-    text = (
-        f"🌐 *Настройка языка*\n\n"
-        f"Текущий язык: **{current_language.upper()}**\n\n"
-        f"Выберите язык интерфейса:"
-    )
-    
-    from aiogram.utils.keyboard import ReplyKeyboardBuilder
-    from aiogram.types import KeyboardButton
-    
-    builder = ReplyKeyboardBuilder()
-    builder.row(KeyboardButton(text="🇷🇺 Русский"))
-    builder.row(KeyboardButton(text="🇬🇧 English"))
-    builder.row(KeyboardButton(text="◀️ Назад"))
-    
-    await message.answer(
-        text,
-        parse_mode="Markdown",
-        reply_markup=builder.as_markup(resize_keyboard=True),
-    )
-
-
-@router.message(F.text.in_({"🇷🇺 Русский", "🇬🇧 English"}))
-async def process_language_selection(
-    message: Message,
-    session: AsyncSession,
-    **data: Any,
-) -> None:
-    """
-    Process language selection.
-    
-    Args:
-        message: Telegram message
-        session: Database session
-        **data: Handler data
-    """
-    user: User | None = data.get("user")
-    if not user:
-        await message.answer("❌ Ошибка: пользователь не найден")
-        return
-    
-    # Determine selected language
-    language = "ru" if message.text == "🇷🇺 Русский" else "en"
-    
-    # Update user language
-    from app.repositories.user_repository import UserRepository
-    user_repo = UserRepository(session)
-    await user_repo.update(user.id, language=language)
-    await session.commit()
-    
-    # Show confirmation
-    if language == "ru":
-        text = "✅ Язык интерфейса изменен на **Русский**"
-    else:
-        text = "✅ Interface language changed to **English**"
-    
-    await message.answer(
-        text,
-        parse_mode="Markdown",
-        reply_markup=settings_keyboard(language),
     )
 
 

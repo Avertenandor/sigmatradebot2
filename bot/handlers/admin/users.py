@@ -3,6 +3,7 @@ Admin Users Handler
 Handles user management (search, list, profile, block/unblock, balance)
 """
 
+import re
 from decimal import Decimal
 from typing import Any
 
@@ -519,24 +520,33 @@ async def handle_profile_block_toggle(
     admin = data.get("admin")
     admin_id = admin.id if admin else None
 
-    if is_blocking:
-        await blacklist_service.add_to_blacklist(
-            telegram_id=user.telegram_id,
-            reason="Блокировка администратором через профиль",
-            added_by_admin_id=admin_id,
-            action_type=BlacklistActionType.BLOCKED,
-        )
-        user.is_banned = True
-        await message.answer("✅ Пользователь заблокирован.")
-    else:
-        entry = await blacklist_service.repo.find_by_telegram_id(user.telegram_id)
-        if entry and entry.is_active:
-            await blacklist_service.repo.update(entry.id, is_active=False)
-        
-        user.is_banned = False
-        await message.answer("✅ Пользователь разблокирован.")
-    
-    await session.commit()
+    try:
+        if is_blocking:
+            await blacklist_service.add_to_blacklist(
+                telegram_id=user.telegram_id,
+                reason="Блокировка администратором через профиль",
+                added_by_admin_id=admin_id,
+                action_type=BlacklistActionType.BLOCKED,
+            )
+            user.is_banned = True
+            await session.flush()  # Ensure atomicity
+            await message.answer("✅ Пользователь заблокирован.")
+        else:
+            entry = await blacklist_service.repo.find_by_telegram_id(user.telegram_id)
+            if entry and entry.is_active:
+                await blacklist_service.repo.update(entry.id, is_active=False)
+
+            user.is_banned = False
+            await session.flush()  # Ensure atomicity
+            await message.answer("✅ Пользователь разблокирован.")
+
+        await session.commit()
+    except Exception as e:
+        logger.error(f"Error updating ban status for user {user.id}: {e}")
+        await session.rollback()
+        await message.answer("❌ Ошибка при изменении статуса блокировки.")
+        return
+
     await show_user_profile(message, user, state, session)
 
 

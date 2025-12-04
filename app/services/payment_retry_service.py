@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.enums import TransactionStatus, TransactionType
 from app.models.payment_retry import PaymentRetry, PaymentType
+from app.models.transaction import Transaction
 from app.repositories.deposit_reward_repository import (
     DepositRewardRepository,
 )
@@ -270,14 +271,31 @@ class PaymentRetryService:
                 else TransactionType.SYSTEM_PAYOUT
             )
 
-            await self.transaction_repo.create(
-                user_id=retry.user_id,
-                tx_hash=tx_hash,
-                type=tx_type.value,
-                amount=retry.amount,
-                to_address=user.wallet_address,
-                status=TransactionStatus.CONFIRMED.value,
+            # IDEMPOTENCY CHECK: Verify tx_hash doesn't already exist
+            existing_tx_stmt = select(Transaction).where(
+                Transaction.tx_hash == tx_hash
             )
+            existing_tx_result = await self.session.execute(existing_tx_stmt)
+            existing_tx = existing_tx_result.scalar_one_or_none()
+
+            if existing_tx:
+                logger.warning(
+                    f"Transaction with tx_hash {tx_hash} already exists (id: {existing_tx.id}). "
+                    f"Skipping duplicate transaction creation (idempotency check)"
+                )
+            else:
+                # Create new transaction
+                await self.transaction_repo.create(
+                    user_id=retry.user_id,
+                    tx_hash=tx_hash,
+                    type=tx_type.value,
+                    amount=retry.amount,
+                    to_address=user.wallet_address,
+                    status=TransactionStatus.CONFIRMED.value,
+                )
+                logger.info(
+                    f"Created transaction record for retry {retry.id} with tx_hash {tx_hash}"
+                )
 
             await self.session.commit()
 

@@ -73,27 +73,30 @@ class ErrorHandlerMiddleware(BaseMiddleware):
                 except Exception as user_notify_error:
                     logger.warning(f"Failed to notify user: {user_notify_error}")
 
-            # 2. Notify admins with technical details
+            # 2. Notify admins with error ID (no stack trace for security)
             admin_ids = settings.get_admin_ids()
             if bot and admin_ids:
                 try:
-                    error_trace = traceback.format_exc()[-800:]  # Last 800 chars
+                    # Generate error ID for tracking
+                    import hashlib
+                    import time
+                    error_id = hashlib.md5(f"{time.time()}{type(e).__name__}".encode()).hexdigest()[:8]
+
+                    # Log full trace to file with error ID
+                    logger.error(f"Error ID {error_id}: {traceback.format_exc()}")
 
                     # Get user info for context
                     user_info = "Unknown"
                     if user:
-                        user_info = (
-                            f"@{user.username}"
-                            if user.username
-                            else f"ID: {user.id}"
-                        )
+                        user_info = f"ID: {user.id}"
 
                     text = (
                         f"🚨 **CRITICAL ERROR**\n\n"
+                        f"🔑 Error ID: `{error_id}`\n"
                         f"👤 User: {user_info}\n"
                         f"❌ Exception: `{type(e).__name__}`\n"
                         f"📝 Message: `{str(e)[:200]}`\n\n"
-                        f"```\n{error_trace}\n```"
+                        f"Check logs for full trace using Error ID."
                     )
                     # Notify first admin only (to avoid spam)
                     await bot.send_message(

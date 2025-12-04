@@ -97,8 +97,11 @@ class TransactionRepository(BaseRepository[Transaction]):
 
     async def get_total_withdrawn(self, user_id: int) -> Decimal:
         """
-        Get total withdrawn amount (completed + pending + processing).
-        Excludes FAILED and REJECTED.
+        Get total withdrawn amount (confirmed + processing only).
+        Excludes PENDING, FAILED, and REJECTED.
+
+        PENDING is excluded from x5 limit calculation to prevent abuse.
+        Only withdrawals that are confirmed or processing count towards the limit.
 
         Args:
             user_id: User ID
@@ -113,17 +116,16 @@ class TransactionRepository(BaseRepository[Transaction]):
             .where(
                 or_(
                     Transaction.status == TransactionStatus.CONFIRMED.value,
-                    Transaction.status == TransactionStatus.PENDING.value,
                     Transaction.status == TransactionStatus.PROCESSING.value,
                 )
             )
         )
         result = await self.session.execute(stmt)
         transactions = result.scalars().all()
-        
+
         if not transactions:
             return Decimal("0")
-            
+
         return sum((t.amount for t in transactions), Decimal("0"))
 
     async def get_total_withdrawn_today(self) -> Decimal:

@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     encryption_key: str
 
     # Application
-    environment: str = "production"
+    environment: str = "development"
     debug: bool = False
     log_level: str = "INFO"
     health_check_port: int = Field(

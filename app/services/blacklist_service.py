@@ -290,7 +290,11 @@ class BlacklistService:
         return await self.repository.count_active()
 
     async def terminate_user(
-        self, user_id: int, reason: str, admin_id: int | None = None
+        self,
+        user_id: int,
+        reason: str,
+        admin_id: int | None = None,
+        redis_client: Any | None = None,
     ) -> dict:
         """
         Terminate user account (R15-2): BLOCKED → TERMINATED.
@@ -306,117 +310,156 @@ class BlacklistService:
             user_id: User ID
             reason: Termination reason
             admin_id: Admin ID (optional)
+            redis_client: Optional Redis client for distributed lock
 
         Returns:
             Dict with success status and actions taken
         """
-        from datetime import UTC, datetime
+        # Проверка прав админа
+        if admin_id is not None:
+            from app.repositories.admin_repository import AdminRepository
 
-        from app.models.appeal import Appeal, AppealStatus
-        from app.models.enums import (
-            SupportTicketStatus,
-            TransactionStatus,
-            TransactionType,
-        )
-        from app.repositories.appeal_repository import AppealRepository
-        from app.repositories.support_ticket_repository import (
-            SupportTicketRepository,
-        )
-        from app.repositories.transaction_repository import (
-            TransactionRepository,
-        )
-        from app.repositories.user_repository import UserRepository
+            admin_repo = AdminRepository(self.session)
+            admin = await admin_repo.get_by_id(admin_id)
 
-        user_repo = UserRepository(self.session)
-        transaction_repo = TransactionRepository(self.session)
-        appeal_repo = AppealRepository(self.session)
-        ticket_repo = SupportTicketRepository(self.session)
+            if not admin:
+                return {
+                    "success": False,
+                    "error": "Админ не найден",
+                }
 
-        user = await user_repo.get_by_id(user_id)
-        if not user:
+            if not admin.is_super_admin:
+                return {
+                    "success": False,
+                    "error": "Только super_admin может терминировать пользователей",
+                }
+
+        # R15-4: Use distributed lock to prevent race conditions
+        from app.utils.distributed_lock import get_distributed_lock
+
+        lock = get_distributed_lock(
+            redis_client=redis_client, session=self.session
+        )
+        lock_key = f"user:{user_id}:terminate_operation"
+
+        async with lock.lock(lock_key, timeout=30, blocking=True, blocking_timeout=5.0) as acquired:
+            if not acquired:
+                logger.warning(
+                    f"Could not acquire lock for terminating user {user_id}, "
+                    "operation may be in progress"
+                )
+                return {
+                    "success": False,
+                    "error": "Operation already in progress",
+                }
+
+            from datetime import UTC, datetime
+
+            from app.models.appeal import Appeal, AppealStatus
+            from app.models.enums import (
+                SupportTicketStatus,
+                TransactionStatus,
+                TransactionType,
+            )
+            from app.repositories.appeal_repository import AppealRepository
+            from app.repositories.support_ticket_repository import (
+                SupportTicketRepository,
+            )
+            from app.repositories.transaction_repository import (
+                TransactionRepository,
+            )
+            from app.repositories.user_repository import UserRepository
+
+            user_repo = UserRepository(self.session)
+            transaction_repo = TransactionRepository(self.session)
+            appeal_repo = AppealRepository(self.session)
+            ticket_repo = SupportTicketRepository(self.session)
+
+            user = await user_repo.get_by_id(user_id)
+            if not user:
+                return {
+                    "success": False,
+                    "error": "User not found",
+                }
+
+            actions_taken = []
+
+            # 1. Reject all pending appeals
+            pending_appeals = await appeal_repo.find_by(
+                user_id=user_id,
+                status=AppealStatus.PENDING,
+            )
+            for appeal in pending_appeals:
+                appeal.status = AppealStatus.REJECTED.value
+                appeal.reviewed_at = datetime.now(UTC)
+                appeal.review_notes = (
+                    "Автоматически отклонено при терминации аккаунта"
+                )
+                actions_taken.append(f"Rejected appeal {appeal.id}")
+
+            # 2. Reject all pending support tickets
+            pending_tickets = await ticket_repo.find_by(
+                user_id=user_id,
+                status=SupportTicketStatus.OPEN.value,
+            )
+            for ticket in pending_tickets:
+                ticket.status = SupportTicketStatus.CLOSED.value
+                actions_taken.append(f"Closed support ticket {ticket.id}")
+
+            # 3. Reject all pending withdrawals
+            pending_withdrawals = await transaction_repo.get_by_user(
+                user_id=user_id,
+                type=TransactionType.WITHDRAWAL.value,
+                status=TransactionStatus.PENDING.value,
+            )
+            rejected_count = 0
+            for withdrawal in pending_withdrawals:
+                withdrawal.status = TransactionStatus.FAILED.value
+                # Return balance
+                user.balance = user.balance + withdrawal.amount
+                rejected_count += 1
+
+            if rejected_count > 0:
+                actions_taken.append(f"Rejected {rejected_count} pending withdrawals")
+
+            # 4. Update blacklist entry to TERMINATED
+            blacklist_entry = await self.repository.find_by_telegram_id(
+                user.telegram_id
+            )
+            if blacklist_entry:
+                await self.repository.update(
+                    blacklist_entry.id,
+                    action_type=BlacklistActionType.TERMINATED,
+                    reason=reason,
+                )
+                actions_taken.append("Updated blacklist to TERMINATED")
+
+            # 6. Mark user as banned (already done, but ensure it's set)
+            user.is_banned = True
+            await user_repo.update(user_id, is_banned=True)
+
+            await self.session.commit()
+
+            logger.warning(
+                f"User {user_id} terminated",
+                extra={
+                    "user_id": user_id,
+                    "telegram_id": user.telegram_id,
+                    "rejected_appeals": len(pending_appeals),
+                    "closed_tickets": len(pending_tickets),
+                    "rejected_withdrawals": rejected_count,
+                    "reason": reason,
+                },
+            )
+
             return {
-                "success": False,
-                "error": "User not found",
-            }
-
-        actions_taken = []
-
-        # 1. Reject all pending appeals
-        pending_appeals = await appeal_repo.find_by(
-            user_id=user_id,
-            status=AppealStatus.PENDING,
-        )
-        for appeal in pending_appeals:
-            appeal.status = AppealStatus.REJECTED.value
-            appeal.reviewed_at = datetime.now(UTC)
-            appeal.review_notes = (
-                "Автоматически отклонено при терминации аккаунта"
-            )
-            actions_taken.append(f"Rejected appeal {appeal.id}")
-
-        # 2. Reject all pending support tickets
-        pending_tickets = await ticket_repo.find_by(
-            user_id=user_id,
-            status=SupportTicketStatus.OPEN.value,
-        )
-        for ticket in pending_tickets:
-            ticket.status = SupportTicketStatus.CLOSED.value
-            actions_taken.append(f"Closed support ticket {ticket.id}")
-
-        # 3. Reject all pending withdrawals
-        pending_withdrawals = await transaction_repo.get_by_user(
-            user_id=user_id,
-            type=TransactionType.WITHDRAWAL.value,
-            status=TransactionStatus.PENDING.value,
-        )
-        rejected_count = 0
-        for withdrawal in pending_withdrawals:
-            withdrawal.status = TransactionStatus.FAILED.value
-            # Return balance
-            user.balance = user.balance + withdrawal.amount
-            rejected_count += 1
-
-        if rejected_count > 0:
-            actions_taken.append(f"Rejected {rejected_count} pending withdrawals")
-
-        # 4. Update blacklist entry to TERMINATED
-        blacklist_entry = await self.repository.find_by_telegram_id(
-            user.telegram_id
-        )
-        if blacklist_entry:
-            await self.repository.update(
-                blacklist_entry.id,
-                action_type=BlacklistActionType.TERMINATED,
-                reason=reason,
-            )
-            actions_taken.append("Updated blacklist to TERMINATED")
-
-        # 6. Mark user as banned (already done, but ensure it's set)
-        user.is_banned = True
-        await user_repo.update(user_id, is_banned=True)
-
-        await self.session.commit()
-
-        logger.warning(
-            f"User {user_id} terminated",
-            extra={
+                "success": True,
                 "user_id": user_id,
-                "telegram_id": user.telegram_id,
+                "actions_taken": actions_taken,
                 "rejected_appeals": len(pending_appeals),
                 "closed_tickets": len(pending_tickets),
                 "rejected_withdrawals": rejected_count,
-                "reason": reason,
-            },
-        )
-
-        return {
-            "success": True,
-            "user_id": user_id,
-            "actions_taken": actions_taken,
-            "rejected_appeals": len(pending_appeals),
-            "closed_tickets": len(pending_tickets),
-            "rejected_withdrawals": rejected_count,
-        }
+            }
 
     async def block_user_with_active_operations(
         self,
@@ -444,6 +487,27 @@ class BlacklistService:
         Returns:
             Dict with success status and actions taken
         """
+        # Проверка прав админа
+        if admin_id is not None:
+            from app.repositories.admin_repository import AdminRepository
+
+            admin_repo = AdminRepository(self.session)
+            admin = await admin_repo.get_by_id(admin_id)
+
+            if not admin:
+                return {
+                    "success": False,
+                    "error": "Админ не найден",
+                    "actions_taken": [],
+                }
+
+            if not admin.is_super_admin:
+                return {
+                    "success": False,
+                    "error": "Только super_admin может блокировать пользователей",
+                    "actions_taken": [],
+                }
+
         # R15-4: Use distributed lock to prevent race conditions
         from app.utils.distributed_lock import get_distributed_lock
 

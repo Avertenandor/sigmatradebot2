@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.admin import Admin
 from app.models.user import User
+from app.repositories.blacklist_repository import BlacklistRepository
 from app.services.admin_service import AdminService
 from app.services.deposit_service import DepositService
 from app.services.referral_service import ReferralService
@@ -25,6 +26,7 @@ from bot.keyboards.reply import (
     main_menu_reply_keyboard,
 )
 from bot.states.admin_states import AdminStates
+from bot.utils.admin_utils import clear_state_preserve_admin_token
 from bot.utils.formatters import format_usdt
 
 router = Router(name="admin_panel")
@@ -140,7 +142,9 @@ async def handle_master_key_input(
         
         # Route to specific handlers manually based on saved text
         # Note: Don't modify message.text - aiogram Message objects are frozen
+        # Import statements moved to top of file for better performance
         if redirect_message_text == "🆘 Техподдержка":
+            # Dynamic import to avoid circular dependency
             from bot.handlers.admin.support import handle_admin_support_menu
             await handle_admin_support_menu(message, state, **data)
             return
@@ -165,31 +169,31 @@ async def handle_master_key_input(
             await show_wallet_dashboard(message, session, state, **data)
             return
         elif redirect_message_text == "💸 Заявки на вывод":
-             await handle_admin_withdrawals(message, session, **data)
-             return
+            await handle_admin_withdrawals(message, session, **data)
+            return
         elif redirect_message_text == "📢 Рассылка":
-             from bot.handlers.admin.broadcast import handle_broadcast_menu
-             await handle_broadcast_menu(message, session, **data)
-             return
+            from bot.handlers.admin.broadcast import handle_broadcast_menu
+            await handle_broadcast_menu(message, session, **data)
+            return
         elif redirect_message_text == "👥 Управление пользователями":
-             await handle_admin_users_menu(message, session, **data)
-             return
+            await handle_admin_users_menu(message, session, **data)
+            return
         elif redirect_message_text == "📊 Статистика":
-             await handle_admin_stats(message, session, **data)
-             return
+            await handle_admin_stats(message, session, **data)
+            return
         elif redirect_message_text == "🔑 Восстановление пароля":
-             from bot.handlers.admin.finpass_recovery import show_recovery_requests
-             await show_recovery_requests(message, session, state, **data)
-             return
+            from bot.handlers.admin.finpass_recovery import show_recovery_requests
+            await show_recovery_requests(message, session, state, **data)
+            return
         elif redirect_message_text and "Финансовая" in redirect_message_text:
-             from bot.handlers.admin.financials import show_financial_list
-             await show_financial_list(message, session, state, **data)
-             return
+            from bot.handlers.admin.financials import show_financial_list
+            await show_financial_list(message, session, state, **data)
+            return
         elif redirect_message_text == "👑 Админ-панель":
-             # Just continue to show admin panel below
-             pass
-    
-    await state.set_state(None)  # Clear state
+            # Just continue to show admin panel below
+            pass
+
+    await state.clear()  # Clear state
 
     logger.info(
         f"Admin {telegram_id} authenticated successfully, "
@@ -237,7 +241,6 @@ async def cmd_admin_panel(
         return
 
     user: User | None = data.get("user")
-    from app.repositories.blacklist_repository import BlacklistRepository
     blacklist_repo = BlacklistRepository(session)
     blacklist_entry = None
     if user:
@@ -308,17 +311,6 @@ async def handle_admin_panel_button(
         parse_mode="Markdown",
         reply_markup=get_admin_keyboard_from_data(data),
     )
-    # Get admin and role flags for keyboard
-    admin, _ = await get_admin_and_super_status(session, telegram_id, data)
-
-    await message.answer(
-        text,
-        parse_mode="Markdown",
-        reply_markup=get_admin_keyboard_from_data(data),
-    )
-
-
-from bot.utils.admin_utils import clear_state_preserve_admin_token
 
 
 @router.message(F.text == "◀️ Главное меню")

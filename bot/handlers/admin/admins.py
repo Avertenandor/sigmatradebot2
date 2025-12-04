@@ -285,14 +285,18 @@ async def handle_admin_role_selection(
         reply_markup=admin_management_keyboard(),
     )
 
-    # Send master key to new admin via Telegram
+    # Send master key to new admin via Telegram (only show partial key for security)
     try:
         bot = message.bot
+        # Show only first 8 and last 4 characters for security
+        masked_key = f"{master_key[:8]}...{master_key[-4:]}"
+
         master_key_message = (
             "🔐 **Ваш мастер-ключ для доступа к админ-панели**\n\n"
-            f"Мастер-ключ: `{master_key}`\n\n"
+            f"Мастер-ключ (частично скрыт): `{masked_key}`\n\n"
             "⚠️ **ВАЖНО:**\n"
-            "• Сохраните этот ключ в безопасном месте\n"
+            "• Полный ключ был отправлен создавшему вас администратору\n"
+            "• Сохраните ключ в безопасном месте\n"
             "• Не передавайте его третьим лицам\n"
             "• Используйте его для входа в админ-панель\n"
             "• При первом входе введите `/admin` и затем мастер-ключ\n\n"
@@ -306,17 +310,28 @@ async def handle_admin_role_selection(
         )
 
         logger.info(
-            f"Master key sent to new admin {new_admin.id} "
+            f"Master key notification sent to new admin {new_admin.id} "
             f"(telegram_id={telegram_id})"
         )
+
+        # Send full key to the creating admin only
+        await message.answer(
+            f"🔐 **Полный мастер-ключ для нового админа**\n\n"
+            f"Мастер-ключ: `{master_key}`\n\n"
+            f"⚠️ Передайте этот ключ администратору {telegram_id} лично.",
+            parse_mode="Markdown",
+        )
+
     except Exception as e:
         logger.error(
             f"Failed to send master key to new admin {new_admin.id}: {e}"
         )
-        # Still log the master key for manual sending
-        logger.info(
-            f"Master key for new admin {new_admin.id} "
-            f"(telegram_id={telegram_id}): {master_key}"
+        # Still show full key to creating admin for manual sending
+        await message.answer(
+            f"⚠️ **Не удалось отправить уведомление новому админу**\n\n"
+            f"Мастер-ключ: `{master_key}`\n\n"
+            f"Передайте этот ключ администратору {telegram_id} лично.",
+            parse_mode="Markdown",
         )
 
 
@@ -808,10 +823,29 @@ async def handle_emergency_block_admin_telegram_id(
         )
 
     except Exception as e:
-        logger.error(f"Error in emergency block: {e}")
-        await session.rollback()
-        await message.answer(
-            f"❌ Ошибка при экстренной блокировке: {e}"
+        logger.error(
+            f"Error in emergency block for admin {admin_to_block.id} "
+            f"(telegram_id={telegram_id}): {e}",
+            exc_info=True
         )
+        await session.rollback()
         await clear_state_preserve_admin_token(state)
+
+        # Log failed attempt
+        from app.utils.security_logging import log_security_event
+        log_security_event(
+            "EMERGENCY: Admin termination failed",
+            {
+                "admin_id": admin.id,
+                "target_telegram_id": telegram_id,
+                "target_admin_id": admin_to_block.id,
+                "error": str(e),
+            }
+        )
+
+        await message.answer(
+            f"❌ Ошибка при экстренной блокировке: {str(e)}\n\n"
+            "Операция была отменена. Попробуйте снова или обратитесь к разработчику.",
+            reply_markup=admin_management_keyboard(),
+        )
 

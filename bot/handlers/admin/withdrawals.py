@@ -320,26 +320,33 @@ async def _show_confirmation(
     action: str,
 ) -> None:
     """Show confirmation dialog."""
-    fsm_data = await state.get_data()
-    withdrawal_id = fsm_data.get("withdrawal_id")
-    
-    if not withdrawal_id:
-        await message.answer("❌ Ошибка: ID заявки не найден.")
-        await handle_pending_withdrawals(message, session, state)
-        return
+    try:
+        fsm_data = await state.get_data()
+        withdrawal_id = fsm_data.get("withdrawal_id")
 
-    action_text = "ОДОБРИТЬ" if action == "approve" else "ОТКЛОНИТЬ"
-    action_emoji = "✅" if action == "approve" else "❌"
-    
-    await state.set_state(AdminStates.confirming_withdrawal_action)
-    
-    await message.answer(
-        f"{action_emoji} **Подтверждение: {action_text}**\n\n"
-        f"📝 Заявка: #{withdrawal_id}\n\n"
-        f"Вы уверены, что хотите **{action_text.lower()}** эту заявку?",
-        parse_mode="Markdown",
-        reply_markup=withdrawal_confirm_keyboard(withdrawal_id, action),
-    )
+        if not withdrawal_id:
+            await message.answer("❌ Ошибка: ID заявки не найден.")
+            await handle_pending_withdrawals(message, session, state)
+            return
+
+        action_text = "ОДОБРИТЬ" if action == "approve" else "ОТКЛОНИТЬ"
+        action_emoji = "✅" if action == "approve" else "❌"
+
+        await state.set_state(AdminStates.confirming_withdrawal_action)
+
+        await message.answer(
+            f"{action_emoji} **Подтверждение: {action_text}**\n\n"
+            f"📝 Заявка: #{withdrawal_id}\n\n"
+            f"Вы уверены, что хотите **{action_text.lower()}** эту заявку?",
+            parse_mode="Markdown",
+            reply_markup=withdrawal_confirm_keyboard(withdrawal_id, action),
+        )
+    except Exception as e:
+        logger.error(f"Error showing withdrawal confirmation: {e}")
+        await message.answer(
+            "❌ Ошибка при отображении подтверждения.",
+            reply_markup=admin_withdrawals_keyboard(),
+        )
 
 
 @router.message(
@@ -372,17 +379,8 @@ async def handle_confirm_withdrawal_action(
     admin: Admin | None = data.get("admin")
 
     try:
-        withdrawal = await withdrawal_service.get_withdrawal_by_id(withdrawal_id)
-
-        if not withdrawal:
-            await message.answer(
-                f"❌ Заявка #{withdrawal_id} не найдена.",
-                reply_markup=admin_withdrawals_keyboard(),
-            )
-            return
-
+        # Check maintenance mode first (before any operations)
         if action == "approve":
-            # Check maintenance mode
             from app.config.settings import settings
 
             if settings.blockchain_maintenance_mode:
@@ -394,6 +392,16 @@ async def handle_confirm_withdrawal_action(
                 )
                 return
 
+        withdrawal = await withdrawal_service.get_withdrawal_by_id(withdrawal_id)
+
+        if not withdrawal:
+            await message.answer(
+                f"❌ Заявка #{withdrawal_id} не найдена.",
+                reply_markup=admin_withdrawals_keyboard(),
+            )
+            return
+
+        if action == "approve":
             # Check dual control
             withdrawal_amount = float(withdrawal.amount)
             requires_dual_control = (

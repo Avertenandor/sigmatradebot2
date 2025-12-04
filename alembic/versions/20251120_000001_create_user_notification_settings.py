@@ -1,8 +1,8 @@
 """create user_notification_settings
 
-Revision ID: 20250119_000001
+Revision ID: 20251120_000001
 Revises: d1890f796453
-Create Date: 2025-01-19 00:00:01.000000
+Create Date: 2025-11-20 00:00:01.000000
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '20250119_000001'
+revision: str = '20251120_000001'
 down_revision: Union[str, None] = 'd1890f796453'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -34,7 +34,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint('user_id')
     )
-    
+
     # Create index on user_id
     op.create_index(
         'ix_user_notification_settings_user_id',
@@ -47,7 +47,6 @@ def downgrade() -> None:
     """Downgrade database schema."""
     # Drop index
     op.drop_index('ix_user_notification_settings_user_id', table_name='user_notification_settings')
-    
+
     # Drop table
     op.drop_table('user_notification_settings')
-

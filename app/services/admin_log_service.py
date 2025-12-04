@@ -54,12 +54,26 @@ class AdminLogService:
             ip_address: IP address (optional)
         """
         try:
+            # Определение критичных действий, которые должны быть immutable
+            critical_actions = {
+                "ADMIN_CREATED",
+                "ADMIN_DELETED",
+                "USER_BLOCKED",
+                "USER_TERMINATED",
+                "WITHDRAWAL_APPROVED",
+                "WITHDRAWAL_REJECTED",
+            }
+
+            # Установить is_immutable=True для критичных действий
+            is_immutable = action_type in critical_actions
+
             await self.action_repo.create(
                 admin_id=admin_id,
                 action_type=action_type,
                 target_user_id=target_user_id,
                 details=details,
                 ip_address=ip_address,
+                is_immutable=is_immutable,
             )
             await self.session.commit()
 

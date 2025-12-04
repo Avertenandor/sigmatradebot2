@@ -1,7 +1,7 @@
 """add_guest_support_tickets
 
 Revision ID: 30a364b46ea7
-Revises: 20250119_000001
+Revises: d1890f796453
 Create Date: 2025-11-19 14:42:48.564513
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '30a364b46ea7'
-down_revision: Union[str, None] = '20250119_000001'
+down_revision: Union[str, None] = 'd1890f796453'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

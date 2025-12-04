@@ -7,7 +7,7 @@ Represents user support tickets with admin assignment.
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -42,6 +42,9 @@ class SupportTicket(Base):
     """
 
     __tablename__ = "support_tickets"
+    __table_args__ = (
+        Index('ix_support_ticket_user_status', 'user_id', 'status'),
+    )
 
     # Primary key
     id: Mapped[int] = mapped_column(

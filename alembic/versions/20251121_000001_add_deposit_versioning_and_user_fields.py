@@ -1,8 +1,8 @@
 """add deposit versioning and user fields
 
-Revision ID: 20250120_000001
+Revision ID: 20251121_000001
 Revises: 20251120_072315
-Create Date: 2025-01-20 00:00:01.000000
+Create Date: 2025-11-21 00:00:01.000000
 
 R17-1, R17-2: Deposit level versioning
 R8-2: User bot_blocked tracking
@@ -15,7 +15,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = "20250120_000001"
+revision: str = "20251121_000001"
 down_revision: Union[str, None] = "20251120_072315"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -141,4 +141,3 @@ def downgrade() -> None:
 
     # Drop table
     op.drop_table("deposit_level_versions")
-

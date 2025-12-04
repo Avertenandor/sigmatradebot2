@@ -11,6 +11,57 @@ from typing import Any
 
 from loguru import logger
 
+# Lua script for atomic rate limit check
+OPERATION_LIMIT_SCRIPT = """
+local key = KEYS[1]
+local limit = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local current = redis.call('INCR', key)
+if current == 1 then
+    redis.call('EXPIRE', key, window)
+end
+return current <= limit and 1 or 0
+"""
+
+# Lua script for dual rate limit check (daily + hourly)
+WITHDRAWAL_LIMIT_SCRIPT = """
+local daily_key = KEYS[1]
+local hourly_key = KEYS[2]
+local daily_limit = tonumber(ARGV[1])
+local hourly_limit = tonumber(ARGV[2])
+local daily_window = tonumber(ARGV[3])
+local hourly_window = tonumber(ARGV[4])
+
+-- Increment daily counter
+local daily_count = redis.call('INCR', daily_key)
+if daily_count == 1 then
+    redis.call('EXPIRE', daily_key, daily_window)
+end
+
+-- Check daily limit
+if daily_count > daily_limit then
+    -- Decrement back since we exceeded
+    redis.call('DECR', daily_key)
+    return -1  -- Daily limit exceeded
+end
+
+-- Increment hourly counter
+local hourly_count = redis.call('INCR', hourly_key)
+if hourly_count == 1 then
+    redis.call('EXPIRE', hourly_key, hourly_window)
+end
+
+-- Check hourly limit
+if hourly_count > hourly_limit then
+    -- Decrement both back since we exceeded
+    redis.call('DECR', daily_key)
+    redis.call('DECR', hourly_key)
+    return -2  -- Hourly limit exceeded
+end
+
+return 1  -- Success
+"""
+
 
 class OperationRateLimiter:
     """
@@ -85,45 +136,44 @@ class OperationRateLimiter:
             Tuple of (allowed, error_message)
         """
         if not self.redis_client:
+            logger.warning("Redis unavailable, allowing withdrawal without rate limit check")
             return True, None  # No Redis, allow
 
         try:
-            # Check daily limit (20 per day)
             daily_key = f"op_limit:withdraw:day:{telegram_id}"
-            daily_count_str = await self.redis_client.get(daily_key)
-            daily_count = int(daily_count_str) if daily_count_str else 0
+            hourly_key = f"op_limit:withdraw:hour:{telegram_id}"
 
-            if daily_count >= 20:
+            # Use Lua script for atomic check-and-increment of both limits
+            # Returns: 1 = success, -1 = daily exceeded, -2 = hourly exceeded
+            result = await self.redis_client.eval(
+                WITHDRAWAL_LIMIT_SCRIPT,
+                2,  # Number of keys
+                daily_key,
+                hourly_key,
+                20,  # Daily limit
+                10,  # Hourly limit
+                86400,  # Daily window (24 hours)
+                3600,  # Hourly window (1 hour)
+            )
+
+            if result == -1:
                 return (
                     False,
                     "Превышен дневной лимит заявок на вывод (20/день). "
                     "Попробуйте завтра.",
                 )
 
-            # Check hourly limit (10 per hour)
-            hourly_key = f"op_limit:withdraw:hour:{telegram_id}"
-            hourly_count_str = await self.redis_client.get(hourly_key)
-            hourly_count = int(hourly_count_str) if hourly_count_str else 0
-
-            if hourly_count >= 10:
+            if result == -2:
                 return (
                     False,
                     "Превышен часовой лимит заявок на вывод (10/час). "
                     "Попробуйте позже.",
                 )
 
-            # Increment counters
-            await self.redis_client.setex(
-                daily_key, 86400, str(daily_count + 1)
-            )  # 24 hours
-            await self.redis_client.setex(
-                hourly_key, 3600, str(hourly_count + 1)
-            )  # 1 hour
-
             return True, None
 
         except Exception as e:
-            logger.error(f"Error checking withdrawal limit: {e}")
+            logger.warning(f"Redis error checking withdrawal limit: {e}")
             # Fail open - allow on error
             return True, None
 
@@ -149,17 +199,24 @@ class OperationRateLimiter:
             Tuple of (allowed, error_message)
         """
         if not self.redis_client:
+            logger.warning(f"Redis unavailable, allowing {operation} operation without rate limit check")
             return True, None  # No Redis, allow
 
         try:
             key = f"op_limit:{operation}:{telegram_id}"
 
-            # Get current count
-            count_str = await self.redis_client.get(key)
-            count = int(count_str) if count_str else 0
+            # Use Lua script for atomic check-and-increment
+            # Returns 1 if allowed, 0 if limit exceeded
+            result = await self.redis_client.eval(
+                OPERATION_LIMIT_SCRIPT,
+                1,  # Number of keys
+                key,
+                max_attempts,
+                window_seconds,
+            )
 
-            # Check limit
-            if count >= max_attempts:
+            if result == 0:
+                # Limit exceeded
                 minutes = window_seconds // 60
                 return (
                     False,
@@ -168,15 +225,10 @@ class OperationRateLimiter:
                     f"Попробуйте позже.",
                 )
 
-            # Increment counter
-            await self.redis_client.setex(
-                key, window_seconds, str(count + 1)
-            )
-
             return True, None
 
         except Exception as e:
-            logger.error(f"Error checking {operation} limit: {e}")
+            logger.warning(f"Redis error checking {operation} limit: {e}")
             # Fail open - allow on error
             return True, None
 

@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DECIMAL, DateTime, ForeignKey, Integer
+from sqlalchemy import DECIMAL, CheckConstraint, DateTime, ForeignKey, Index, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -21,21 +21,28 @@ class Referral(Base):
     """Referral model - multi-level referral relationships."""
 
     __tablename__ = "referrals"
+    __table_args__ = (
+        Index('ix_referral_referrer_level', 'referrer_id', 'level'),
+        CheckConstraint(
+            'level >= 1 AND level <= 3',
+            name='check_referral_level_range'
+        ),
+    )
 
     # Primary key
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
 
     # Referrer (who invited)
-    referrer_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
+    referrer_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
         index=True
     )
 
     # Referral (who was invited)
-    referral_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
+    referral_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
         index=True
     )
 

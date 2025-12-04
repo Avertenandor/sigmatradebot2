@@ -141,14 +141,14 @@ async def process_blacklist_identifier(
     wallet_address = None
 
     if identifier.startswith("0x") and len(identifier) == 42:
-        # Validate BSC address format
+        # Validate BSC address format with full checksum validation
         from app.utils.validation import validate_bsc_address
-        if validate_bsc_address(identifier, checksum=False):
-            wallet_address = identifier.lower()
+        if validate_bsc_address(identifier, checksum=True):
+            wallet_address = identifier  # Keep original case for checksum
         else:
             await message.answer(
                 "❌ Неверный формат BSC адреса! "
-                "Адрес должен начинаться с '0x' и содержать 42 символа.",
+                "Адрес должен начинаться с '0x', содержать 42 символа и иметь правильную контрольную сумму.",
                 reply_markup=cancel_keyboard(),
             )
             return
@@ -227,8 +227,9 @@ async def process_blacklist_reason(
         admin = await admin_repo.get_by(telegram_id=message.from_user.id)
         if admin:
             admin_id = admin.id
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Failed to get admin ID for blacklist entry: {e}")
+        # Continue without admin_id (will be None)
 
     blacklist_service = BlacklistService(session)
 

@@ -98,19 +98,20 @@ class IncomingDepositService:
             try:
                 # Create and Confirm Deposit
                 # Use create_deposit from service which handles locks and logic
+                # tx_hash ensures idempotency - duplicate calls will be caught by unique constraint
                 deposit = await self.deposit_service.create_deposit(
                     user_id=user.id,
                     level=level,
                     amount=amount,
-                    tx_hash=tx_hash
+                    tx_hash=tx_hash  # Idempotency key
                 )
-                
+
                 # Manually update block number and wallet address if not set by create
                 deposit.block_number = block_number
                 deposit.wallet_address = from_address
                 await self.session.commit()
 
-                # Confirm
+                # Confirm - idempotent operation, safe to call multiple times
                 await self.deposit_service.confirm_deposit(deposit.id, block_number)
                 
                 # Notify User

@@ -38,8 +38,42 @@ async def _start_finpass_recovery_flow(
         **data: Handler data
     """
     from bot.keyboards.reply import finpass_recovery_keyboard, main_menu_reply_keyboard
-    
+    from datetime import datetime, timedelta
+    from sqlalchemy import select, func
+    from app.models.financial_password_recovery import FinancialPasswordRecovery
+
     recovery_service = FinpassRecoveryService(session)
+
+    # Rate limit: check how many requests created in last 24 hours
+    since = datetime.utcnow() - timedelta(hours=24)
+    stmt = (
+        select(func.count(FinancialPasswordRecovery.id))
+        .where(FinancialPasswordRecovery.user_id == user.id)
+        .where(FinancialPasswordRecovery.created_at >= since)
+    )
+    result = await session.execute(stmt)
+    recent_count = result.scalar_one()
+
+    if recent_count >= 3:
+        text = (
+            "⚠️ **Превышен лимит запросов**\n\n"
+            "Вы можете создать не более 3 запросов на восстановление пароля за 24 часа.\n\n"
+            "Попробуйте позже или обратитесь в поддержку."
+        )
+
+        is_admin = data.get("is_admin", False)
+        from app.repositories.blacklist_repository import BlacklistRepository
+        blacklist_repo = BlacklistRepository(session)
+        blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
+
+        await message.answer(
+            text,
+            parse_mode="Markdown",
+            reply_markup=main_menu_reply_keyboard(
+                user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
+            ),
+        )
+        return
 
     # Check if already has pending request
     pending = await recovery_service.get_pending_by_user(user.id)
@@ -165,8 +199,8 @@ async def process_recovery_reason(
             from app.repositories.blacklist_repository import BlacklistRepository
             blacklist_repo = BlacklistRepository(session)
             blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Error fetching blacklist entry: {e}", extra={"user_id": user.id})
         await message.answer(
             "❌ Восстановление пароля отменено.",
             reply_markup=main_menu_reply_keyboard(
@@ -182,6 +216,13 @@ async def process_recovery_reason(
             "❌ Причина слишком короткая!\n\n"
             "Пожалуйста, опишите ситуацию подробнее "
             "(минимум 10 символов)."
+        )
+        return
+
+    if len(reason) > 1000:
+        await message.answer(
+            "❌ Причина слишком длинная!\n\n"
+            "Пожалуйста, сократите описание (максимум 1000 символов)."
         )
         return
 
@@ -240,8 +281,8 @@ async def process_recovery_confirmation(
             from app.repositories.blacklist_repository import BlacklistRepository
             blacklist_repo = BlacklistRepository(session)
             blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Error fetching blacklist entry: {e}", extra={"user_id": user.id})
         await message.answer(
             "❌ Восстановление пароля отменено.",
             reply_markup=main_menu_reply_keyboard(

@@ -51,6 +51,9 @@ def upgrade():
 
 
 def downgrade():
+    # WARNING: This downgrade will permanently delete all referral_code data.
+    # All referral codes and their relationships will be lost.
+    # Make sure to backup the data before running this downgrade if you need to preserve it.
     op.drop_index(op.f('ix_users_referral_code'), table_name='users')
     op.drop_column('users', 'referral_code')
 

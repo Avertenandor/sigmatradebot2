@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
     DECIMAL,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Integer,
@@ -37,6 +38,12 @@ class DepositLevelVersion(Base):
     """
 
     __tablename__ = "deposit_level_versions"
+    __table_args__ = (
+        CheckConstraint(
+            'level_number >= 1 AND level_number <= 5',
+            name='check_deposit_level_number_range'
+        ),
+    )
 
     # Primary key
     id: Mapped[int] = mapped_column(
@@ -50,10 +57,10 @@ class DepositLevelVersion(Base):
 
     # Deposit conditions
     amount: Mapped[Decimal] = mapped_column(
-        DECIMAL(10, 2), nullable=False
+        DECIMAL(18, 8), nullable=False
     )
     roi_percent: Mapped[Decimal] = mapped_column(
-        DECIMAL(5, 2), nullable=False
+        DECIMAL(18, 8), nullable=False
     )
     roi_cap_percent: Mapped[int] = mapped_column(
         Integer, nullable=False

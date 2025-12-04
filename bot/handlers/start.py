@@ -151,8 +151,9 @@ async def cmd_start(
             balance_str = '0'
 
         # Escape username for Markdown to prevent TelegramBadRequest
+        from bot.utils.text_utils import escape_markdown
         raw_username = user.username or _('common.user')
-        safe_username = raw_username.replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")
+        safe_username = escape_markdown(raw_username)
 
         welcome_text = (
             f"{_('common.welcome_back', username=safe_username)}\n\n"
@@ -757,7 +758,7 @@ async def process_password_confirmation(
         try:
             user = await user_service.register_user(
                 telegram_id=message.from_user.id,
-                username=message.from_user.username,
+                username=message.from_user.username if message.from_user.username else None,
                 wallet_address=wallet_address,
                 financial_password=hashed_password,
                 referrer_telegram_id=referrer_telegram_id,
@@ -795,7 +796,7 @@ async def process_password_confirmation(
                     user_service = UserService(session)
                     user = await user_service.register_user(
                         telegram_id=message.from_user.id,
-                        username=message.from_user.username,
+                        username=message.from_user.username if message.from_user.username else None,
                         wallet_address=wallet_address,
                         financial_password=hashed_password,
                         referrer_telegram_id=referrer_telegram_id,
