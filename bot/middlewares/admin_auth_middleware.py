@@ -180,6 +180,7 @@ class AdminAuthMiddleware(BaseMiddleware):
         data["admin_session_token"] = session_token
         data["is_super_admin"] = admin_obj.is_super_admin
         data["is_extended_admin"] = admin_obj.is_extended_admin
+        data["can_manage_wallets"] = admin_obj.can_manage_wallets
 
         # Note: validate_session already updates last_activity
         # So we don't need to update it again here

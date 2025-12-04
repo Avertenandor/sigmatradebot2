@@ -752,17 +752,23 @@ async def handle_admin_wallet_menu(
     **data: Any,
 ) -> None:
     """Handle wallet management menu from admin panel."""
-    from app.config.settings import settings
-    
     is_admin = data.get("is_admin", False)
     if not is_admin:
         await message.answer("❌ Эта функция доступна только администраторам")
         return
     
-    # Проверка что пользователь - super admin
-    admin_ids = settings.get_admin_ids()
-    if not admin_ids or message.from_user.id != admin_ids[0]:
-        await message.answer("❌ Доступ запрещён")
+    # Check permission using role-based flag
+    can_manage = data.get("can_manage_wallets", False)
+    
+    # Fallback to legacy check if flag missing (e.g. if middleware issue)
+    if not can_manage:
+        from app.config.settings import settings
+        admin_ids = settings.get_admin_ids()
+        if admin_ids and message.from_user.id == admin_ids[0]:
+            can_manage = True
+            
+    if not can_manage:
+        await message.answer("❌ Доступ запрещён (недостаточно прав)")
         return
     
     # Redirect to wallet dashboard
