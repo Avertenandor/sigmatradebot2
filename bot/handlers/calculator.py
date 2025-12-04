@@ -168,8 +168,12 @@ async def show_calculator(
         )
         return
 
-    # Calculate average ROI
-    avg_roi = (corridor["min"] + corridor["max"]) / 2
+    # Calculate daily ROI (accruals per day × ROI per accrual)
+    period = corridor["period_hours"]
+    accruals_per_day = Decimal(24) / Decimal(period)
+    daily_min = corridor["min"] * accruals_per_day
+    daily_max = corridor["max"] * accruals_per_day
+    daily_avg = (daily_min + daily_max) / 2
 
     # Build levels preview
     levels_preview = ""
@@ -185,9 +189,9 @@ async def show_calculator(
 ━━━━━━━━━━━━━━━━━━━━━━━
 
 📈 *Текущие условия:*
-• Доходность: *{format_percent(corridor['min'])}—{format_percent(corridor['max'])}%* в день
-• Средняя: ~*{format_percent(avg_roi)}%* в день
-• Начисления: каждые *{corridor['period_hours']}* часов
+• Начисления: каждые *{period}ч* ({int(accruals_per_day)}× в день)
+• За начисление: *{format_percent(corridor['min'])}—{format_percent(corridor['max'])}%*
+• В день: *{format_percent(daily_min)}—{format_percent(daily_max)}%* (~{format_percent(daily_avg)}%)
 
 {levels_preview}
 💎 *Реферальная программа:*
@@ -237,12 +241,14 @@ async def show_comparison(
         await message.answer("❌ Уровни не найдены.")
         return
 
-    # Get average ROI from corridor
-    avg_roi = Decimal("2.0")
-    if corridor_data:
-        min_roi = Decimal(corridor_data.get("min", "1.0"))
-        max_roi = Decimal(corridor_data.get("max", "3.0"))
-        avg_roi = (min_roi + max_roi) / 2
+    # Get ROI from corridor (per accrual, not per day!)
+    min_roi = Decimal(corridor_data.get("min", "1.0"))
+    max_roi = Decimal(corridor_data.get("max", "3.0"))
+    period = int(corridor_data.get("period_hours", 6))
+    
+    # Calculate DAILY ROI
+    accruals_per_day = Decimal(24) / Decimal(period)
+    daily_roi_avg = (min_roi + max_roi) / 2 * accruals_per_day
 
     text = "📊 *СРАВНЕНИЕ УРОВНЕЙ*\n"
     text += "━━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -255,8 +261,8 @@ async def show_comparison(
 
         status = "✅ ОТКРЫТ" if is_active else "🔒 СКОРО"
 
-        # Calculate with average ROI
-        daily = amount * avg_roi / Decimal("100")
+        # Calculate with daily ROI
+        daily = amount * daily_roi_avg / Decimal("100")
         monthly = daily * 30
 
         # Referral bonus
@@ -266,7 +272,7 @@ async def show_comparison(
         text += f"*Level {lvl}* — {status}\n"
         text += f"💵 Депозит: *{format_money(amount)} USDT*\n\n"
 
-        text += f"📈 *Доход (~{format_percent(avg_roi)}%/день):*\n"
+        text += f"📈 *Доход (~{format_percent(daily_roi_avg)}%/день):*\n"
         text += f"├ День: *+{format_money(daily)} USDT*\n"
         text += f"└ Месяц: *+{format_money(monthly)} USDT*\n"
 
@@ -323,16 +329,22 @@ async def show_level_details(
     amount = Decimal(info["amount"])
     cap = info["roi_cap"]
 
-    # Get ROI corridor
-    min_roi = Decimal(corridor_data.get("min", "1.0"))
-    max_roi = Decimal(corridor_data.get("max", "3.0"))
-    avg_roi = (min_roi + max_roi) / 2
+    # Get ROI corridor (per accrual!)
+    min_roi_acc = Decimal(corridor_data.get("min", "1.0"))
+    max_roi_acc = Decimal(corridor_data.get("max", "3.0"))
+    avg_roi_acc = (min_roi_acc + max_roi_acc) / 2
     period = int(corridor_data.get("period_hours", 6))
+    
+    # Calculate DAILY ROI
+    accruals_per_day = Decimal(24) / Decimal(period)
+    daily_roi_min = min_roi_acc * accruals_per_day
+    daily_roi_max = max_roi_acc * accruals_per_day
+    daily_roi_avg = avg_roi_acc * accruals_per_day
 
-    # Calculate projections
-    daily_min = amount * min_roi / Decimal("100")
-    daily_avg = amount * avg_roi / Decimal("100")
-    daily_max = amount * max_roi / Decimal("100")
+    # Calculate daily income projections
+    daily_min = amount * daily_roi_min / Decimal("100")
+    daily_avg = amount * daily_roi_avg / Decimal("100")
+    daily_max = amount * daily_roi_max / Decimal("100")
 
     weekly_avg = daily_avg * 7
     monthly_avg = daily_avg * 30
@@ -351,18 +363,19 @@ async def show_level_details(
 
 💵 *Депозит:* {format_money(amount)} USDT
 🎯 *ROI Cap:* {cap}% от депозита
-⏰ *Начисления:* каждые {period} часов
+⏰ *Начисления:* каждые {period}ч ({int(accruals_per_day)}× в день)
+📊 *За начисление:* {format_percent(min_roi_acc)}—{format_percent(max_roi_acc)}%
 
 {'─' * 28}
 📈 *ПРОГНОЗ ДОХОДНОСТИ*
 {'─' * 28}
 
-*Ежедневный доход:*
-├ 📉 Min: *+{format_money(daily_min)} USDT* ({format_percent(min_roi)}%)
-├ 📊 Avg: *+{format_money(daily_avg)} USDT* ({format_percent(avg_roi)}%)
-└ 📈 Max: *+{format_money(daily_max)} USDT* ({format_percent(max_roi)}%)
+*Ежедневный доход (×{int(accruals_per_day)} начислений):*
+├ 📉 Min: *+{format_money(daily_min)}* ({format_percent(daily_roi_min)}%)
+├ 📊 Avg: *+{format_money(daily_avg)}* ({format_percent(daily_roi_avg)}%)
+└ 📈 Max: *+{format_money(daily_max)}* ({format_percent(daily_roi_max)}%)
 
-*При среднем ROI ~{format_percent(avg_roi)}%/день:*
+*При среднем ROI ~{format_percent(daily_roi_avg)}%/день:*
 ┌────────────────────────
 │ 📅 7 дней:   *+{format_money(weekly_avg)}*
 │ 📅 30 дней:  *+{format_money(monthly_avg)}*
@@ -420,7 +433,9 @@ async def show_level_details(
     )
 
 
-@router.message(CalculatorStates.selecting_level, F.text.startswith("🔒 Level"))
+@router.message(
+    CalculatorStates.selecting_level, F.text.startswith("🔒 Level")
+)
 async def show_locked_level(
     message: Message,
     state: FSMContext,
@@ -447,12 +462,17 @@ async def show_locked_level(
     amount = Decimal(info["amount"])
     cap = info["roi_cap"]
 
-    # Get average ROI
-    min_roi = Decimal(corridor_data.get("min", "1.0"))
-    max_roi = Decimal(corridor_data.get("max", "3.0"))
-    avg_roi = (min_roi + max_roi) / 2
+    # Get ROI (per accrual!)
+    min_roi_acc = Decimal(corridor_data.get("min", "1.0"))
+    max_roi_acc = Decimal(corridor_data.get("max", "3.0"))
+    avg_roi_acc = (min_roi_acc + max_roi_acc) / 2
+    period = int(corridor_data.get("period_hours", 6))
+    
+    # Calculate DAILY ROI
+    accruals_per_day = Decimal(24) / Decimal(period)
+    daily_roi_avg = avg_roi_acc * accruals_per_day
 
-    daily = amount * avg_roi / Decimal("100")
+    daily = amount * daily_roi_avg / Decimal("100")
     monthly = daily * 30
     ref_bonus = amount * Decimal("0.03")
 
@@ -468,7 +488,7 @@ async def show_locked_level(
 💵 Депозит: *{format_money(amount)} USDT*
 🎯 ROI Cap: *{cap}%*
 
-*Потенциальный доход:*
+*Потенциальный доход (~{format_percent(daily_roi_avg)}%/день):*
 ├ День: *+{format_money(daily)}*
 └ Месяц: *+{format_money(monthly)}*
 {'─' * 28}
@@ -583,16 +603,23 @@ async def calculate_custom_amount(
         await message.answer("❌ Максимальная сумма: 1 000 000 USDT")
         return
 
-    # Get corridor
+    # Get corridor (per accrual!)
     corridor = await get_roi_corridor(session)
-    min_roi = corridor["min"]
-    max_roi = corridor["max"]
-    avg_roi = (min_roi + max_roi) / 2
+    min_roi_acc = corridor["min"]
+    max_roi_acc = corridor["max"]
+    avg_roi_acc = (min_roi_acc + max_roi_acc) / 2
+    period = corridor["period_hours"]
+    
+    # Calculate DAILY ROI
+    accruals_per_day = Decimal(24) / Decimal(period)
+    daily_roi_min = min_roi_acc * accruals_per_day
+    daily_roi_max = max_roi_acc * accruals_per_day
+    daily_roi_avg = avg_roi_acc * accruals_per_day
 
     # Calculations
-    daily_min = amount * min_roi / Decimal("100")
-    daily_avg = amount * avg_roi / Decimal("100")
-    daily_max = amount * max_roi / Decimal("100")
+    daily_min = amount * daily_roi_min / Decimal("100")
+    daily_avg = amount * daily_roi_avg / Decimal("100")
+    daily_max = amount * daily_roi_max / Decimal("100")
 
     weekly = daily_avg * 7
     monthly = daily_avg * 30
@@ -611,15 +638,19 @@ async def calculate_custom_amount(
 🧮 *РАСЧЁТ: {format_money(amount)} USDT*
 {'━' * 28}
 
+⏰ Начисления: каждые *{period}ч* (×{int(accruals_per_day)}/день)
+📊 За начисление: {format_percent(min_roi_acc)}—{format_percent(max_roi_acc)}%
+
+{'─' * 28}
 📈 *ВАША ДОХОДНОСТЬ*
 {'─' * 28}
 
-*Ежедневно:*
-├ 📉 Min ({format_percent(min_roi)}%): *+{format_money(daily_min)}*
-├ 📊 Avg ({format_percent(avg_roi)}%): *+{format_money(daily_avg)}*
-└ 📈 Max ({format_percent(max_roi)}%): *+{format_money(daily_max)}*
+*Ежедневно (×{int(accruals_per_day)} начислений):*
+├ 📉 Min: *+{format_money(daily_min)}* ({format_percent(daily_roi_min)}%)
+├ 📊 Avg: *+{format_money(daily_avg)}* ({format_percent(daily_roi_avg)}%)
+└ 📈 Max: *+{format_money(daily_max)}* ({format_percent(daily_roi_max)}%)
 
-*При среднем ROI:*
+*При среднем ROI ~{format_percent(daily_roi_avg)}%/день:*
 ┌────────────────────────
 │ 7 дней:   *+{format_money(weekly)}*
 │ 30 дней:  *+{format_money(monthly)}*
