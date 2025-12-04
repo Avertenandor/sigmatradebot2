@@ -22,7 +22,7 @@ class Admin(Base):
 
     Represents a bot administrator with:
     - Telegram account info
-    - Role-based permissions (admin, extended_admin, super_admin)
+    - Role-based permissions (admin, extended_admin, super_admin, moderator)
     - Master key for 2FA authentication
     - Self-referencing creator tracking
 
@@ -30,7 +30,7 @@ class Admin(Base):
         id: Primary key
         telegram_id: Unique Telegram admin ID
         username: Telegram username (optional)
-        role: Admin role (admin/extended_admin/super_admin)
+        role: Admin role (admin/extended_admin/super_admin/moderator)
         master_key: Hashed master key for authentication
         created_by: ID of admin who created this admin
         created_at: Creation timestamp
@@ -123,22 +123,29 @@ class Admin(Base):
     @property
     def is_extended_admin(self) -> bool:
         """Check if admin is extended admin or higher."""
-        return self.role in ("extended_admin", "super_admin")
+        return self.role in ("extended_admin", "super_admin", "moderator")
 
     @property
     def is_admin(self) -> bool:
         """Check if admin has at least basic admin role."""
-        return self.role in ("admin", "extended_admin", "super_admin")
+        return self.role in ("admin", "extended_admin", "super_admin", "moderator")
 
     @property
     def can_stage_wallet_changes(self) -> bool:
         """Check if can initiate wallet change requests."""
-        return self.is_extended_admin
+        # Moderator CANNOT stage wallet changes
+        return self.role in ("extended_admin", "super_admin")
 
     @property
     def can_approve_wallet_changes(self) -> bool:
         """Check if can approve wallet change requests."""
         return self.is_super_admin
+
+    @property
+    def can_manage_wallets(self) -> bool:
+        """Check if admin can manage system wallets."""
+        # Only super_admin can manage wallets
+        return self.role == "super_admin"
 
     @property
     def display_name(self) -> str:
@@ -152,6 +159,7 @@ class Admin(Base):
             "admin": "Admin",
             "extended_admin": "Extended Admin",
             "super_admin": "Super Admin",
+            "moderator": "Moderator",
         }
         return role_map.get(self.role, self.role)
 

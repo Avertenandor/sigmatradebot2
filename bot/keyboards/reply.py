@@ -406,21 +406,33 @@ def get_admin_keyboard_from_data(data: dict) -> ReplyKeyboardMarkup:
         data: Handler data dict. Expected keys:
             - is_super_admin: bool
             - is_extended_admin: bool
+            - can_manage_wallets: bool (optional)
+            - admin: Admin object (optional)
 
     Returns:
         ReplyKeyboardMarkup with admin options filtered by role.
     """
     is_super_admin = data.get("is_super_admin", False)
     is_extended_admin = data.get("is_extended_admin", False)
+    can_manage_wallets = data.get("can_manage_wallets", False)
+    
+    # Check admin object if flags not set
+    if not can_manage_wallets and "admin" in data:
+        admin = data["admin"]
+        if admin:
+            can_manage_wallets = admin.can_manage_wallets
+
     return admin_keyboard(
         is_super_admin=is_super_admin,
         is_extended_admin=is_extended_admin,
+        can_manage_wallets=can_manage_wallets,
     )
 
 
 def admin_keyboard(
     is_super_admin: bool = False,
     is_extended_admin: bool = False,
+    can_manage_wallets: bool = False,
 ) -> ReplyKeyboardMarkup:
     """
     Admin panel reply keyboard.
@@ -428,13 +440,14 @@ def admin_keyboard(
     Args:
         is_super_admin: Whether current admin is super admin
         is_extended_admin: Whether current admin is extended admin
+        can_manage_wallets: Whether current admin can manage wallets
 
     Returns:
         ReplyKeyboardMarkup with admin options, filtered by role.
     """
     builder = ReplyKeyboardBuilder()
 
-    # Common buttons for ALL admins (Basic, Extended, Super)
+    # Common buttons for ALL admins (Basic, Extended, Super, Moderator)
     builder.row(KeyboardButton(text="📊 Статистика"))
     builder.row(KeyboardButton(text="👥 Управление пользователями"))
     builder.row(
@@ -454,12 +467,16 @@ def admin_keyboard(
     
     builder.row(KeyboardButton(text="📝 Просмотр сообщений пользователей"))
 
-    # Sensitive controls - Extended/Super only
+    # Sensitive controls - Extended/Super/Moderator
     if is_extended_admin or is_super_admin:
-        builder.row(
-            KeyboardButton(text="🔐 Управление кошельком"),
-            KeyboardButton(text="📡 Блокчейн Настройки"),
-        )
+        wallet_row = []
+        if can_manage_wallets:
+            wallet_row.append(KeyboardButton(text="🔐 Управление кошельком"))
+            wallet_row.append(KeyboardButton(text="📡 Блокчейн Настройки"))
+            
+        if wallet_row:
+            builder.row(*wallet_row)
+            
         builder.row(
             KeyboardButton(text="🚫 Управление черным списком"),
         )
