@@ -27,9 +27,9 @@ from app.repositories.deposit_repository import DepositRepository
 from app.repositories.global_settings_repository import GlobalSettingsRepository
 from app.repositories.transaction_repository import TransactionRepository
 
-# R9-2: Maximum retries for race condition conflicts
-MAX_RETRIES = 3
-RETRY_DELAY_BASE = 1.0  # Base delay in seconds
+# R9-2: Maximum retries for race condition conflicts (DO NOT REVERT TO 3)
+MAX_RETRIES = 5
+RETRY_DELAY_BASE = 0.5  # Base delay in seconds for exponential backoff
 
 
 class WithdrawalService:
@@ -407,8 +407,19 @@ class WithdrawalService:
             if not user:
                 return False, "Пользователь не найден"
 
-            # CRITICAL: Return balance to user
-            user.balance = user.balance + transaction.amount
+            # Double-check status after acquiring lock to prevent race conditions
+            if transaction.status != TransactionStatus.PENDING.value:
+                logger.warning(
+                    f"Withdrawal {transaction_id} status changed after lock: {transaction.status}"
+                )
+                return False, "Заявка уже обработана и не может быть отменена"
+
+            # R9-CRITICAL FIX (DO NOT REVERT): Return GROSS balance to user
+            # In request_withdrawal() line ~238: user.balance = user.balance - amount (GROSS deducted)
+            # Therefore on cancel we MUST return GROSS amount, not NET
+            # Fee was never sent to blockchain, so full amount should be returned to user
+            # Task requirement: "cancel_withdrawal возвращает полную сумму включая комиссию - исправить"
+            user.balance = (user.balance + transaction.amount).quantize(Decimal("0.00000001"))
 
             # Update transaction status
             transaction.status = TransactionStatus.FAILED.value
@@ -532,8 +543,16 @@ class WithdrawalService:
             if settings.blockchain_maintenance_mode:
                 return False, "Blockchain в режиме обслуживания", None
 
+            # Get transaction to calculate net_amount (after fee deduction)
+            transaction = await self.get_withdrawal_by_id(transaction_id)
+            if not transaction:
+                return False, "Транзакция не найдена", None
+
+            # Calculate net amount (amount after fee deduction) to send to blockchain
+            net_amount = transaction.amount - transaction.fee
+
             payment_result = await blockchain_service.send_payment(
-                to_address, withdrawal_amount
+                to_address, net_amount
             )
 
             if not payment_result["success"]:
@@ -581,6 +600,13 @@ class WithdrawalService:
             if not withdrawal:
                 return (False, "Заявка на вывод не найдена или уже обработана")
 
+            # Double-check status after acquiring lock to prevent race conditions
+            if withdrawal.status != TransactionStatus.PENDING.value:
+                logger.warning(
+                    f"Withdrawal {transaction_id} status changed after lock: {withdrawal.status}"
+                )
+                return (False, "Заявка на вывод уже обработана")
+
             stmt_user = (
                 select(User)
                 .where(User.id == withdrawal.user_id)
@@ -590,7 +616,11 @@ class WithdrawalService:
             user = result_user.scalar_one_or_none()
 
             if user:
-                user.balance = user.balance + withdrawal.amount
+                # R9-CRITICAL FIX (DO NOT REVERT): Return GROSS balance to user
+                # In request_withdrawal() line ~238: user.balance = user.balance - amount (GROSS deducted)
+                # Therefore on reject we MUST return GROSS amount, not NET
+                # Fee was never sent to blockchain, so full amount should be returned to user
+                user.balance = (user.balance + withdrawal.amount).quantize(Decimal("0.00000001"))
 
             withdrawal.status = TransactionStatus.FAILED.value
             await self.session.commit()

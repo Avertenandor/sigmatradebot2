@@ -15,6 +15,7 @@ from loguru import logger
 
 from app.models.user import User
 from app.services.deposit_service import DepositService
+from bot.i18n.loader import get_translator, get_user_language
 from bot.keyboards.reply import deposit_keyboard, main_menu_reply_keyboard
 from bot.states.deposit import DepositStates
 from bot.utils.menu_buttons import is_menu_button
@@ -68,8 +69,16 @@ async def select_deposit_level(
         data: Additional data including session_factory and user
     """
     user: User | None = data.get("user")
+    session = data.get("session")
+
+    # R13-3: Get user language for i18n
+    _ = get_translator("ru")  # Default fallback
+    if user and session:
+        user_language = await get_user_language(session, user.id)
+        _ = get_translator(user_language)
+
     if not user:
-        await message.answer("❌ Ошибка: пользователь не найден")
+        await message.answer(_("errors.user_not_found"))
         return
     
     # Extract level from button text
@@ -87,9 +96,8 @@ async def select_deposit_level(
     
     if not session_factory:
         # Fallback to old session
-        session = data.get("session")
         if not session:
-            await message.answer("❌ Системная ошибка. Отправьте /start или обратитесь в поддержку.")
+            await message.answer(_("errors.system_error"))
             return
         validation_service = DepositValidationService(session)
         can_purchase, error_msg = await validation_service.can_purchase_level(
@@ -210,7 +218,7 @@ async def process_tx_hash(
 ) -> None:
     """
     Process transaction hash for deposit.
-    
+
     Uses session_factory for short transaction during deposit creation.
 
     Args:
@@ -219,8 +227,16 @@ async def process_tx_hash(
         data: Additional data including session_factory and user
     """
     user: User | None = data.get("user")
+    session = data.get("session")
+
+    # R13-3: Get user language for i18n
+    _ = get_translator("ru")  # Default fallback
+    if user and session:
+        user_language = await get_user_language(session, user.id)
+        _ = get_translator(user_language)
+
     if not user:
-        await message.answer("❌ Ошибка: пользователь не найден")
+        await message.answer(_("errors.user_not_found"))
         await state.clear()
         return
     
@@ -258,9 +274,8 @@ async def process_tx_hash(
     # Validate and create deposit with SHORT transaction
     if not session_factory:
         # Fallback to old session
-        session = data.get("session")
         if not session:
-            await message.answer("❌ Системная ошибка.")
+            await message.answer(_("errors.system_error"))
             await state.clear()
             return
 

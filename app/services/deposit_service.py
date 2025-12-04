@@ -141,11 +141,12 @@ class DepositService:
                     f"Попытка депозита {amount} USDT отклонена."
                 )
 
-            # Validate amount matches level version
-            if amount < level_version.amount:
+            # Validate amount matches level version exactly (prevent dust/overpayment attacks)
+            if amount != level_version.amount:
                 raise ValueError(
-                    f"Amount {amount} is less than required "
-                    f"{level_version.amount} for level {level}"
+                    f"Amount {amount} does not match required "
+                    f"{level_version.amount} for level {level}. "
+                    f"Exact amount required."
                 )
 
             # Validate level
@@ -159,7 +160,7 @@ class DepositService:
             try:
                 # R17-1: Calculate ROI cap from version (not settings)
                 roi_cap_percent = Decimal(str(level_version.roi_cap_percent))
-                roi_cap = amount * (roi_cap_percent / 100)
+                roi_cap = (amount * (roi_cap_percent / Decimal("100"))).quantize(Decimal("0.00000001"))
 
                 deposit = await self.deposit_repo.create(
                     user_id=user_id,
@@ -189,6 +190,7 @@ class DepositService:
 
         Processes referral rewards automatically after confirmation.
         Sets next_accrual_at based on global settings.
+        Uses pessimistic locking to prevent race conditions.
 
         Args:
             deposit_id: Deposit ID
@@ -199,65 +201,74 @@ class DepositService:
         """
         from datetime import UTC, datetime, timedelta
         from app.repositories.global_settings_repository import GlobalSettingsRepository
+        from sqlalchemy import select
 
         try:
+            # Acquire pessimistic lock on deposit to prevent concurrent modifications
+            stmt = select(Deposit).where(Deposit.id == deposit_id).with_for_update()
+            result = await self.session.execute(stmt)
+            deposit = result.scalar_one_or_none()
+
+            if not deposit:
+                logger.warning(f"Deposit {deposit_id} not found for confirmation")
+                return None
+
+            # Idempotency: Skip if already confirmed
+            if deposit.status == TransactionStatus.CONFIRMED.value:
+                logger.info(f"Deposit {deposit_id} already confirmed, skipping")
+                return deposit
+
             # R12-1: Calculate next_accrual_at based on settings
             settings_repo = GlobalSettingsRepository(self.session)
             global_settings = await settings_repo.get_settings()
-            
+
             roi_settings = global_settings.roi_settings or {}
             accrual_period_hours = int(roi_settings.get("REWARD_ACCRUAL_PERIOD_HOURS", 6))
-            
-            # Start cycle immediately or after period?
-            # "Установить next_accrual_at = datetime.now(UTC) ... чтобы запустить цикл"
-            # Usually accrual happens after period. But if we want "immediate" effect for new users, 
-            # we might set it to now + period. The previous fix set it to NOW because they were already waiting.
+
             # Standard logic: Accrue after X hours.
             now = datetime.now(UTC)
             next_accrual = now + timedelta(hours=accrual_period_hours)
 
-            deposit = await self.deposit_repo.update(
-                deposit_id,
-                status=TransactionStatus.CONFIRMED.value,
-                block_number=block_number,
-                confirmed_at=now,
-                next_accrual_at=next_accrual, # Set next accrual date
+            # Update deposit with confirmed status
+            deposit.status = TransactionStatus.CONFIRMED.value
+            deposit.block_number = block_number
+            deposit.confirmed_at = now
+            deposit.next_accrual_at = next_accrual
+            self.session.add(deposit)
+
+            await self.session.commit()
+            logger.info(
+                "Deposit confirmed", extra={"deposit_id": deposit_id}
             )
 
-            if deposit:
-                await self.session.commit()
+            # Process referral rewards after deposit confirmation
+            from app.services.referral_service import ReferralService
+
+            referral_service = ReferralService(self.session)
+            success, total_rewards, error = (
+                await referral_service.process_referral_rewards(
+                    user_id=deposit.user_id, deposit_amount=deposit.amount
+                )
+            )
+
+            if success:
                 logger.info(
-                    "Deposit confirmed", extra={"deposit_id": deposit_id}
+                    "Referral rewards processed",
+                    extra={
+                        "deposit_id": deposit_id,
+                        "user_id": deposit.user_id,
+                        "total_rewards": str(total_rewards),
+                    },
                 )
-
-                # Process referral rewards after deposit confirmation
-                from app.services.referral_service import ReferralService
-
-                referral_service = ReferralService(self.session)
-                success, total_rewards, error = (
-                    await referral_service.process_referral_rewards(
-                        user_id=deposit.user_id, deposit_amount=deposit.amount
-                    )
+            else:
+                logger.warning(
+                    "Failed to process referral rewards",
+                    extra={
+                        "deposit_id": deposit_id,
+                        "user_id": deposit.user_id,
+                        "error": error,
+                    },
                 )
-
-                if success:
-                    logger.info(
-                        "Referral rewards processed",
-                        extra={
-                            "deposit_id": deposit_id,
-                            "user_id": deposit.user_id,
-                            "total_rewards": str(total_rewards),
-                        },
-                    )
-                else:
-                    logger.warning(
-                        "Failed to process referral rewards",
-                        extra={
-                            "deposit_id": deposit_id,
-                            "user_id": deposit.user_id,
-                            "error": error,
-                        },
-                    )
 
             return deposit
 

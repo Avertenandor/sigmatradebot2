@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DECIMAL, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DECIMAL, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -28,6 +28,9 @@ class DepositCorridorHistory(Base):
     """
 
     __tablename__ = "deposit_corridor_history"
+    __table_args__ = (
+        Index('ix_corridor_level_effective', 'level', 'changed_at'),
+    )
 
     # Primary key
     id: Mapped[int] = mapped_column(

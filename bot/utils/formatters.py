@@ -17,7 +17,7 @@ def format_usdt(amount: Decimal | float | int) -> str:
         Formatted string (e.g., "123.45")
     """
     if isinstance(amount, Decimal):
-        return f"{float(amount):.2f}"
+        return f"{amount:.2f}"
     return f"{amount:.2f}"
 
 
@@ -78,16 +78,20 @@ def format_tx_hash_with_link(tx_hash: str | None) -> str:
 
 def escape_md(text: str | None) -> str:
     """
-    Escape special characters for Markdown V1.
-    
-    Escapes: _ * ` [
-    
+    Escape special characters for Markdown V2.
+
+    Escapes: _ * ` [ ] ( ) ~ > # + - = | { } . !
+
     Args:
         text: Input text
-        
+
     Returns:
         Escaped text safe for Markdown
     """
     if not text:
         return ""
-    return str(text).replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")
+    special_chars = ['_', '*', '`', '[', ']', '(', ')', '~', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    text_str = str(text)
+    for char in special_chars:
+        text_str = text_str.replace(char, f'\\{char}')
+    return text_str

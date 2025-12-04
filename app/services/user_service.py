@@ -438,11 +438,10 @@ class UserService:
         Returns:
             Balance dict with all statistics
         """
-        from app.models.enums import TransactionStatus, TransactionType
-        from app.repositories.deposit_repository import DepositRepository
-        from app.repositories.transaction_repository import (
-            TransactionRepository,
-        )
+        from app.models.deposit import Deposit
+        from app.models.enums import DepositStatus, TransactionStatus, TransactionType
+        from app.models.transaction import Transaction
+        from sqlalchemy import func
 
         user = await self.user_repo.get_by_id(user_id)
         if not user:
@@ -457,52 +456,75 @@ class UserService:
                 "total_earnings": Decimal("0.00"),
             }
 
-        # Get deposits total
-        deposit_repo = DepositRepository(self.session)
-        total_deposits = await deposit_repo.get_total_deposited(user_id)
+        # Single aggregated query for all transaction statistics
+        from sqlalchemy import case, select
 
-        # Get withdrawals total
-        transaction_repo = TransactionRepository(self.session)
-        withdrawals = await transaction_repo.get_by_user(
-            user_id=user_id,
-            type=TransactionType.WITHDRAWAL.value,
-            status=TransactionStatus.CONFIRMED.value,
-        )
-        total_withdrawals = (
-            sum(w.amount for w in withdrawals)
-            if withdrawals else Decimal("0.00")
+        stats_stmt = select(
+            # Total deposits
+            func.coalesce(
+                func.sum(
+                    case(
+                        (Deposit.status == DepositStatus.CONFIRMED.value, Deposit.amount),
+                        else_=0
+                    )
+                ),
+                0
+            ).label("total_deposits"),
+            # Total withdrawals (confirmed)
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            (Transaction.type == TransactionType.WITHDRAWAL.value) &
+                            (Transaction.status == TransactionStatus.CONFIRMED.value),
+                            Transaction.amount
+                        ),
+                        else_=0
+                    )
+                ),
+                0
+            ).label("total_withdrawals"),
+            # Pending withdrawals
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            (Transaction.type == TransactionType.WITHDRAWAL.value) &
+                            (Transaction.status == TransactionStatus.PENDING.value),
+                            Transaction.amount
+                        ),
+                        else_=0
+                    )
+                ),
+                0
+            ).label("pending_withdrawals"),
+            # Total earnings (deposit rewards + referral rewards)
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            (Transaction.type.in_([
+                                TransactionType.DEPOSIT_REWARD.value,
+                                TransactionType.REFERRAL_REWARD.value
+                            ])) &
+                            (Transaction.status == TransactionStatus.CONFIRMED.value),
+                            Transaction.amount
+                        ),
+                        else_=0
+                    )
+                ),
+                0
+            ).label("total_earnings"),
+        ).select_from(
+            Transaction
+        ).outerjoin(
+            Deposit, Deposit.user_id == user_id
+        ).where(
+            Transaction.user_id == user_id
         )
 
-        # Get pending withdrawals
-        pending_withdrawals_list = await transaction_repo.get_by_user(
-            user_id=user_id,
-            type=TransactionType.WITHDRAWAL.value,
-            status=TransactionStatus.PENDING.value,
-        )
-        pending_withdrawals = (
-            sum(w.amount for w in pending_withdrawals_list)
-            if pending_withdrawals_list else Decimal("0.00")
-        )
-
-        # Get earnings (deposit rewards + referral earnings)
-        earnings_transactions = await transaction_repo.get_by_user(
-            user_id=user_id,
-            type=TransactionType.DEPOSIT_REWARD.value,
-            status=TransactionStatus.CONFIRMED.value,
-        )
-        total_earnings = (
-            sum(e.amount for e in earnings_transactions)
-            if earnings_transactions else Decimal("0.00")
-        )
-
-        # Add referral earnings if any
-        referral_earnings = await transaction_repo.get_by_user(
-            user_id=user_id,
-            type=TransactionType.REFERRAL_REWARD.value,
-            status=TransactionStatus.CONFIRMED.value,
-        )
-        if referral_earnings:
-            total_earnings += sum(e.amount for e in referral_earnings)
+        result = await self.session.execute(stats_stmt)
+        stats = result.one()
 
         # Calculate total balance (available + pending earnings)
         available_balance = getattr(user, "balance", Decimal("0.00"))
@@ -514,10 +536,10 @@ class UserService:
             "total_balance": total_balance,
             "total_earned": getattr(user, "total_earned", Decimal("0.00")),
             "pending_earnings": pending_earnings,
-            "pending_withdrawals": pending_withdrawals,
-            "total_deposits": total_deposits,
-            "total_withdrawals": total_withdrawals,
-            "total_earnings": total_earnings,
+            "pending_withdrawals": stats.pending_withdrawals or Decimal("0.00"),
+            "total_deposits": stats.total_deposits or Decimal("0.00"),
+            "total_withdrawals": stats.total_withdrawals or Decimal("0.00"),
+            "total_earnings": stats.total_earnings or Decimal("0.00"),
         }
 
     def generate_referral_link(

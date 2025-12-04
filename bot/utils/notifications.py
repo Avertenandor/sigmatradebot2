@@ -4,7 +4,10 @@ Notification utilities.
 Helper functions for sending notifications.
 """
 
+import asyncio
+
 from aiogram import Bot
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from loguru import logger
 
 
@@ -30,5 +33,8 @@ async def notify_admins(
                 message,
                 parse_mode=parse_mode,
             )
+            await asyncio.sleep(0.05)  # 50ms delay between messages
+        except (TelegramBadRequest, TelegramForbiddenError) as e:
+            logger.warning(f"Failed to notify admin {admin_id}: {e}")
         except Exception as e:
-            logger.error(f"Failed to notify admin {admin_id}: {e}")
+            logger.error(f"Unexpected error notifying admin {admin_id}: {e}")

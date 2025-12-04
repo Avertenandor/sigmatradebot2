@@ -94,12 +94,12 @@ async def main() -> None:  # noqa: C901
             not settings.telegram_bot_token
             or "your_" in settings.telegram_bot_token.lower()
         ):
-            logger.error("TELEGRAM_BOT_TOKEN is not properly configured")
+            raise ValueError("TELEGRAM_BOT_TOKEN is required")
         if (
             not settings.database_url
             or "your_" in settings.database_url.lower()
         ):
-            logger.error("DATABASE_URL is not properly configured")
+            raise ValueError("DATABASE_URL is required")
         if (
             not settings.wallet_private_key
             or "your_" in settings.wallet_private_key.lower()

@@ -1,7 +1,7 @@
 """add admin is_blocked field
 
 Revision ID: 20250124_000001
-Revises: 20250120_000001
+Revises: 20251121_000001
 Create Date: 2025-01-24 00:00:01.000000
 
 R10-3: Add is_blocked field to Admin model for compromised admin protection.
@@ -14,7 +14,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = "20250124_000001"
-down_revision: Union[str, None] = "20250120_000001"
+down_revision: Union[str, None] = "20251121_000001"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

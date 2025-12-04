@@ -72,11 +72,23 @@ async def handle_wallet_address(
     """
     wallet_address = message.text.strip()
 
-    # Basic validation
+    # Full wallet validation
     if not wallet_address.startswith("0x") or len(wallet_address) != 42:
         await message.answer(
             "❌ Неверный формат адреса кошелька.\n\n"
             "Адрес должен начинаться с 0x и содержать 42 символа.\n"
+            "Пример: 0x1234567890123456789012345678901234567890\n\n"
+            "Попробуйте еще раз:"
+        )
+        return
+
+    # Validate hex characters
+    try:
+        int(wallet_address[2:], 16)
+    except ValueError:
+        await message.answer(
+            "❌ Неверный формат адреса кошелька.\n\n"
+            "Адрес должен содержать только hex символы (0-9, a-f).\n"
             "Пример: 0x1234567890123456789012345678901234567890\n\n"
             "Попробуйте еще раз:"
         )
@@ -109,6 +121,22 @@ async def handle_wallet_address(
 
     # Store wallet address in state
     await state.update_data(wallet_address=wallet_address, recovery_info=recovery_info)
+
+    # Atomic check: verify wallet is not linked to current telegram_id
+    from app.repositories.user_repository import UserRepository
+
+    user_repo = UserRepository(session)
+    current_telegram_id = message.from_user.id if message.from_user else None
+
+    if current_telegram_id:
+        existing_user = await user_repo.find_by_telegram_id(current_telegram_id)
+        if existing_user and existing_user.wallet_address.lower() == wallet_address.lower():
+            await message.answer(
+                "❌ Этот кошелек уже привязан к текущему Telegram аккаунту.\n\n"
+                "Восстановление не требуется."
+            )
+            await state.clear()
+            return
 
     # Generate message for signing
     import secrets
@@ -156,10 +184,25 @@ async def handle_signature(
     state_data = await state.get_data()
     wallet_address = state_data.get("wallet_address")
     recovery_code = state_data.get("recovery_code")
+    attempts = state_data.get("signature_attempts", 0)
 
     if not wallet_address or not recovery_code:
         await message.answer(
             "❌ Ошибка: данные сессии потеряны.\n\n"
+            "Начните процесс заново командой /recover_account"
+        )
+        await state.clear()
+        return
+
+    # Rate limit: max 5 attempts per session
+    if attempts >= 5:
+        logger.warning(
+            f"R16-3: Too many signature attempts: "
+            f"wallet={wallet_address}, "
+            f"telegram_id={message.from_user.id if message.from_user else None}"
+        )
+        await message.answer(
+            "❌ Превышен лимит попыток подписи (5 попыток).\n\n"
             "Начните процесс заново командой /recover_account"
         )
         await state.clear()
@@ -176,6 +219,8 @@ async def handle_signature(
     )
 
     if not is_valid or not user:
+        # Increment attempts counter
+        await state.update_data(signature_attempts=attempts + 1)
         logger.warning(
             f"R16-3: Wallet ownership verification failed: "
             f"wallet={wallet_address}, "
@@ -205,10 +250,13 @@ async def handle_signature(
         return
 
     # Check if this telegram_id is already linked to another account
-    from app.repositories.user_repository import UserRepository
+    # Use SELECT FOR UPDATE to prevent race conditions
+    from sqlalchemy import select
+    from app.models.user import User as UserModel
 
-    user_repo = UserRepository(session)
-    existing_user = await user_repo.find_by_telegram_id(new_telegram_id)
+    stmt = select(UserModel).where(UserModel.telegram_id == new_telegram_id).with_for_update()
+    result = await session.execute(stmt)
+    existing_user = result.scalar_one_or_none()
 
     if existing_user and existing_user.id != user.id:
         logger.warning(

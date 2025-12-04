@@ -116,7 +116,6 @@ NAVIGATION_BUTTONS = [
     "◀️ Главное меню",
     "👑 Админ-панель",
     "⏭ Пропустить",  # Registration skip button (may have leftover keyboard)
-    "⏭️ Пропустить",  # Same with FE0F variation selector
     "✅ Да, оставить контакты",  # Registration contacts button
     # Note: "📊 Статистика" is also in ADMIN_MENU_BUTTONS, but included here
     # for completeness as it's used in navigation contexts

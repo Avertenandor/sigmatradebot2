@@ -21,8 +21,8 @@ class DepositSettingsStates(StatesGroup):
     waiting_for_max_level = State()
 
 
-class WalletManagementStates(StatesGroup):
-    """States for wallet management."""
+class AdminWalletManagementStates(StatesGroup):
+    """States for admin wallet management."""
 
     waiting_for_wallet_type = State()
     waiting_for_new_address = State()

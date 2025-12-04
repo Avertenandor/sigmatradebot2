@@ -7,7 +7,7 @@ Manages referral chains, relationships, and reward processing.
 from decimal import Decimal
 
 from loguru import logger
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.referral import Referral
@@ -252,10 +252,13 @@ class ReferralService:
             if rate == Decimal("0"):
                 continue
 
-            reward_amount = deposit_amount * rate
+            reward_amount = (deposit_amount * rate).quantize(Decimal("0.00000001"))
 
-            # Fetch referrer to update balance
-            referrer = await self.user_repo.get_by_id(relationship.referrer_id)
+            # Fetch referrer with pessimistic lock to prevent balance race conditions
+            stmt = select(User).where(User.id == relationship.referrer_id).with_for_update()
+            result = await self.session.execute(stmt)
+            referrer = result.scalar_one_or_none()
+
             if not referrer:
                 logger.warning(
                     f"Referrer {relationship.referrer_id} not found for reward",
@@ -263,9 +266,9 @@ class ReferralService:
                 )
                 continue
 
-            # Update referrer balance
-            referrer.balance += reward_amount
-            referrer.total_earned += reward_amount
+            # Update referrer balance atomically
+            referrer.balance = ((referrer.balance or Decimal("0")) + reward_amount).quantize(Decimal("0.00000001"))
+            referrer.total_earned = ((referrer.total_earned or Decimal("0")) + reward_amount).quantize(Decimal("0.00000001"))
             self.session.add(referrer)
 
             # Create earning record
@@ -277,7 +280,7 @@ class ReferralService:
             )
 
             # Update total earned in relationship
-            relationship.total_earned += reward_amount
+            relationship.total_earned = (relationship.total_earned + reward_amount).quantize(Decimal("0.00000001"))
             await self.session.flush()
 
             total_rewards += reward_amount
@@ -330,19 +333,22 @@ class ReferralService:
                 continue
 
             # Reward is % of ROI amount
-            reward_amount = roi_amount * rate
+            reward_amount = (roi_amount * rate).quantize(Decimal("0.00000001"))
 
             if reward_amount <= 0:
                 continue
 
-            # Fetch referrer to update balance
-            referrer = await self.user_repo.get_by_id(relationship.referrer_id)
+            # Fetch referrer with pessimistic lock to prevent balance race conditions
+            stmt = select(User).where(User.id == relationship.referrer_id).with_for_update()
+            result = await self.session.execute(stmt)
+            referrer = result.scalar_one_or_none()
+
             if not referrer:
                 continue
 
-            # Update referrer balance
-            referrer.balance += reward_amount
-            referrer.total_earned += reward_amount
+            # Update referrer balance atomically
+            referrer.balance = ((referrer.balance or Decimal("0")) + reward_amount).quantize(Decimal("0.00000001"))
+            referrer.total_earned = ((referrer.total_earned or Decimal("0")) + reward_amount).quantize(Decimal("0.00000001"))
             self.session.add(referrer)
 
             # Create earning record
@@ -354,7 +360,7 @@ class ReferralService:
             )
 
             # Update total earned in relationship
-            relationship.total_earned += reward_amount
+            relationship.total_earned = (relationship.total_earned + reward_amount).quantize(Decimal("0.00000001"))
             self.session.add(relationship)
 
             total_rewards += reward_amount
@@ -392,38 +398,37 @@ class ReferralService:
         """
         offset = (page - 1) * limit
 
-        # Get referrals with pagination
+        # Get referrals with pagination - JOIN to avoid N+1
         stmt = (
-            select(Referral)
-            .where(Referral.referrer_id == user_id, Referral.level == level)
+            select(Referral, User)
+            .join(User, Referral.referral_id == User.id)
+            .where(Referral.referrer_id == user_id)
+            .where(Referral.level == level)
             .order_by(Referral.created_at.desc())
             .limit(limit)
             .offset(offset)
         )
 
         result = await self.session.execute(stmt)
-        relationships = list(result.scalars().all())
+        rows = result.all()
 
-        # Get total count
-        count_stmt = select(Referral).where(
-            Referral.referrer_id == user_id, Referral.level == level
+        # Get total count using func.count
+        count_stmt = (
+            select(func.count(Referral.id))
+            .where(Referral.referrer_id == user_id)
+            .where(Referral.level == level)
         )
         count_result = await self.session.execute(count_stmt)
-        total = len(list(count_result.scalars().all()))
+        total = count_result.scalar_one()
 
-        # Load referral users
+        # Build referrals list from joined data
         referrals = []
-        for rel in relationships:
-            user_stmt = select(User).where(User.id == rel.referral_id)
-            user_result = await self.session.execute(user_stmt)
-            user = user_result.scalar_one_or_none()
-
-            if user:
-                referrals.append({
-                    "user": user,
-                    "earned": rel.total_earned,
-                    "joined_at": rel.created_at,
-                })
+        for rel, user in rows:
+            referrals.append({
+                "user": user,
+                "earned": rel.total_earned,
+                "joined_at": rel.created_at,
+            })
 
         pages = (total + limit - 1) // limit
 
@@ -698,29 +703,48 @@ class ReferralService:
         Returns:
             Dict with total referrals, earnings breakdown
         """
-        # Get all referrals
-        all_referrals = await self.referral_repo.find_by()
+        # Use GROUP BY to aggregate by level - avoid loading all data
+        stmt = (
+            select(
+                Referral.level,
+                func.count(Referral.id).label("count"),
+                func.coalesce(func.sum(Referral.total_earned), 0).label("earnings")
+            )
+            .group_by(Referral.level)
+        )
+        result = await self.session.execute(stmt)
+        level_data = result.all()
 
-        # Count by level
+        # Build by_level dict
         by_level = {}
-        for level in [1, 2, 3]:
-            level_refs = [r for r in all_referrals if r.level == level]
-            level_earnings = sum(r.total_earned for r in level_refs)
-            by_level[level] = {
-                "count": len(level_refs),
-                "earnings": level_earnings,
+        total_referrals = 0
+        for row in level_data:
+            by_level[row.level] = {
+                "count": row.count,
+                "earnings": row.earnings,
             }
+            total_referrals += row.count
 
-        # Get all earnings
-        all_earnings = await self.earning_repo.find_by()
-        total_earnings = sum(e.amount for e in all_earnings)
-        paid_earnings = sum(e.amount for e in all_earnings if e.paid)
-        pending_earnings = sum(e.amount for e in all_earnings if not e.paid)
+        # Get earnings aggregates using SQL
+        from app.models.referral_earning import ReferralEarning
+        earnings_stmt = (
+            select(
+                func.sum(ReferralEarning.amount).label("total"),
+                func.sum(
+                    func.case((ReferralEarning.paid == True, ReferralEarning.amount), else_=0)
+                ).label("paid"),
+                func.sum(
+                    func.case((ReferralEarning.paid == False, ReferralEarning.amount), else_=0)
+                ).label("pending")
+            )
+        )
+        earnings_result = await self.session.execute(earnings_stmt)
+        earnings_row = earnings_result.one()
 
         return {
-            "total_referrals": len(all_referrals),
-            "total_earnings": total_earnings,
-            "paid_earnings": paid_earnings,
-            "pending_earnings": pending_earnings,
+            "total_referrals": total_referrals,
+            "total_earnings": earnings_row.total or Decimal("0"),
+            "paid_earnings": earnings_row.paid or Decimal("0"),
+            "pending_earnings": earnings_row.pending or Decimal("0"),
             "by_level": by_level,
         }

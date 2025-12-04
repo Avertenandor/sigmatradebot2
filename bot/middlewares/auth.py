@@ -87,7 +87,7 @@ class AuthMiddleware(BaseMiddleware):
             return await handler(event, data)
 
         logger.debug(
-            f"AuthMiddleware: Processing event for user {telegram_user.id} (@{telegram_user.username})"
+            f"AuthMiddleware: Processing event for user {telegram_user.id}"
         )
 
         # Load user from database
@@ -100,7 +100,7 @@ class AuthMiddleware(BaseMiddleware):
         if not user:
             logger.info(
                 f"User not found for Telegram ID {telegram_user.id} "
-                f"(@{telegram_user.username}) - will show registration menu"
+                f"- will show registration menu"
             )
 
         # Add user to data (may be None for unregistered users)
@@ -133,7 +133,7 @@ class AuthMiddleware(BaseMiddleware):
             else:
                 is_admin = True
                 logger.info(
-                    f"User {telegram_user.id} (@{telegram_user.username}) "
+                    f"User {telegram_user.id} "
                     f"identified as admin from Admin table (role: {admin.role if admin else 'unknown'})"
                 )
         else:

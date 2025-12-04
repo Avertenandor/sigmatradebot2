@@ -346,7 +346,7 @@ class RewardService:
                     continue
 
             # Calculate reward
-            reward_amount = (deposit.amount * reward_rate) / 100
+            reward_amount = ((deposit.amount * reward_rate) / Decimal("100")).quantize(Decimal("0.00000001"))
 
             # R12-1: For all levels, cap to remaining ROI space
             if deposit.roi_cap_amount:
@@ -387,7 +387,7 @@ class RewardService:
             from datetime import UTC, datetime
 
             deposit_repo = DepositRepository(self.session)
-            new_roi_paid = (deposit.roi_paid_amount or Decimal("0")) + reward_amount
+            new_roi_paid = ((deposit.roi_paid_amount or Decimal("0")) + reward_amount).quantize(Decimal("0.00000001"))
 
             # Update roi_paid_amount
             await deposit_repo.update(
@@ -537,6 +537,7 @@ class RewardService:
 
         This method processes individual deposits based on their
         next_accrual_at timestamp and corridor settings.
+        Uses pessimistic locking to prevent race conditions.
         """
         from datetime import UTC
         from datetime import timedelta
@@ -547,12 +548,16 @@ class RewardService:
         corridor_service = RoiCorridorService(self.session)
         referral_service = ReferralService(self.session)
 
-        # Get deposits due for accrual
+        # Get deposits due for accrual with pessimistic lock
         now = datetime.now(UTC)
-        stmt = select(Deposit).where(
-            Deposit.status == "confirmed",
-            Deposit.is_roi_completed == False,  # noqa: E712
-            Deposit.next_accrual_at <= now,
+        stmt = (
+            select(Deposit)
+            .where(
+                Deposit.status == "confirmed",
+                Deposit.is_roi_completed == False,  # noqa: E712
+                Deposit.next_accrual_at <= now,
+            )
+            .with_for_update()  # Prevent concurrent reward calculations
         )
         result = await self.session.execute(stmt)
         deposits = list(result.scalars().all())
@@ -578,7 +583,7 @@ class RewardService:
                     rate = config["roi_fixed"]
 
                 # Calculate reward
-                reward_amount = (deposit.amount * rate) / 100
+                reward_amount = ((deposit.amount * rate) / Decimal("100")).quantize(Decimal("0.00000001"))
 
                 # Check ROI cap
                 roi_remaining = deposit.roi_cap_amount - (
@@ -617,8 +622,8 @@ class RewardService:
 
                 # Update deposit
                 new_roi_paid = (
-                    deposit.roi_paid_amount or Decimal("0")
-                ) + reward_amount
+                    (deposit.roi_paid_amount or Decimal("0")) + reward_amount
+                ).quantize(Decimal("0.00000001"))
                 period_hours = await corridor_service.get_accrual_period_hours()
                 next_accrual = now + timedelta(hours=period_hours)
 
@@ -692,6 +697,7 @@ class RewardService:
     ) -> None:
         """
         Credit ROI reward to user's internal balance and create transaction.
+        Uses pessimistic locking to prevent balance race conditions.
 
         Args:
             user_id: User ID receiving the reward
@@ -701,7 +707,12 @@ class RewardService:
         if reward_amount <= 0:
             return
 
-        user = await self.user_repo.get_by_id(user_id)
+        # Acquire pessimistic lock on user to prevent concurrent balance updates
+        from app.models.user import User
+        stmt = select(User).where(User.id == user_id).with_for_update()
+        result = await self.session.execute(stmt)
+        user = result.scalar_one_or_none()
+
         if not user:
             logger.error(
                 "Failed to credit ROI to balance: user not found",
@@ -710,11 +721,11 @@ class RewardService:
             return
 
         balance_before = user.balance or Decimal("0")
-        balance_after = balance_before + reward_amount
+        balance_after = (balance_before + reward_amount).quantize(Decimal("0.00000001"))
 
         # Update user balances
         user.balance = balance_after
-        user.total_earned = (user.total_earned or Decimal("0")) + reward_amount
+        user.total_earned = ((user.total_earned or Decimal("0")) + reward_amount).quantize(Decimal("0.00000001"))
         self.session.add(user)
 
         # Create accounting transaction for internal ROI credit

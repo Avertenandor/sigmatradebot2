@@ -20,6 +20,7 @@ from app.models.transaction import Transaction # For auto-payout
 from app.models.enums import TransactionStatus # For auto-payout
 from app.services.user_service import UserService
 from app.services.withdrawal_service import WithdrawalService
+from bot.i18n.loader import get_translator, get_user_language
 from bot.keyboards.reply import (
     finpass_input_keyboard,
     main_menu_reply_keyboard,
@@ -29,6 +30,19 @@ from bot.states.withdrawal import WithdrawalStates
 from bot.utils.menu_buttons import is_menu_button
 
 router = Router()
+
+
+def _log_task_exception(task: asyncio.Task, tx_id: int) -> None:
+    """Log exceptions from background tasks."""
+    try:
+        task.result()
+    except asyncio.CancelledError:
+        logger.warning(f"Auto-payout task for tx {tx_id} was cancelled")
+    except Exception as e:
+        logger.error(
+            f"Unhandled exception in auto-payout task for tx {tx_id}: {e}",
+            exc_info=True
+        )
 
 
 async def is_level1_only_user(session: AsyncSession, user_id: int) -> bool:
@@ -85,65 +99,123 @@ async def check_withdrawal_eligibility(
 
 
 async def process_auto_payout(
-    tx_id: int, 
-    amount: Decimal, 
-    to_address: str, 
-    bot: Bot, 
+    tx_id: int,
+    amount: Decimal,
+    to_address: str,
+    bot: Bot,
     telegram_id: int
 ):
     """
-    Process auto-payout in background.
+    Process auto-payout in background with proper error handling and idempotency checks.
     """
     from app.config.database import async_session_maker
     from app.services.blockchain_service import get_blockchain_service
-    
-    blockchain_service = get_blockchain_service()
-    if not blockchain_service:
-        logger.error(f"Blockchain service not initialized for auto-payout tx {tx_id}")
-        return
 
-    logger.info(f"Starting auto-payout for tx {tx_id}, amount {amount} to {to_address}")
-    
-    # Send payment
-    result = await blockchain_service.send_payment(to_address, float(amount))
-    
-    async with async_session_maker() as session:
-        stmt = select(Transaction).where(Transaction.id == tx_id)
-        res = await session.execute(stmt)
-        tx = res.scalar_one_or_none()
-        
-        if not tx:
-            logger.error(f"Transaction {tx_id} not found during auto-payout update")
+    try:
+        blockchain_service = get_blockchain_service()
+        if not blockchain_service:
+            logger.error(f"Blockchain service not initialized for auto-payout tx {tx_id}")
             return
 
-        if result["success"]:
-            logger.info(f"Auto-payout successful for tx {tx_id}: {result['tx_hash']}")
-            tx.tx_hash = result["tx_hash"]
-            tx.status = TransactionStatus.CONFIRMED.value
-            
-            # Notify user about success
-            try:
-                await bot.send_message(
-                    chat_id=telegram_id,
-                    text=(
-                        f"✅ *Выплата отправлена!*\n\n"
-                        f"💰 Сумма: `{amount} USDT`\n"
-                        f"💳 Кошелек: `{to_address[:6]}...{to_address[-4:]}`\n"
-                        f"🔗 TX: [Посмотреть транзакцию](https://bscscan.com/tx/{result['tx_hash']})\n\n"
-                        f"🤝 Спасибо за ваше доверие к SigmaTrade!"
-                    ),
-                    parse_mode="Markdown",
-                    disable_web_page_preview=True
+        logger.info(f"Starting auto-payout for tx {tx_id}, amount {amount} to {to_address}")
+
+        # IDEMPOTENCY CHECK: Verify transaction status before sending
+        async with async_session_maker() as session:
+            stmt = select(Transaction).where(Transaction.id == tx_id).with_for_update()
+            res = await session.execute(stmt)
+            tx = res.scalar_one_or_none()
+
+            if not tx:
+                logger.error(f"Transaction {tx_id} not found during auto-payout check")
+                return
+
+            # Check if already processed (idempotency)
+            if tx.tx_hash:
+                logger.warning(
+                    f"Auto-payout tx {tx_id} already has tx_hash: {tx.tx_hash}. "
+                    f"Skipping duplicate send (idempotency check)"
                 )
-            except Exception as e:
-                logger.error(f"Failed to send auto-payout notification to {telegram_id}: {e}")
-                
-        else:
-            logger.error(f"Auto-payout failed for tx {tx_id}: {result.get('error')}")
-            # Revert to PENDING for manual admin review
-            tx.status = TransactionStatus.PENDING.value
-            
-        await session.commit()
+                return
+
+            # Check if status is still PROCESSING
+            if tx.status != TransactionStatus.PROCESSING.value:
+                logger.warning(
+                    f"Auto-payout tx {tx_id} status changed to {tx.status}. "
+                    f"Skipping send (expected PROCESSING)"
+                )
+                return
+
+            # Calculate net_amount (after fee deduction) for blockchain payment
+            net_amount = tx.amount - tx.fee
+
+            await session.commit()
+
+        # Send payment to blockchain (using net_amount and Decimal for precision)
+        logger.info(
+            f"Sending blockchain payment for tx {tx_id}: "
+            f"gross={amount} USDT, net={net_amount} USDT (after fee) to {to_address}"
+        )
+        result = await blockchain_service.send_payment(to_address, net_amount)
+
+        # Update transaction with result
+        async with async_session_maker() as session:
+            stmt = select(Transaction).where(Transaction.id == tx_id).with_for_update()
+            res = await session.execute(stmt)
+            tx = res.scalar_one_or_none()
+
+            if not tx:
+                logger.error(f"Transaction {tx_id} not found during auto-payout update")
+                return
+
+            if result["success"]:
+                logger.info(f"Auto-payout successful for tx {tx_id}: {result['tx_hash']}")
+                tx.tx_hash = result["tx_hash"]
+                tx.status = TransactionStatus.CONFIRMED.value
+
+                # Calculate net_amount for notification (same calculation as before sending)
+                notification_net_amount = tx.amount - tx.fee
+
+                # Notify user about success (show net amount actually sent to blockchain)
+                try:
+                    await bot.send_message(
+                        chat_id=telegram_id,
+                        text=(
+                            f"✅ *Выплата отправлена!*\n\n"
+                            f"💰 Сумма: `{notification_net_amount} USDT`\n"
+                            f"💳 Кошелек: `{to_address[:6]}...{to_address[-4:]}`\n"
+                            f"🔗 TX: [Посмотреть транзакцию](https://bscscan.com/tx/{result['tx_hash']})\n\n"
+                            f"🤝 Спасибо за ваше доверие к SigmaTrade!"
+                        ),
+                        parse_mode="Markdown",
+                        disable_web_page_preview=True
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to send auto-payout notification to {telegram_id}: {e}")
+
+            else:
+                logger.error(f"Auto-payout failed for tx {tx_id}: {result.get('error')}")
+                # Revert to PENDING for manual admin review
+                tx.status = TransactionStatus.PENDING.value
+
+            await session.commit()
+
+    except Exception as e:
+        logger.error(
+            f"Critical error in process_auto_payout for tx {tx_id}: {e}",
+            exc_info=True
+        )
+        # Try to revert transaction to PENDING for manual review
+        try:
+            async with async_session_maker() as session:
+                stmt = select(Transaction).where(Transaction.id == tx_id).with_for_update()
+                res = await session.execute(stmt)
+                tx = res.scalar_one_or_none()
+                if tx and tx.status == TransactionStatus.PROCESSING.value:
+                    tx.status = TransactionStatus.PENDING.value
+                    await session.commit()
+                    logger.info(f"Reverted tx {tx_id} to PENDING after error")
+        except Exception as revert_error:
+            logger.error(f"Failed to revert tx {tx_id} to PENDING: {revert_error}")
 
 
 @router.message(F.text == "💸 Вывести средства")
@@ -189,13 +261,20 @@ async def withdraw_all(
 ) -> None:
     """Handle 'Withdraw All' button."""
     user: User | None = data.get("user")
+    session = data.get("session")
+
+    # R13-3: Get user language for i18n
+    _ = get_translator("ru")  # Default fallback
+    if user and session:
+        user_language = await get_user_language(session, user.id)
+        _ = get_translator(user_language)
+
     if not user:
-        await message.answer("❌ Ошибка: пользователь не найден")
+        await message.answer(_("errors.user_not_found"))
         return
 
-    session = data.get("session")
     if not session:
-        await message.answer("❌ Системная ошибка")
+        await message.answer(_("errors.system_error"))
         return
 
     # Check withdrawal eligibility (finpass for all, phone/email for level 2+)
@@ -293,13 +372,20 @@ async def withdraw_amount(
 ) -> None:
     """Handle 'Withdraw Amount' button."""
     user: User | None = data.get("user")
+    session = data.get("session")
+
+    # R13-3: Get user language for i18n
+    _ = get_translator("ru")  # Default fallback
+    if user and session:
+        user_language = await get_user_language(session, user.id)
+        _ = get_translator(user_language)
+
     if not user:
-        await message.answer("❌ Ошибка: пользователь не найден")
+        await message.answer(_("errors.user_not_found"))
         return
 
-    session = data.get("session")
     if not session:
-        await message.answer("❌ Системная ошибка")
+        await message.answer(_("errors.system_error"))
         return
 
     # Check withdrawal eligibility (finpass for all, phone/email for level 2+)
@@ -326,14 +412,21 @@ async def process_withdrawal_amount(
 ) -> None:
     """Process withdrawal amount."""
     user: User | None = data.get("user")
+    session = data.get("session")
+
+    # R13-3: Get user language for i18n
+    _ = get_translator("ru")  # Default fallback
+    if user and session:
+        user_language = await get_user_language(session, user.id)
+        _ = get_translator(user_language)
+
     if not user:
-        await message.answer("❌ Ошибка: пользователь не найден")
+        await message.answer(_("errors.user_not_found"))
         await state.clear()
         return
-    
-    session = data.get("session")
+
     if not session:
-        await message.answer("❌ Системная ошибка")
+        await message.answer(_("errors.system_error"))
         await state.clear()
         return
     
@@ -381,7 +474,7 @@ async def process_withdrawal_amount(
 
     if not balance or Decimal(str(balance["available_balance"])) < amount:
         await message.answer(
-            f"❌ Недостаточно средств!\n\n"
+            f"{_('errors.insufficient_balance')}\n\n"
             f"Доступно: {balance['available_balance']:.2f} USDT\n"
             f"Попробуйте меньшую сумму:"
         )
@@ -408,8 +501,16 @@ async def process_financial_password(
 ) -> None:
     """Process financial password and create withdrawal."""
     user: User | None = data.get("user")
+    session = data.get("session")
+
+    # R13-3: Get user language for i18n
+    _ = get_translator("ru")  # Default fallback
+    if user and session:
+        user_language = await get_user_language(session, user.id)
+        _ = get_translator(user_language)
+
     if not user:
-        await message.answer("❌ Ошибка: пользователь не найден")
+        await message.answer(_("errors.user_not_found"))
         await state.clear()
         return
     
@@ -452,7 +553,7 @@ async def process_financial_password(
     
     # Verify password and create withdrawal
     if not session_factory:
-        await message.answer("❌ Системная ошибка (no session factory)")
+        await message.answer(_("errors.system_error"))
         return
         
     try:
@@ -515,16 +616,25 @@ async def process_financial_password(
                     parse_mode="Markdown",
                     reply_markup=main_menu_reply_keyboard(user=user)
                 )
-                # Trigger background task
-                asyncio.create_task(
-                    process_auto_payout(
-                        transaction.id, 
-                        transaction.amount, 
-                        transaction.to_address,
-                        message.bot,
-                        user.telegram_id
+                # Trigger background task with error handling
+                try:
+                    logger.info(f"Creating auto-payout background task for tx {transaction.id}")
+                    task = asyncio.create_task(
+                        process_auto_payout(
+                            transaction.id,
+                            transaction.amount,
+                            transaction.to_address,
+                            message.bot,
+                            user.telegram_id
+                        )
                     )
-                )
+                    # Add done callback to log any unhandled exceptions
+                    task.add_done_callback(lambda t: _log_task_exception(t, transaction.id))
+                except Exception as e:
+                    logger.error(
+                        f"Failed to create auto-payout task for tx {transaction.id}: {e}",
+                        exc_info=True
+                    )
             else:
                 await message.answer(
                     f"✅ *Заявка #{transaction.id} создана!*\n\n"
@@ -576,11 +686,17 @@ async def _show_withdrawal_history(
 ) -> None:
     """Show withdrawal history with pagination."""
     session_factory = data.get("session_factory")
-    
+    session = data.get("session")
+
+    # R13-3: Get user language for i18n
+    _ = get_translator("ru")  # Default fallback
+    if user and session:
+        user_language = await get_user_language(session, user.id)
+        _ = get_translator(user_language)
+
     if not session_factory:
-        session = data.get("session")
         if not session:
-            await message.answer("❌ Системная ошибка.")
+            await message.answer(_("errors.system_error"))
             return
         withdrawal_service = WithdrawalService(session)
         result = await withdrawal_service.get_user_withdrawals(
@@ -643,12 +759,19 @@ async def handle_smart_withdrawal_amount(
         return
     
     user: User | None = data.get("user")
+    session = data.get("session")
+
+    # R13-3: Get user language for i18n
+    _ = get_translator("ru")  # Default fallback
+    if user and session:
+        user_language = await get_user_language(session, user.id)
+        _ = get_translator(user_language)
+
     if not user:
         return
-    
-    session = data.get("session")
+
     if not session:
-        await message.answer("❌ Системная ошибка")
+        await message.answer(_("errors.system_error"))
         return
     
     # Check withdrawal eligibility (finpass for all, phone/email for level 2+)
@@ -693,7 +816,7 @@ async def handle_smart_withdrawal_amount(
     
     if amount > available:
         await message.answer(
-            f"❌ Недостаточно средств!\n\n"
+            f"{_('errors.insufficient_balance')}\n\n"
             f"Доступно: {available:.2f} USDT\n"
             f"Запрошено: {amount:.2f} USDT",
             reply_markup=withdrawal_keyboard(),

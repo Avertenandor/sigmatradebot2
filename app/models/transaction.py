@@ -13,6 +13,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     String,
     Text,
 )
@@ -29,6 +30,7 @@ class Transaction(Base):
 
     __tablename__ = "transactions"
     __table_args__ = (
+        Index('ix_transaction_user_created', 'user_id', 'created_at'),
         CheckConstraint(
             'amount > 0', name='check_transaction_amount_positive'
         ),
@@ -46,9 +48,9 @@ class Transaction(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
 
     # User reference
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
         index=True
     )
 

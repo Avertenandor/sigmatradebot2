@@ -89,16 +89,8 @@ class DatabaseMiddleware(BaseMiddleware):
             logger.warning(f"R11-1: Circuit breaker blocked operation: {reason}")
             if isinstance(event, Message):
                 try:
+                    # Don't access DB when circuit breaker is open
                     user_language = DEFAULT_LANGUAGE
-                    if hasattr(event, "from_user") and event.from_user:
-                        try:
-                            async with self.session_pool() as lang_session:
-                                user_language = await get_user_language(
-                                    lang_session, event.from_user.id
-                                )
-                        except Exception as e:
-                            logger.warning(f"Failed to get user language from DB: {e}")
-                            pass
                     _ = get_translator(user_language)
                     await event.answer(_("errors.database_unavailable"))
                 except Exception as e:
@@ -116,7 +108,12 @@ class DatabaseMiddleware(BaseMiddleware):
                 data["session"] = session
                 try:
                     result = await handler(event, data)
-                    await session.commit()
+                    try:
+                        await session.commit()
+                    except Exception as commit_error:
+                        logger.error(f"Failed to commit session: {commit_error}")
+                        await session.rollback()
+                        raise
                     # R11-1: Record success
                     circuit_breaker.record_success()
                     return result

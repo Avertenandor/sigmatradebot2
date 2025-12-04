@@ -5,12 +5,15 @@ Handles admin authentication and session management.
 """
 
 import secrets
+from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import bcrypt
 from loguru import logger
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from app.models.admin import Admin
 from app.models.admin_session import AdminSession
@@ -26,6 +29,17 @@ MASTER_KEY_LENGTH = 32  # 32 bytes = 256 bits
 # Admin login rate limiting
 ADMIN_LOGIN_MAX_ATTEMPTS = 5
 ADMIN_LOGIN_WINDOW_SECONDS = 3600  # 1 hour
+
+# Lua script for atomic failed login tracking
+FAILED_LOGIN_SCRIPT = """
+local key = KEYS[1]
+local window = tonumber(ARGV[1])
+local current = redis.call('INCR', key)
+if current == 1 then
+    redis.call('EXPIRE', key, window)
+end
+return current
+"""
 
 
 class AdminService:
@@ -47,6 +61,10 @@ class AdminService:
         self.admin_repo = AdminRepository(session)
         self.session_repo = AdminSessionRepository(session)
         self.redis_client = redis_client
+
+        # In-memory fallback for failed login tracking
+        # Structure: {telegram_id: [(timestamp, ...), ...]}
+        self._failed_logins: dict[int, list[datetime]] = defaultdict(list)
 
     @staticmethod
     def generate_master_key() -> str:
@@ -120,6 +138,39 @@ class AdminService:
         Returns:
             Tuple of (admin, master_key, error_message)
         """
+        # Валидация роли
+        valid_roles = ["admin", "super_admin", "extended_admin"]
+        if role not in valid_roles:
+            return (
+                None,
+                None,
+                f"Недопустимая роль: {role}. Допустимые роли: {', '.join(valid_roles)}",
+            )
+
+        # Проверка прав создателя
+        creator = await self.admin_repo.get_by_id(created_by)
+        if not creator:
+            return (
+                None,
+                None,
+                "Создатель не найден",
+            )
+
+        if not creator.is_super_admin:
+            return (
+                None,
+                None,
+                "Только super_admin может создавать админов",
+            )
+
+        # Нельзя создать super_admin если сам не super_admin
+        if role == "super_admin" and not creator.is_super_admin:
+            return (
+                None,
+                None,
+                "Нельзя создать super_admin",
+            )
+
         # Check if admin exists
         existing = await self.admin_repo.find_by(
             telegram_id=telegram_id
@@ -372,12 +423,15 @@ class AdminService:
 
     async def list_all_admins(self) -> list[Admin]:
         """
-        List all admins.
+        List all admins with eager loading of creator relationship.
 
         Returns:
             List of all admins
         """
-        return await self.admin_repo.find_all()
+        # Use joinedload to avoid N+1 query when accessing creator
+        stmt = select(Admin).options(joinedload(Admin.creator))
+        result = await self.session.execute(stmt)
+        return list(result.scalars().unique().all())
 
     async def get_all_admins(self) -> list[Admin]:
         """
@@ -400,20 +454,37 @@ class AdminService:
         """
         return await self.admin_repo.get_by_id(admin_id)
 
-    async def delete_admin(self, admin_id: int) -> bool:
+    async def delete_admin(
+        self, admin_id: int, deleted_by_admin_id: int
+    ) -> tuple[bool, str | None]:
         """
         Delete admin.
 
         Args:
             admin_id: Admin ID
+            deleted_by_admin_id: ID of admin performing deletion
 
         Returns:
-            Success flag
+            Tuple of (success, error_message)
         """
+        # Проверка прав удаляющего админа
+        deleting_admin = await self.admin_repo.get_by_id(
+            deleted_by_admin_id
+        )
+        if not deleting_admin:
+            return False, "Админ не найден"
+
+        if not deleting_admin.is_super_admin:
+            return False, "Только super_admin может удалять админов"
+
         admin = await self.admin_repo.get_by_id(admin_id)
 
         if not admin:
-            return False
+            return False, "Удаляемый админ не найден"
+
+        # Нельзя удалить самого себя
+        if admin_id == deleted_by_admin_id:
+            return False, "Нельзя удалить самого себя"
 
         # Deactivate all sessions
         await self.session_repo.deactivate_all_for_admin(admin_id)
@@ -423,77 +494,107 @@ class AdminService:
         await self.session.commit()
 
         logger.info(
-            "Admin deleted", extra={"admin_id": admin_id}
+            "Admin deleted",
+            extra={
+                "admin_id": admin_id,
+                "deleted_by": deleted_by_admin_id,
+            },
         )
 
-        return True
+        return True, None
 
     async def _track_failed_login(self, telegram_id: int) -> None:
         """
         Track failed login attempt and block if limit exceeded.
 
+        Uses Lua script for atomic operations with Redis.
+        Falls back to in-memory tracking if Redis is unavailable.
+
         Args:
             telegram_id: Telegram user ID
         """
-        if not self.redis_client:
-            return  # No Redis, skip rate limiting
+        count = 0
 
-        try:
-            key = f"admin_login_attempts:{telegram_id}"
-            
-            # Get current count
-            count_str = await self.redis_client.get(key)
-            count = int(count_str) if count_str else 0
-            
-            # Increment
-            count += 1
-            await self.redis_client.setex(
-                key, ADMIN_LOGIN_WINDOW_SECONDS, str(count)
-            )
-            
-            # Check if limit exceeded
-            if count >= ADMIN_LOGIN_MAX_ATTEMPTS:
-                from app.utils.security_logging import log_security_event
+        if self.redis_client:
+            try:
+                key = f"admin_login_attempts:{telegram_id}"
 
-                log_security_event(
-                    "Admin login rate limit exceeded",
-                    {
-                        "telegram_id": telegram_id,
-                        "action_type": "ADMIN_LOGIN_BRUTE_FORCE",
-                        "attempts": count,
-                        "limit": ADMIN_LOGIN_MAX_ATTEMPTS,
-                    }
+                # Use Lua script for atomic increment with expiry
+                count = await self.redis_client.eval(
+                    FAILED_LOGIN_SCRIPT,
+                    1,  # Number of keys
+                    key,
+                    ADMIN_LOGIN_WINDOW_SECONDS,
                 )
-                
-                # Block the Telegram ID
-                await self._block_telegram_id_for_failed_logins(telegram_id)
-                
-        except Exception as e:
-            # R11-2: Redis failed, continue without rate limiting
-            logger.warning(
-                f"R11-2: Redis error tracking failed login for {telegram_id}: {e}. "
-                "Continuing without rate limiting (degraded mode)."
+
+            except Exception as e:
+                # R11-2: Redis failed, fall back to in-memory
+                logger.warning(
+                    f"R11-2: Redis error tracking failed login for {telegram_id}: {e}. "
+                    "Falling back to in-memory tracking."
+                )
+                # Fall through to in-memory tracking
+                self.redis_client = None
+
+        if not self.redis_client:
+            # Use in-memory fallback
+            now = datetime.now(UTC)
+            cutoff = now - timedelta(seconds=ADMIN_LOGIN_WINDOW_SECONDS)
+
+            # Clean old entries
+            self._failed_logins[telegram_id] = [
+                ts for ts in self._failed_logins[telegram_id] if ts > cutoff
+            ]
+
+            # Add current attempt
+            self._failed_logins[telegram_id].append(now)
+            count = len(self._failed_logins[telegram_id])
+
+            logger.info(
+                f"Tracking failed login in-memory for {telegram_id}: {count}/{ADMIN_LOGIN_MAX_ATTEMPTS}"
             )
+
+        # Check if limit exceeded
+        if count >= ADMIN_LOGIN_MAX_ATTEMPTS:
+            from app.utils.security_logging import log_security_event
+
+            log_security_event(
+                "Admin login rate limit exceeded",
+                {
+                    "telegram_id": telegram_id,
+                    "action_type": "ADMIN_LOGIN_BRUTE_FORCE",
+                    "attempts": count,
+                    "limit": ADMIN_LOGIN_MAX_ATTEMPTS,
+                }
+            )
+
+            # Block the Telegram ID
+            await self._block_telegram_id_for_failed_logins(telegram_id)
 
     async def _clear_failed_login_attempts(self, telegram_id: int) -> None:
         """
         Clear failed login attempts on successful login.
 
+        Clears both Redis and in-memory fallback.
+
         Args:
             telegram_id: Telegram user ID
         """
-        if not self.redis_client:
-            return
+        # Clear Redis
+        if self.redis_client:
+            try:
+                key = f"admin_login_attempts:{telegram_id}"
+                await self.redis_client.delete(key)
+            except Exception as e:
+                # R11-2: Redis failed, continue without clearing
+                logger.warning(
+                    f"R11-2: Redis error clearing failed login attempts for {telegram_id}: {e}. "
+                    "Continuing without clearing (degraded mode)."
+                )
 
-        try:
-            key = f"admin_login_attempts:{telegram_id}"
-            await self.redis_client.delete(key)
-        except Exception as e:
-            # R11-2: Redis failed, continue without clearing
-            logger.warning(
-                f"R11-2: Redis error clearing failed login attempts for {telegram_id}: {e}. "
-                "Continuing without clearing (degraded mode)."
-            )
+        # Clear in-memory fallback
+        if telegram_id in self._failed_logins:
+            del self._failed_logins[telegram_id]
 
     async def _block_telegram_id_for_failed_logins(
         self, telegram_id: int

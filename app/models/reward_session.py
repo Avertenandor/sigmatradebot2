@@ -10,10 +10,11 @@ from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
+    DECIMAL,
     DateTime,
     ForeignKey,
     Integer,
-    Numeric,
     String,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -50,6 +51,12 @@ class RewardSession(Base):
     """
 
     __tablename__ = "reward_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            'start_date < end_date',
+            name='check_reward_session_date_range'
+        ),
+    )
 
     # Primary key
     id: Mapped[int] = mapped_column(
@@ -61,19 +68,19 @@ class RewardSession(Base):
 
     # Reward Rates (percentage, e.g., 1.1170 = 1.117%)
     reward_rate_level_1: Mapped[Decimal] = mapped_column(
-        Numeric(precision=10, scale=4), nullable=False
+        DECIMAL(18, 8), nullable=False
     )
     reward_rate_level_2: Mapped[Decimal] = mapped_column(
-        Numeric(precision=10, scale=4), nullable=False
+        DECIMAL(18, 8), nullable=False
     )
     reward_rate_level_3: Mapped[Decimal] = mapped_column(
-        Numeric(precision=10, scale=4), nullable=False
+        DECIMAL(18, 8), nullable=False
     )
     reward_rate_level_4: Mapped[Decimal] = mapped_column(
-        Numeric(precision=10, scale=4), nullable=False
+        DECIMAL(18, 8), nullable=False
     )
     reward_rate_level_5: Mapped[Decimal] = mapped_column(
-        Numeric(precision=10, scale=4), nullable=False
+        DECIMAL(18, 8), nullable=False
     )
 
     # Time Period

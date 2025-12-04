@@ -54,8 +54,7 @@ class MessageLogMiddleware(BaseMiddleware):
                                 user_id=user_id,
                             )
                             logger.debug(
-                                f"Logged message from user {telegram_id}: "
-                                f"'{event.text[:50]}...'"
+                                f"Logged message from user {telegram_id}"
                             )
                         except Exception as e:
                             # Don't fail if logging fails

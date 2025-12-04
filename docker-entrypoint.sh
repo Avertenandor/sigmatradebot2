@@ -41,17 +41,11 @@ case "$1" in
         
         # Run database migrations (only for bot service)
         echo -e "${YELLOW}Running database migrations...${NC}"
-        if alembic upgrade head; then
-            echo -e "${GREEN}Migrations complete!${NC}"
-        else
-            MIGRATION_EXIT_CODE=$?
-            echo -e "${RED}Migration failed with exit code: ${MIGRATION_EXIT_CODE}${NC}"
-            echo -e "${YELLOW}Checking migration status...${NC}"
-            alembic current || true
-            echo -e "${YELLOW}Attempting to continue anyway...${NC}"
-            # In production, you might want to exit here:
-            # exit ${MIGRATION_EXIT_CODE}
+        if ! alembic upgrade head; then
+            echo -e "${RED}Migration failed!${NC}"
+            exit 1
         fi
+        echo -e "${GREEN}Migrations complete!${NC}"
         echo -e "${GREEN}Starting Telegram Bot...${NC}"
         exec python -m bot.main
         ;;

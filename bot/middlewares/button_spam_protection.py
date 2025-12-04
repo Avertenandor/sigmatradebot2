@@ -146,6 +146,8 @@ class ButtonSpamProtectionMiddleware(BaseMiddleware):
         """
         Check if action is on cooldown.
 
+        Uses SETNX (SET if Not eXists) for atomic check-and-set operation.
+
         Args:
             user_id: User ID
             callback_data: Callback data
@@ -160,8 +162,12 @@ class ButtonSpamProtectionMiddleware(BaseMiddleware):
 
         try:
             key = f"button_cooldown:{user_id}:{callback_data}"
-            exists = await self.redis_client.exists(key)
-            return exists == 1
+            # Atomic check-and-set: returns None if key already exists
+            result = await self.redis_client.set(
+                key, "1", ex=int(cooldown), nx=True
+            )
+            # If result is None, key already exists (on cooldown)
+            return result is None
         except Exception as e:
             logger.warning(f"Redis error in button spam protection: {e}")
             return False  # Fail open
@@ -172,17 +178,14 @@ class ButtonSpamProtectionMiddleware(BaseMiddleware):
         """
         Set cooldown for action.
 
+        Note: This method is now redundant as _is_on_cooldown sets cooldown
+        atomically. Kept for backwards compatibility.
+
         Args:
             user_id: User ID
             callback_data: Callback data
             cooldown: Cooldown period
         """
-        if not self.redis_client:
-            return
-
-        try:
-            key = f"button_cooldown:{user_id}:{callback_data}"
-            await self.redis_client.setex(key, int(cooldown), "1")
-        except Exception as e:
-            logger.warning(f"Redis error setting cooldown: {e}")
+        # No-op: cooldown is now set atomically in _is_on_cooldown
+        pass
 

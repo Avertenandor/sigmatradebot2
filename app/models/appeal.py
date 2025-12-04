@@ -6,7 +6,7 @@ Tracks user appeals for blocked accounts.
 
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -45,6 +45,9 @@ class Appeal(Base):
     """
 
     __tablename__ = "appeals"
+    __table_args__ = (
+        Index('ix_appeal_user_status', 'user_id', 'status'),
+    )
 
     # Primary key
     id: Mapped[int] = mapped_column(

@@ -1,8 +1,8 @@
 """create admin_actions table
 
-Revision ID: 20250113_000001
+Revision ID: 20251118_000001
 Revises: 20251117_000001
-Create Date: 2025-01-13 00:00:01.000000
+Create Date: 2025-11-18 00:00:01.000000
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = "20250113_000001"
+revision: str = "20251118_000001"
 down_revision: Union[str, None] = "20251117_000001"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -71,4 +71,3 @@ def downgrade() -> None:
 
     # Drop table
     op.drop_table("admin_actions")
-

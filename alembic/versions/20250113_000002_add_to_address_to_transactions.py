@@ -1,7 +1,7 @@
 """add to_address to transactions
 
 Revision ID: 20250113_000002
-Revises: 20250113_000001
+Revises: 20251118_000001
 Create Date: 2025-01-13 00:00:02.000000
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '20250113_000002'
-down_revision: Union[str, None] = '20250113_000001'
+down_revision: Union[str, None] = '20251118_000001'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

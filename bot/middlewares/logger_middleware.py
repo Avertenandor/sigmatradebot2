@@ -53,7 +53,7 @@ class LoggerMiddleware(BaseMiddleware):
             update_type = "callback_query"
 
         logger.info(
-            f"[{request_id}] {update_type} from user {user_id} (@{username}) "
+            f"[{request_id}] {update_type} from user {user_id} "
             f"[lang={language_code}]"
         )
         

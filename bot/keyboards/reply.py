@@ -554,7 +554,7 @@ def withdrawal_list_keyboard(
     for wd in withdrawals:
         amount_str = format_usdt(wd.amount)
         user_label = f"ID:{wd.user_id}"
-        if hasattr(wd, "user") and wd.user and wd.user.username:
+        if hasattr(wd, "user") and wd.user and hasattr(wd.user, 'username') and wd.user.username:
             user_label = f"@{wd.user.username}"
         # Neutral emoji for selection
         builder.row(
@@ -598,6 +598,10 @@ def admin_withdrawal_detail_keyboard() -> ReplyKeyboardMarkup:
 
 def withdrawal_confirm_keyboard(withdrawal_id: int, action: str) -> ReplyKeyboardMarkup:
     """Keyboard for confirming withdrawal action."""
+    # Validate action parameter
+    if action not in ("approve", "reject"):
+        raise ValueError(f"Invalid action: {action}. Must be 'approve' or 'reject'")
+
     builder = ReplyKeyboardBuilder()
     action_text = "Одобрить" if action == "approve" else "Отклонить"
     builder.row(
@@ -1376,7 +1380,7 @@ def admin_ticket_list_keyboard(
         # Button 1
         t1 = tickets[i]
         user_label1 = f"ID: {t1.user_id}"
-        if t1.user and t1.user.username:
+        if t1.user and hasattr(t1.user, 'username') and t1.user.username:
             user_label1 = f"@{t1.user.username}"
         row_buttons.append(KeyboardButton(text=f"🎫 #{t1.id} {user_label1}"))
         
@@ -1384,7 +1388,7 @@ def admin_ticket_list_keyboard(
         if i + 1 < len(tickets):
             t2 = tickets[i+1]
             user_label2 = f"ID: {t2.user_id}"
-            if t2.user and t2.user.username:
+            if t2.user and hasattr(t2.user, 'username') and t2.user.username:
                 user_label2 = f"@{t2.user.username}"
             row_buttons.append(KeyboardButton(text=f"🎫 #{t2.id} {user_label2}"))
             

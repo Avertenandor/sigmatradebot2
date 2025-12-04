@@ -62,11 +62,12 @@ class PaymentSender:
         # Wallet setup
         self._private_key = payout_wallet_private_key
         self._payout_address: str | None = None
+        self._account: Account | None = None
 
         if self._private_key:
-            # Derive address from private key
-            account = Account.from_key(self._private_key)
-            self._payout_address = account.address
+            # Derive address from private key (cache account for reuse)
+            self._account = Account.from_key(self._private_key)
+            self._payout_address = self._account.address
             logger.info(
                 f"PaymentSender initialized with wallet: "
                 f"{self._payout_address}"
@@ -174,9 +175,10 @@ class PaymentSender:
             Dict with success, tx_hash, error
         """
         try:
-            # Get nonce
+            # Get nonce (using 'latest' to avoid race conditions)
+            # TODO: Add NonceManager with distributed lock for multi-process environments
             nonce = await self.web3.eth.get_transaction_count(
-                self._payout_address
+                self._payout_address, 'latest'
             )
 
             # Build transaction
@@ -218,9 +220,8 @@ class PaymentSender:
                 }
             )
 
-            # Sign transaction
-            account = Account.from_key(self._private_key)
-            signed_tx = account.sign_transaction(transaction)
+            # Sign transaction (reuse cached account)
+            signed_tx = self._account.sign_transaction(transaction)
 
             # Send transaction
             tx_hash = await self.web3.eth.send_raw_transaction(
@@ -258,10 +259,14 @@ class PaymentSender:
                     }
 
             except TimeoutError:
+                logger.warning(
+                    f"Transaction confirmation timeout for {tx_hash_hex}. "
+                    "Transaction may still be pending on blockchain."
+                )
                 return {
                     "success": False,
                     "tx_hash": tx_hash_hex,
-                    "error": "Transaction confirmation timeout",
+                    "error": "Transaction confirmation timeout (may still be pending)",
                 }
 
         except Exception as e:

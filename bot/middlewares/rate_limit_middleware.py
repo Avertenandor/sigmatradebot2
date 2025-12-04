@@ -18,6 +18,18 @@ try:
 except ImportError:
     redis = None  # type: ignore
 
+# Lua script for atomic rate limiting
+RATE_LIMIT_SCRIPT = """
+local key = KEYS[1]
+local limit = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local current = redis.call('INCR', key)
+if current == 1 then
+    redis.call('EXPIRE', key, window)
+end
+return current <= limit and 1 or 0
+"""
+
 
 class RateLimitMiddleware(BaseMiddleware):
     """
@@ -112,28 +124,26 @@ class RateLimitMiddleware(BaseMiddleware):
                 # Rate limit key
                 key = f"ratelimit:user:{user.id}"
 
-                # Get current count
-                count = await self.redis_client.get(key)
+                # Use Lua script for atomic check-and-increment
+                # Returns 1 if allowed, 0 if limit exceeded
+                result = await self.redis_client.eval(
+                    RATE_LIMIT_SCRIPT,
+                    1,  # Number of keys
+                    key,
+                    self.user_limit,
+                    self.user_window,
+                )
 
-                if count is None:
-                    # First request in window
-                    await self.redis_client.setex(
-                        key, self.user_window, "1"
-                    )
-                    return await handler(event, data)
-
-                current_count = int(count)
-
-                if current_count >= self.user_limit:
+                if result == 0:
+                    # Rate limit exceeded
                     logger.warning(
                         f"R11-2: Rate limit exceeded for user {user.id}: "
-                        f"{current_count}/{self.user_limit}"
+                        f"limit={self.user_limit}"
                     )
                     # Silently ignore (don't waste resources responding)
                     return None
 
-                # Increment counter
-                await self.redis_client.incr(key)
+                # Allowed, proceed
                 return await handler(event, data)
 
             except Exception as e:

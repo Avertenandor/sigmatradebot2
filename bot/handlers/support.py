@@ -10,7 +10,7 @@ from aiogram.types import Message
 
 from app.models.user import User
 from bot.keyboards.reply import support_keyboard
-from bot.states.support_states import SupportStates
+from bot.states.support import SupportStates
 from bot.utils.formatters import escape_md
 
 router = Router(name="support")
@@ -163,13 +163,16 @@ async def process_ticket_message(
 
         if bot_instance:
             # Format admin notification
+            # Truncate message text to avoid long messages
+            truncated_text = message.text[:200] + "..." if len(message.text) > 200 else message.text
+
             if user:
                 username = escape_md(user.username) if user.username else "пользователь"
                 admin_text = (
                     f"🆕 *Новое обращение #{ticket.id}*\n\n"
                     f"От: @{username} "
                     f"(`{user.telegram_id}`)\n"
-                    f"Текст: {message.text}"
+                    f"Текст: {escape_md(truncated_text)}"
                 )
             else:
                 # Guest ticket
@@ -181,7 +184,7 @@ async def process_ticket_message(
                 admin_text = (
                     f"🆕 *Новое обращение #{ticket.id}* (Гость)\n\n"
                     f"От: @{username} (`{telegram_id}`)\n"
-                    f"Текст: {message.text}"
+                    f"Текст: {escape_md(truncated_text)}"
                 )
 
             for admin_id in settings.get_admin_ids():
@@ -189,12 +192,13 @@ async def process_ticket_message(
                     await bot_instance.send_message(
                         admin_id, admin_text, parse_mode="Markdown"
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.error(f"Failed to notify admin {admin_id}: {e}")
 
     except Exception as e:
+        logger.error(f"Error creating ticket: {e}")
         await state.clear()
-        await message.answer(f"❌ Ошибка создания обращения: {e}")
+        await message.answer("❌ Произошла ошибка. Попробуйте позже.")
 
 
 @router.message(F.text == "📋 Мои обращения")

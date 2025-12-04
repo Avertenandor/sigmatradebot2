@@ -5,6 +5,7 @@ Supports: text, photo, voice, audio + inline link buttons
 """
 
 import asyncio
+import re
 from datetime import datetime
 from typing import Any
 
@@ -31,8 +32,8 @@ from bot.utils.admin_utils import clear_state_preserve_admin_token
 router = Router(name="admin_broadcast")
 
 # Rate limiting for broadcasts (1 minute cooldown)
-broadcast_rate_limits: dict[int, datetime] = {}
-BROADCAST_COOLDOWN_MS = 1 * 60 * 1000  # 1 minute in milliseconds
+# NOTE: Using Redis for distributed rate limiting
+BROADCAST_COOLDOWN_SECONDS = 60  # 1 minute
 
 
 @router.message(F.text == "📢 Рассылка")
@@ -52,21 +53,27 @@ async def handle_start_broadcast(
         await message.answer("❌ Эта функция доступна только администраторам")
         return
 
-    # Check rate limit
-    now = datetime.now()
-    last_broadcast = broadcast_rate_limits.get(admin_id)
+    # Check rate limit using Redis
+    redis_client = data.get("redis_client")
+    if redis_client:
+        rate_limit_key = f"broadcast:ratelimit:{admin_id}"
+        last_broadcast_ts = await redis_client.get(rate_limit_key)
 
-    if last_broadcast:
-        time_since_last = (now - last_broadcast).total_seconds() * 1000
-        remaining_cooldown = BROADCAST_COOLDOWN_MS - time_since_last
+        if last_broadcast_ts:
+            try:
+                last_broadcast = datetime.fromisoformat(last_broadcast_ts.decode())
+                time_since_last = (datetime.now() - last_broadcast).total_seconds()
 
-        if remaining_cooldown > 0:
-            remaining_minutes = int(remaining_cooldown / 60000) + 1
-            await message.answer(
-                f"⏳ Подождите {remaining_minutes} мин. перед следующей рассылкой",
-                reply_markup=admin_broadcast_keyboard(),
-            )
-            return
+                if time_since_last < BROADCAST_COOLDOWN_SECONDS:
+                    remaining_cooldown = BROADCAST_COOLDOWN_SECONDS - time_since_last
+                    remaining_minutes = int(remaining_cooldown / 60) + 1
+                    await message.answer(
+                        f"⏳ Подождите {remaining_minutes} мин. перед следующей рассылкой",
+                        reply_markup=admin_broadcast_keyboard(),
+                    )
+                    return
+            except Exception as e:
+                logger.warning(f"Error checking broadcast rate limit: {e}")
 
     await state.set_state(AdminStates.awaiting_broadcast_message)
 
@@ -225,9 +232,35 @@ async def handle_button_link(
     button_text = button_text.strip()
     url = url.strip()
 
-    if not url.startswith("http") and not url.startswith("t.me"):
+    # Validate button text
+    if not button_text or len(button_text) > 64:
         await message.reply(
-            "❌ Ссылка должна начинаться с `http://`, `https://` или `t.me`",
+            "❌ Текст кнопки должен быть от 1 до 64 символов",
+            parse_mode="Markdown",
+        )
+        return
+
+    # Validate URL with proper regex
+    url_pattern = re.compile(
+        r'^(https?:\/\/)?(www\.)?'  # http:// or https://
+        r'([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}'  # domain
+        r'(:[0-9]{1,5})?'  # optional port
+        r'(\/[^\s]*)?$'  # optional path
+    )
+
+    # Also allow t.me links
+    tg_pattern = re.compile(r'^(https?:\/\/)?(t\.me|telegram\.me)\/[a-zA-Z0-9_]+')
+
+    if not (url.startswith(("http://", "https://", "t.me/", "telegram.me/"))):
+        await message.reply(
+            "❌ Ссылка должна начинаться с `http://`, `https://`, `t.me/` или `telegram.me/`",
+            parse_mode="Markdown",
+        )
+        return
+
+    if not (url_pattern.match(url) or tg_pattern.match(url)):
+        await message.reply(
+            "❌ Неверный формат URL. Проверьте правильность ссылки.",
             parse_mode="Markdown",
         )
         return
@@ -269,8 +302,15 @@ async def execute_broadcast(
         admin_telegram_id=message.chat.id
     )
 
-    # Record broadcast timestamp for rate limiting
-    broadcast_rate_limits[admin_id] = datetime.now()
+    # Record broadcast timestamp for rate limiting in Redis
+    redis_client = data.get("redis_client")
+    if redis_client:
+        rate_limit_key = f"broadcast:ratelimit:{admin_id}"
+        await redis_client.set(
+            rate_limit_key,
+            datetime.now().isoformat(),
+            ex=BROADCAST_COOLDOWN_SECONDS
+        )
 
     await message.reply(
         f"✅ **Рассылка запущена в фоне!**\n\n"

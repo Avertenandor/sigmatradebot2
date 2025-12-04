@@ -52,9 +52,24 @@ class WalletAdminService:
 
         Raises:
             ValueError: If request not found or cannot be approved
+            PermissionError: If admin is not super_admin
         """
         # Note: admin_notes parameter is reserved for future use
         _ = admin_notes  # Mark as intentionally unused
+
+        # Проверка прав админа
+        from app.repositories.admin_repository import AdminRepository
+
+        admin_repo = AdminRepository(self.session)
+        admin = await admin_repo.get_by_id(admin_id)
+
+        if not admin:
+            raise PermissionError("Админ не найден")
+
+        if not admin.is_super_admin:
+            raise PermissionError(
+                "Только super_admin может одобрять заявки на смену кошелька"
+            )
 
         request = await self.repository.get_by_id(request_id)
 
@@ -102,7 +117,22 @@ class WalletAdminService:
 
         Raises:
             ValueError: If request not found or cannot be rejected
+            PermissionError: If admin is not super_admin
         """
+        # Проверка прав админа
+        from app.repositories.admin_repository import AdminRepository
+
+        admin_repo = AdminRepository(self.session)
+        admin = await admin_repo.get_by_id(admin_id)
+
+        if not admin:
+            raise PermissionError("Админ не найден")
+
+        if not admin.is_super_admin:
+            raise PermissionError(
+                "Только super_admin может отклонять заявки на смену кошелька"
+            )
+
         request = await self.repository.get_by_id(request_id)
 
         if not request:

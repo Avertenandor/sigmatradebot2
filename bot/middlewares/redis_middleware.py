@@ -115,11 +115,16 @@ class RedisMiddleware(BaseMiddleware):
         """
         # Check Redis health periodically (every 10th call to avoid overhead)
         # Or check if we know Redis is unhealthy
-        if not self._redis_healthy or (hasattr(self, "_check_counter") and self._check_counter % 10 == 0):
+        if not hasattr(self, "_check_counter"):
+            self._check_counter = 0
+
+        if not self._redis_healthy or (self._check_counter % 10 == 0):
             await self._check_redis_health()
-            if not hasattr(self, "_check_counter"):
-                self._check_counter = 0
-            self._check_counter += 1
+
+        self._check_counter += 1
+        # Reset counter periodically to avoid overflow
+        if self._check_counter >= 1000:
+            self._check_counter = 0
 
         # Provide Redis client only if healthy
         if self.redis_client and self._redis_healthy:

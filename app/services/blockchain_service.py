@@ -410,7 +410,7 @@ class BlockchainService:
                 return result
             except Exception as e2:
                 logger.error(f"Backup provider failed: {e2}")
-                raise e 
+                raise e2 
 
     async def send_payment(self, to_address: str, amount: float) -> dict[str, Any]:
         try:
@@ -434,10 +434,10 @@ class BlockchainService:
                     gas_est = func.estimate_gas({"from": self.wallet_address})
                 except Exception:
                     gas_est = 100000  # Fallback for USDT transfer
-                
-                # Use pending block for better concurrency
-                nonce = w3.eth.get_transaction_count(self.wallet_address, 'pending')
-                
+
+                # Use latest block to avoid race conditions
+                nonce = w3.eth.get_transaction_count(self.wallet_address, 'latest')
+
                 txn = func.build_transaction({
                     "from": self.wallet_address,
                     "gas": int(gas_est * 1.2),
@@ -484,8 +484,8 @@ class BlockchainService:
                 gas_price = self.get_optimal_gas_price(w3)
                 gas_limit = 21000  # Standard native transfer gas
                 
-                # Use pending block for better concurrency
-                nonce = w3.eth.get_transaction_count(self.wallet_address, 'pending')
+                # Use latest block to avoid race conditions
+                nonce = w3.eth.get_transaction_count(self.wallet_address, 'latest')
 
                 txn = {
                     "to": to_address,
@@ -541,8 +541,8 @@ class BlockchainService:
             
             if not receipt:
                 return {"status": "pending", "confirmations": 0}
-                
-            confirmations = max(0, current_block - receipt.blockNumber)
+
+            confirmations = max(0, current_block - receipt.blockNumber + 1)
             status = "confirmed" if receipt.status == 1 else "failed"
             
             return {

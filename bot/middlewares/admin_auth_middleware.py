@@ -80,11 +80,24 @@ class AdminAuthMiddleware(BaseMiddleware):
         )
 
         if not admin:
-            logger.warning(
-                f"User {telegram_user.id} marked as admin but not found "
-                f"in Admin table"
+            # Security: If marked as admin but not in DB - block access
+            logger.error(
+                f"SECURITY: User {telegram_user.id} marked as admin but not found "
+                f"in Admin table - blocking access"
             )
-            return await handler(event, data)
+            if isinstance(event, Message):
+                await event.answer(
+                    "🚫 **Ошибка доступа**\n\n"
+                    "Произошла ошибка при проверке прав администратора.\n"
+                    "Обратитесь к супер-администратору.",
+                    parse_mode="Markdown",
+                )
+            elif isinstance(event, CallbackQuery):
+                await event.answer(
+                    "🚫 Ошибка доступа к админ-панели",
+                    show_alert=True,
+                )
+            return
 
         # R10-3: Check if admin is blocked
         if admin.is_blocked:
