@@ -70,10 +70,62 @@ async def _monitor_metrics_async() -> dict:
         }
 
 
+# Переводы типов аномалий
+ANOMALY_TRANSLATIONS = {
+    "withdrawal_pending_spike": {
+        "title": "📤 Скачок ожидающих выводов",
+        "description": "Много заявок на вывод ожидают обработки",
+        "recommendations": [
+            "Проверить очередь выводов вручную",
+            "При необходимости приостановить авто-одобрение",
+        ],
+    },
+    "withdrawal_amount_spike": {
+        "title": "💸 Крупный вывод средств",
+        "description": "Сумма вывода значительно выше среднего",
+        "recommendations": [
+            "Проверить легитимность вывода",
+            "Убедиться что пользователь реальный",
+        ],
+    },
+    "deposit_spike": {
+        "title": "📥 Скачок депозитов",
+        "description": "Необычно много депозитов за короткое время",
+        "recommendations": [
+            "Проверить источники депозитов",
+            "Мониторить на предмет мошенничества",
+        ],
+    },
+    "level5_deposit_spike": {
+        "title": "💎 Скачок депозитов Level 5",
+        "description": "Много крупных депозитов (Level 5)",
+        "recommendations": [
+            "Проверить новых крупных инвесторов",
+            "Верифицировать источники средств",
+        ],
+    },
+    "rejection_rate_spike": {
+        "title": "❌ Рост отказов по выводам",
+        "description": "Много выводов отклонено",
+        "recommendations": [
+            "Проверить причины отказов",
+            "Связаться с пользователями",
+        ],
+    },
+}
+
+SEVERITY_TRANSLATIONS = {
+    "low": "🟢 Низкая",
+    "medium": "🟡 Средняя",
+    "high": "🟠 Высокая",
+    "critical": "🔴 КРИТИЧЕСКАЯ",
+}
+
+
 async def _send_anomaly_alerts(
     anomalies: list[dict[str, Any]], metrics: dict[str, Any]
 ) -> None:
-    """Send anomaly alerts to admins (R14-1)."""
+    """Send anomaly alerts to admins in Russian (R14-1)."""
     try:
         async with async_session_maker() as session:
             bot = Bot(token=settings.telegram_bot_token)
@@ -85,42 +137,74 @@ async def _send_anomaly_alerts(
                 anomaly_type = anomaly.get("type", "unknown")
                 current = anomaly.get("current", 0)
                 expected = anomaly.get("expected_mean", 0)
-                z_score = anomaly.get("z_score", 0)
                 severity = anomaly.get("severity", "medium")
 
-                deviation_pct = (
-                    ((current - expected) / expected * 100)
-                    if expected > 0
-                    else 0
+                # Get translation
+                translation = ANOMALY_TRANSLATIONS.get(anomaly_type, {})
+                title = translation.get("title", f"⚠️ {anomaly_type}")
+                description = translation.get(
+                    "description", "Обнаружена аномалия"
+                )
+                recommendations = translation.get("recommendations", [])
+
+                severity_text = SEVERITY_TRANSLATIONS.get(
+                    severity, f"⚪ {severity}"
                 )
 
-                message = (
-                    f"🚨 **ANOMALY DETECTED: {anomaly_type}**\n\n"
-                    f"**Severity:** {severity.upper()}\n"
-                    f"**Current:** {current}\n"
-                    f"**Expected:** {expected:.2f}\n"
-                    f"**Deviation:** {deviation_pct:+.1f}%\n"
-                    f"**Z-score:** {z_score:.2f}\n\n"
-                    f"**Timestamp:** {metrics.get('timestamp', 'N/A')}"
-                )
+                # Calculate deviation
+                if expected > 0:
+                    deviation_pct = (current - expected) / expected * 100
+                    comparison = (
+                        f"в *{current/expected:.1f}x* раз больше"
+                        if current > expected
+                        else f"в *{expected/current:.1f}x* раз меньше"
+                    )
+                else:
+                    deviation_pct = 0
+                    comparison = "—"
 
-                # Add recommendations
-                if anomaly_type == "withdrawal_pending_spike":
-                    message += (
-                        "\n\n**Recommended Actions:**\n"
-                        "- Review pending withdrawals manually\n"
-                        "- Consider temporary pause of auto-approvals"
-                    )
-                elif anomaly_type == "withdrawal_amount_spike":
-                    message += (
-                        "\n\n**Recommended Actions:**\n"
-                        "- Require two super_admin approvals for large withdrawals\n"
-                        "- Enhanced fraud detection for new operations"
-                    )
+                # Format current value nicely
+                if isinstance(current, float):
+                    current_str = f"{current:.2f} USDT"
+                else:
+                    current_str = str(current)
+
+                if isinstance(expected, float):
+                    expected_str = f"{expected:.2f} USDT"
+                else:
+                    expected_str = str(expected)
+
+                # Build message
+                message = f"""
+🚨 *ВНИМАНИЕ: {title}*
+{'━' * 28}
+
+📋 *{description}*
+
+{'─' * 28}
+📊 *Статистика:*
+├ Сейчас: *{current_str}*
+├ Обычно: *{expected_str}*
+├ Отклонение: *{deviation_pct:+.0f}%* ({comparison})
+└ Важность: {severity_text}
+
+{'─' * 28}
+💡 *Рекомендации:*
+"""
+                for i, rec in enumerate(recommendations, 1):
+                    message += f"{i}. {rec}\n"
+
+                message += f"""
+{'─' * 28}
+🕐 _{metrics.get('timestamp', 'N/A')[:19]}_
+                """.strip()
 
                 for admin_id in admin_ids:
                     await notification_service.send_notification(
-                        bot, admin_id, message, critical=(severity == "critical")
+                        bot,
+                        admin_id,
+                        message,
+                        critical=(severity == "critical"),
                     )
 
             await bot.session.close()
