@@ -119,8 +119,8 @@ def main_menu_reply_keyboard(
             from app.config.settings import settings
             admin_ids = settings.get_admin_ids()
             is_super_admin_id = telegram_id and admin_ids and telegram_id == admin_ids[0]
-            
-            logger.info(f"[KEYBOARD] AFTER admin panel button, before master key check")
+
+            logger.info("[KEYBOARD] AFTER admin panel button, before master key check")
             logger.info(
                 f"[KEYBOARD] Checking master key button: "
                 f"telegram_id={telegram_id}, type={type(telegram_id)}, "
@@ -197,8 +197,7 @@ def deposit_keyboard(
             level_info = levels_status[level]
             amount = level_info["amount"]
             status = level_info["status"]
-            status_text = level_info.get("status_text", "")
-            
+
             # Build button text with status indicator
             if status == "active":
                 button_text = f"✅ Level {level} ({amount} USDT) - Активен"
@@ -402,30 +401,21 @@ def get_admin_keyboard_from_data(data: dict) -> ReplyKeyboardMarkup:
     """
     Get admin keyboard using role flags from handler data.
 
+    Flags are set by AdminAuthMiddleware based on Admin model properties.
+
     Args:
         data: Handler data dict. Expected keys:
             - is_super_admin: bool
             - is_extended_admin: bool
-            - can_manage_wallets: bool (optional)
-            - admin: Admin object (optional)
+            - can_manage_wallets: bool
 
     Returns:
         ReplyKeyboardMarkup with admin options filtered by role.
     """
-    is_super_admin = data.get("is_super_admin", False)
-    is_extended_admin = data.get("is_extended_admin", False)
-    can_manage_wallets = data.get("can_manage_wallets", False)
-    
-    # Check admin object if flags not set
-    if not can_manage_wallets and "admin" in data:
-        admin = data["admin"]
-        if admin:
-            can_manage_wallets = admin.can_manage_wallets
-
     return admin_keyboard(
-        is_super_admin=is_super_admin,
-        is_extended_admin=is_extended_admin,
-        can_manage_wallets=can_manage_wallets,
+        is_super_admin=data.get("is_super_admin", False),
+        is_extended_admin=data.get("is_extended_admin", False),
+        can_manage_wallets=data.get("can_manage_wallets", False),
     )
 
 
@@ -467,15 +457,14 @@ def admin_keyboard(
     
     builder.row(KeyboardButton(text="📝 Просмотр сообщений пользователей"))
 
-    # Sensitive controls - Extended/Super/Moderator
+    # Extended admin controls (includes Moderator role)
+    # Wallet buttons shown only if can_manage_wallets=True (Super Admin only)
     if is_extended_admin or is_super_admin:
-        wallet_row = []
         if can_manage_wallets:
-            wallet_row.append(KeyboardButton(text="🔐 Управление кошельком"))
-            wallet_row.append(KeyboardButton(text="📡 Блокчейн Настройки"))
-            
-        if wallet_row:
-            builder.row(*wallet_row)
+            builder.row(
+                KeyboardButton(text="🔐 Управление кошельком"),
+                KeyboardButton(text="📡 Блокчейн Настройки"),
+            )
             
         builder.row(
             KeyboardButton(text="🚫 Управление черным списком"),
