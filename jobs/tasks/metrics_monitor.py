@@ -180,7 +180,30 @@ async def _send_anomaly_alerts(
 {'━' * 28}
 
 📋 *{description}*
+"""
+                # Add user info for withdrawal-related anomalies
+                if anomaly_type in (
+                    "withdrawal_amount_spike",
+                    "withdrawal_pending_spike",
+                ):
+                    last_w = metrics.get("withdrawals", {}).get(
+                        "last_withdrawal"
+                    )
+                    if last_w:
+                        username = last_w.get("username") or "без username"
+                        tg_id = last_w.get("telegram_id", "?")
+                        user_id = last_w.get("user_id", "?")
+                        amount = last_w.get("amount", 0)
+                        message += f"""
+{'─' * 28}
+👤 *Последний вывод:*
+├ Пользователь: @{username}
+├ Telegram ID: `{tg_id}`
+├ User ID: {user_id}
+└ Сумма: *{amount:.2f} USDT*
+"""
 
+                message += f"""
 {'─' * 28}
 📊 *Статистика:*
 ├ Сейчас: *{current_str}*

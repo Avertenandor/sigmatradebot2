@@ -62,6 +62,27 @@ class MetricsMonitorService:
             w.amount for w in withdrawals_last_hour
         ))
 
+        # Get last withdrawal with user info
+        last_withdrawal_info = None
+        if withdrawals_last_hour:
+            # Sort by created_at desc and get the latest
+            sorted_withdrawals = sorted(
+                withdrawals_last_hour,
+                key=lambda x: x.created_at,
+                reverse=True,
+            )
+            last_w = sorted_withdrawals[0]
+            # Get user info
+            user = await self.user_repo.get_by_id(last_w.user_id)
+            if user:
+                last_withdrawal_info = {
+                    "user_id": user.id,
+                    "telegram_id": user.telegram_id,
+                    "username": user.username,
+                    "amount": float(last_w.amount),
+                    "created_at": last_w.created_at.isoformat(),
+                }
+
         # Rejected withdrawals (in last hour)
         rejected_count = len([
             w for w in withdrawals_last_hour
@@ -105,6 +126,7 @@ class MetricsMonitorService:
                 "last_hour_amount": withdrawal_amount_last_hour,
                 "rejected_count": rejected_count,
                 "rejection_rate": rejection_rate,
+                "last_withdrawal": last_withdrawal_info,
             },
             "deposits": {
                 "last_day_count": deposit_count,
