@@ -168,7 +168,7 @@ async def show_balance(
     state: FSMContext,
     **data: Any,
 ) -> None:
-    """Show user balance."""
+    """Show user balance with detailed breakdown."""
     telegram_id = message.from_user.id if message.from_user else None
     logger.info(f"[MENU] show_balance called for user {telegram_id}")
     user: User | None = data.get("user")
@@ -195,16 +195,49 @@ async def show_balance(
         await message.answer("❌ Ошибка получения баланса")
         return
 
+    # Calculate ROI earnings (total earnings minus referral earnings)
+    total_earnings = balance.get('total_earnings', 0)
+    referral_earnings = balance.get('referral_earnings', 0)
+    roi_earnings = max(0, float(total_earnings) - float(referral_earnings))
+
     text = (
         f"💰 *Ваш баланс:*\n\n"
-        f"Общий: `{balance['total_balance']:.2f} USDT`\n"
-        f"Доступно: `{balance['available_balance']:.2f} USDT`\n"
-        f"В ожидании: `{balance['pending_earnings']:.2f} USDT`\n\n"
-        f"📊 *Статистика:*\n"
-        f"Депозиты: `{balance['total_deposits']:.2f} USDT`\n"
-        f"Выводы: `{balance['total_withdrawals']:.2f} USDT`\n"
-        f"Заработано: `{balance['total_earnings']:.2f} USDT`"
+        f"💵 Доступно: `{balance['available_balance']:.2f} USDT`\n"
+        f"📊 Общий: `{balance['total_balance']:.2f} USDT`\n"
+        f"⏳ В ожидании: `{balance['pending_earnings']:.2f} USDT`\n\n"
+        f"═══════════════════════════\n"
+        f"📈 *Откуда ваши средства:*\n\n"
+        f"🎯 *ROI доход:* `{roi_earnings:.2f} USDT`\n"
+        f"   _(прибыль от депозитов)_\n\n"
+        f"👥 *Реферальный доход:* `{referral_earnings:.2f} USDT`\n"
     )
+
+    # Add referral breakdown if there are referrals
+    direct = balance.get('direct_referrals', 0)
+    level2 = balance.get('level2_referrals', 0)
+    level3 = balance.get('level3_referrals', 0)
+
+    if direct > 0 or level2 > 0 or level3 > 0:
+        text += (
+            f"   • Уровень 1 (3%): {direct} чел.\n"
+            f"   • Уровень 2 (2%): {level2} чел.\n"
+            f"   • Уровень 3 (5%): {level3} чел.\n"
+        )
+    else:
+        text += f"   _(приглашайте друзей для заработка)_\n"
+
+    text += (
+        f"\n═══════════════════════════\n"
+        f"📊 *Общая статистика:*\n\n"
+        f"💰 Всего депозитов: `{balance['total_deposits']:.2f} USDT`\n"
+        f"💸 Всего выводов: `{balance['total_withdrawals']:.2f} USDT`\n"
+        f"✅ Всего заработано: `{balance['total_earned']:.2f} USDT`\n"
+    )
+
+    # Add pending withdrawals if any
+    pending_withdrawals = balance.get('pending_withdrawals', 0)
+    if pending_withdrawals > 0:
+        text += f"🔄 В обработке (выводы): `{pending_withdrawals:.2f} USDT`\n"
 
     await message.answer(text, parse_mode="Markdown")
 
