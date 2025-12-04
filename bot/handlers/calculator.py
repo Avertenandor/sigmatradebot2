@@ -93,6 +93,13 @@ def format_decimal(value: Decimal, decimals: int = 2) -> str:
     return f"{value:.{decimals}f}"
 
 
+def format_percent(value: Decimal) -> str:
+    """Format percentage without trailing zeros. 1.500 -> 1.5, 2.000 -> 2"""
+    # Format with 2 decimals, then strip trailing zeros
+    formatted = f"{value:.2f}".rstrip('0').rstrip('.')
+    return formatted
+
+
 @router.message(F.text == "📊 Калькулятор")
 async def show_calculator(
     message: Message,
@@ -122,7 +129,7 @@ async def show_calculator(
         
         levels_text += (
             f"{status} *Level {lvl}:* {int(amount)} USDT\n"
-            f"   📈 ROI: {format_decimal(roi, 3)}%/день"
+            f"   📈 ROI: {format_percent(roi)}%/день"
         )
         if cap:
             levels_text += f" | Cap: {cap}%"
@@ -177,7 +184,7 @@ async def show_comparison(
         monthly = daily * 30
         
         text += f"{status} *Level {lvl}* — {int(amount)} USDT\n"
-        text += f"   📈 ROI: *{format_decimal(roi, 3)}%*/день\n"
+        text += f"   📈 ROI: *{format_percent(roi)}%*/день\n"
         text += f"   💰 Доход: *{format_decimal(daily)}/день* | "
         text += f"*{format_decimal(monthly)}/мес*\n"
         
@@ -260,7 +267,7 @@ async def show_level_details(
         f"*Статус:* {status}\n"
         f"{'═' * 25}\n\n"
         f"💵 *Депозит:* {int(amount)} USDT\n"
-        f"📈 *ROI:* {format_decimal(roi, 3)}% в день\n\n"
+        f"📈 *ROI:* {format_percent(roi)}% в день\n\n"
         f"*💰 Ваш личный заработок:*\n"
         f"┌─────────────────────────\n"
         f"│ 📅 *1 день:*     {format_decimal(daily)} USDT\n"
@@ -358,7 +365,7 @@ async def show_locked_level(
         f"Следите за анонсами в сообществе.\n\n"
         f"*Условия уровня:*\n"
         f"💵 Депозит: *{int(amount)} USDT*\n"
-        f"📈 ROI: *{format_decimal(roi, 3)}%* в день\n\n"
+        f"📈 ROI: *{format_percent(roi)}%* в день\n\n"
         f"*Потенциальный заработок:*\n"
         f"• День: *{format_decimal(daily)} USDT*\n"
         f"• Месяц: *{format_decimal(monthly)} USDT*\n"
