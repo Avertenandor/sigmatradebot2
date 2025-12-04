@@ -813,6 +813,33 @@ async def process_password_confirmation(
                 async with session_factory() as session:
                     user_service = UserService(session)
                     user = await user_service.get_by_telegram_id(message.from_user.id)
+                    
+                    # FIX: Create referral relationships if they don't exist
+                    if user and user.referrer_id:
+                        from app.services.referral_service import ReferralService
+                        from app.repositories.referral_repository import ReferralRepository
+                        
+                        referral_repo = ReferralRepository(session)
+                        existing_refs = await referral_repo.get_referrals_for_user(user.id)
+                        
+                        if not existing_refs:
+                            logger.info(
+                                f"Creating missing referral relationships for user {user.id} "
+                                f"with referrer {user.referrer_id}"
+                            )
+                            referral_service = ReferralService(session)
+                            success, error = await referral_service.create_referral_relationships(
+                                new_user_id=user.id,
+                                direct_referrer_id=user.referrer_id,
+                            )
+                            if success:
+                                logger.info(
+                                    f"Referral relationships created for user {user.id}"
+                                )
+                            else:
+                                logger.warning(
+                                    f"Failed to create referral relationships for user {user.id}: {error}"
+                                )
                 
                 if user:
                     logger.info(
