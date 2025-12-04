@@ -266,6 +266,28 @@ class ReferralService:
                 )
                 continue
 
+            # Security checks: skip inactive, blocked, or banned referrers
+            if not referrer.is_active:
+                logger.warning(
+                    "Skipping inactive referrer for reward",
+                    extra={"referrer_id": referrer.id, "referral_id": relationship.id}
+                )
+                continue
+
+            if referrer.earnings_blocked:
+                logger.warning(
+                    "Skipping earnings-blocked referrer for reward",
+                    extra={"referrer_id": referrer.id, "referral_id": relationship.id}
+                )
+                continue
+
+            if referrer.is_banned:
+                logger.warning(
+                    "Skipping banned referrer for reward",
+                    extra={"referrer_id": referrer.id, "referral_id": relationship.id}
+                )
+                continue
+
             # Update referrer balance atomically
             referrer.balance = ((referrer.balance or Decimal("0")) + reward_amount).quantize(Decimal("0.00000001"))
             referrer.total_earned = ((referrer.total_earned or Decimal("0")) + reward_amount).quantize(Decimal("0.00000001"))
@@ -281,7 +303,7 @@ class ReferralService:
 
             # Update total earned in relationship
             relationship.total_earned = (relationship.total_earned + reward_amount).quantize(Decimal("0.00000001"))
-            await self.session.flush()
+            self.session.add(relationship)
 
             total_rewards += reward_amount
 
@@ -297,6 +319,8 @@ class ReferralService:
                 },
             )
 
+        # Flush all changes at once to avoid race conditions
+        await self.session.flush()
         await self.session.commit()
 
         return True, total_rewards, None
@@ -344,6 +368,28 @@ class ReferralService:
             referrer = result.scalar_one_or_none()
 
             if not referrer:
+                continue
+
+            # Security checks: skip inactive, blocked, or banned referrers
+            if not referrer.is_active:
+                logger.warning(
+                    "Skipping inactive referrer for ROI reward",
+                    extra={"referrer_id": referrer.id, "referral_id": relationship.id}
+                )
+                continue
+
+            if referrer.earnings_blocked:
+                logger.warning(
+                    "Skipping earnings-blocked referrer for ROI reward",
+                    extra={"referrer_id": referrer.id, "referral_id": relationship.id}
+                )
+                continue
+
+            if referrer.is_banned:
+                logger.warning(
+                    "Skipping banned referrer for ROI reward",
+                    extra={"referrer_id": referrer.id, "referral_id": relationship.id}
+                )
                 continue
 
             # Update referrer balance atomically

@@ -526,10 +526,16 @@ class UserService:
         result = await self.session.execute(stats_stmt)
         stats = result.one()
 
+        # Get referral statistics for detailed breakdown
+        referral_stats = await self.referral_service.get_referral_stats(user_id)
+
         # Calculate total balance (available + pending earnings)
         available_balance = getattr(user, "balance", Decimal("0.00"))
         pending_earnings = getattr(user, "pending_earnings", Decimal("0.00"))
         total_balance = available_balance + pending_earnings
+
+        # Get total paid (withdrawals that were actually sent)
+        total_paid = stats.total_withdrawals or Decimal("0.00")
 
         return {
             "available_balance": available_balance,
@@ -540,6 +546,19 @@ class UserService:
             "total_deposits": stats.total_deposits or Decimal("0.00"),
             "total_withdrawals": stats.total_withdrawals or Decimal("0.00"),
             "total_earnings": stats.total_earnings or Decimal("0.00"),
+            # Referral breakdown
+            "referral_earnings": referral_stats.get("total_earned", Decimal("0.00")),
+            "referral_pending": referral_stats.get("pending_earnings", Decimal("0.00")),
+            "referral_paid": referral_stats.get("paid_earnings", Decimal("0.00")),
+            "referral_count": (
+                referral_stats.get("direct_referrals", 0) +
+                referral_stats.get("level2_referrals", 0) +
+                referral_stats.get("level3_referrals", 0)
+            ),
+            "direct_referrals": referral_stats.get("direct_referrals", 0),
+            "level2_referrals": referral_stats.get("level2_referrals", 0),
+            "level3_referrals": referral_stats.get("level3_referrals", 0),
+            "total_paid": total_paid,
         }
 
     def generate_referral_link(
