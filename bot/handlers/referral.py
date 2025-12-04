@@ -1,7 +1,7 @@
 """
-Referral Handler - ТОЛЬКО REPLY KEYBOARDS!
+Referral Handler - Партнёрская программа.
 
-Handles referral program actions including stats, leaderboard, and earnings.
+Handles referral program actions including stats, sharing, and earnings.
 """
 
 from typing import Any
@@ -9,17 +9,96 @@ import re
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from app.services.referral_service import ReferralService
 from app.services.user_service import UserService
 from bot.keyboards.reply import referral_keyboard, referral_list_keyboard
-from bot.utils.constants import REFERRAL_RATES
 from bot.utils.formatters import format_usdt
 
 router = Router(name="referral")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SHARE REFERRAL LINK
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@router.message(F.text == "📤 Поделиться ссылкой")
+async def handle_share_link(
+    message: Message,
+    session: AsyncSession,
+    user: User,
+    **data: Any,
+) -> None:
+    """Share referral link with inline buttons."""
+    from app.config.settings import settings
+    import urllib.parse
+
+    user_service = UserService(session)
+    bot_username = settings.telegram_bot_username
+    referral_link = user_service.generate_referral_link(user, bot_username)
+
+    # Create share text
+    share_text = (
+        "🚀 Присоединяйся к SigmaTrade!\n\n"
+        "💰 Инвестируй в USDT и получай до 8% в день!\n"
+        "👥 Партнёрская программа до 3-х уровней\n\n"
+        f"👉 {referral_link}"
+    )
+
+    # URL encode for sharing
+    encoded_text = urllib.parse.quote(share_text)
+
+    # Inline buttons for sharing
+    inline_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="📱 Отправить в Telegram",
+                url=f"https://t.me/share/url?url={referral_link}"
+                    f"&text={encoded_text}"
+            )
+        ],
+    ])
+
+    text = f"""
+📤 *ПОДЕЛИТЬСЯ ССЫЛКОЙ*
+{'━' * 26}
+
+🔗 *Ваша реферальная ссылка:*
+`{referral_link}`
+
+👆 _Нажмите на ссылку чтобы скопировать_
+
+{'─' * 26}
+📱 *Готовый текст для друзей:*
+
+{share_text}
+
+{'─' * 26}
+💡 *Совет:* Отправляйте ссылку в группы,
+чаты и друзьям напрямую!
+    """.strip()
+
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=referral_keyboard(),
+    )
+
+    # Send additional message with inline buttons
+    await message.answer(
+        "👇 *Быстрые действия:*",
+        parse_mode="Markdown",
+        reply_markup=inline_kb,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# MY PARTNERS (REFERRALS LIST)
+# ═══════════════════════════════════════════════════════════════════════════
 
 
 async def _show_referral_list(
@@ -30,64 +109,58 @@ async def _show_referral_list(
     level: int = 1,
     page: int = 1,
 ) -> None:
-    """
-    Show referral list for specific level and page.
-    
-    R4-3: Shows detailed list with dates and earnings.
-    R4-4: Supports pagination.
-    
-    Args:
-        message: Telegram message
-        session: Database session
-        user: Current user
-        state: FSM context
-        level: Referral level (1-3)
-        page: Page number
-    """
+    """Show referral list for specific level and page."""
     referral_service = ReferralService(session)
-    
-    # Get referrals for the level
+
     result = await referral_service.get_referrals_by_level(
         user.id, level=level, page=page, limit=10
     )
-    
+
     referrals = result["referrals"]
     total = result["total"]
     total_pages = result["pages"]
-    
-    # Save to FSM for navigation
+
     await state.update_data(
         referral_level=level,
         referral_page=page,
     )
-    
-    # Build message text
-    text = f"👥 *Мои рефералы - Уровень {level}*\n\n"
-    
+
+    # Level names
+    level_names = {1: "Прямые", 2: "2-я линия", 3: "3-я линия"}
+    level_rates = {1: "3%", 2: "2%", 3: "5%"}
+
+    text = f"""
+👥 *МОИ ПАРТНЁРЫ — {level_names[level]}*
+{'━' * 26}
+
+📊 Уровень {level} | Комиссия: *{level_rates[level]}*
+👥 Партнёров: *{total}*
+"""
+
     if not referrals:
-        text += f"На уровне {level} у вас пока нет рефералов."
+        text += "\n_На этом уровне пока нет партнёров._\n"
+        text += "\n💡 Приглашайте друзей для роста команды!"
     else:
-        text += f"*Всего рефералов уровня {level}: {total}*\n\n"
-        
+        text += f"\n{'─' * 26}\n"
+
         for idx, ref in enumerate(referrals, start=1):
             ref_user = ref["user"]
             earned = ref["earned"]
             joined_at = ref["joined_at"]
-            
+
             username = ref_user.username or "без username"
-            # Escape Markdown chars in username
-            username = username.replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")
-            date_str = joined_at.strftime("%d.%m.%Y")
-            
-            text += (
-                f"*{idx + (page - 1) * 10}.* @{username}\n"
-                f"📅 Дата регистрации: {date_str}\n"
-                f"💰 Заработано: *{format_usdt(earned)} USDT*\n\n"
-            )
-        
+            # Escape Markdown
+            username = username.replace("_", "\\_")
+            username = username.replace("*", "\\*")
+            date_str = joined_at.strftime("%d.%m.%y")
+
+            num = idx + (page - 1) * 10
+            text += f"*{num}.* @{username}\n"
+            text += f"   📅 {date_str} | 💰 {format_usdt(earned)}\n"
+
         if total_pages > 1:
-            text += f"*Страница {page} из {total_pages}*\n\n"
-    
+            text += f"\n📄 Страница *{page}* из *{total_pages}*"
+
     await message.answer(
         text,
         parse_mode="Markdown",
@@ -99,48 +172,90 @@ async def _show_referral_list(
     )
 
 
-@router.message(F.text == "👥 Мои рефералы")
-async def handle_my_referrals(
+@router.message(F.text == "👥 Мои партнёры")
+async def handle_my_partners(
     message: Message,
     session: AsyncSession,
     state: FSMContext,
     user: User,
 ) -> None:
-    """
-    Show user's referrals list.
-    
-    R4-2: Checks if user has any referrals, shows message if none.
-    R4-3: Shows detailed list by levels.
-    """
+    """Show user's partners with tree visualization."""
     referral_service = ReferralService(session)
 
-    # R4-2: Check if user has any referrals across all levels
-    total_referrals = 0
-    for level in [1, 2, 3]:
-        result = await referral_service.get_referrals_by_level(
-            user.id, level=level, page=1, limit=1
-        )
-        total_referrals += result["total"]
-    
-    # R4-2: If no referrals at all, show message
-    if total_referrals == 0:
-        text = (
-            "👥 *Мои рефералы*\n\n"
-            "У вас пока нет рефералов.\n\n"
-            "Приглашайте друзей и получайте бонусы с *3-х уровней*!\n"
-            "• Уровень 1: *3%*\n"
-            "• Уровень 2: *2%*\n"
-            "• Уровень 3: *5%*\n\n"
-            "Вашу реферальную ссылку можно найти в разделе "
-            "\"📊 Статистика рефералов\"."
-        )
+    # Get stats for all levels
+    stats = await referral_service.get_referral_stats(user.id)
+    l1 = stats.get('direct_referrals', 0)
+    l2 = stats.get('level2_referrals', 0)
+    l3 = stats.get('level3_referrals', 0)
+    total = l1 + l2 + l3
+
+    if total == 0:
+        text = f"""
+👥 *МОИ ПАРТНЁРЫ*
+{'━' * 26}
+
+_У вас пока нет партнёров._
+
+{'─' * 26}
+💡 *Как привлечь партнёров:*
+
+1️⃣ Нажмите «📤 Поделиться ссылкой»
+2️⃣ Отправьте друзьям или в группы
+3️⃣ Получайте бонусы с их активности!
+
+*Ваши комиссии:*
+├ L1: *3%* от депозитов и ROI
+├ L2: *2%* от депозитов и ROI
+└ L3: *5%* от депозитов и ROI
+        """.strip()
+
         await message.answer(
-            text, parse_mode="Markdown", reply_markup=referral_keyboard()
+            text,
+            parse_mode="Markdown",
+            reply_markup=referral_keyboard(),
         )
         return
 
-    # R4-3: Show detailed list for Level 1 by default
-    await _show_referral_list(message, session, user, state, level=1, page=1)
+    # Build team tree visualization
+    text = f"""
+👥 *МОИ ПАРТНЁРЫ*
+{'━' * 26}
+
+*Структура команды:*
+
+👤 *Вы*
+├── 👥 L1 (прямые): *{l1}* чел.
+│   └── 👥 L2 (их партнёры): *{l2}* чел.
+│       └── 👥 L3 (3-я линия): *{l3}* чел.
+└── 📊 *Всего в команде: {total}*
+
+{'─' * 26}
+*Комиссии по уровням:*
+├ L1: *3%* — {l1} партнёров
+├ L2: *2%* — {l2} партнёров
+└ L3: *5%* — {l3} партнёров
+
+{'─' * 26}
+👇 *Выберите уровень для просмотра:*
+    """.strip()
+
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=referral_list_keyboard(level=1, page=1, total_pages=1),
+    )
+
+
+# Handle old button name for compatibility
+@router.message(F.text == "👥 Мои рефералы")
+async def handle_my_referrals_compat(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    user: User,
+) -> None:
+    """Compatibility handler for old button."""
+    await handle_my_partners(message, session, state, user)
 
 
 @router.message(F.text.regexp(r"^📊 Уровень (\d+)$"))
@@ -154,10 +269,10 @@ async def handle_referral_level_selection(
     match = re.match(r"^📊 Уровень (\d+)$", message.text)
     if not match:
         return
-    
+
     level = int(match.group(1))
     if level not in [1, 2, 3]:
-        await message.answer("❌ Неверный уровень рефералов.")
+        await message.answer("❌ Неверный уровень.")
         return
 
     await _show_referral_list(message, session, user, state, level=level, page=1)
@@ -171,16 +286,23 @@ async def handle_referral_pagination(
     user: User,
 ) -> None:
     """Handle referral list pagination."""
-    data = await state.get_data()
-    level = data.get("referral_level", 1)
-    current_page = data.get("referral_page", 1)
-    
+    fsm_data = await state.get_data()
+    level = fsm_data.get("referral_level", 1)
+    current_page = fsm_data.get("referral_page", 1)
+
     if message.text == "⬅ Предыдущая страница":
         page = max(1, current_page - 1)
     else:
         page = current_page + 1
-    
-    await _show_referral_list(message, session, user, state, level=level, page=page)
+
+    await _show_referral_list(
+        message, session, user, state, level=level, page=page
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# MY EARNINGS
+# ═══════════════════════════════════════════════════════════════════════════
 
 
 @router.message(F.text == "💰 Мой заработок")
@@ -189,137 +311,247 @@ async def handle_my_earnings(
     session: AsyncSession,
     user: User,
 ) -> None:
-    """Show user's referral earnings."""
+    """Show user's referral earnings with breakdown."""
     referral_service = ReferralService(session)
-
-    # Get referral stats
     stats = await referral_service.get_referral_stats(user.id)
 
-    # R4-6: Check for zero earnings
     total_earned = stats.get('total_earned', 0)
+    pending = stats.get('pending_earnings', 0)
+    paid = stats.get('paid_earnings', 0)
+
     if total_earned == 0:
-        text = (
-            "💰 *Мой заработок*\n\n"
-            "У вас пока нет реферальных начислений.\n\n"
-            "💡 *Совет:* Начните строить свою команду! Ссылку можно найти в разделе "
-            "\"📊 Статистика рефералов\"."
-        )
+        text = f"""
+💰 *МОЙ ЗАРАБОТОК*
+{'━' * 26}
+
+_У вас пока нет реферальных начислений._
+
+{'─' * 26}
+💡 *Как начать зарабатывать:*
+
+1️⃣ Пригласите друга по ссылке
+2️⃣ Он делает депозит — вы получаете *3%*
+3️⃣ Он получает ROI — вы тоже получаете *3%*
+
+Бонусы начисляются автоматически
+на ваш баланс!
+        """.strip()
+
         await message.answer(
-            text, parse_mode="Markdown", reply_markup=referral_keyboard()
+            text,
+            parse_mode="Markdown",
+            reply_markup=referral_keyboard(),
         )
         return
 
-    # Get pending earnings
+    # Get pending earnings details
     result = await referral_service.get_pending_earnings(
-        user.id, page=1, limit=10
+        user.id, page=1, limit=5
     )
-    earnings = result["earnings"]
-    total_amount = result["total_amount"]
+    earnings = result.get("earnings", [])
 
-    text = (
-        f"💰 *Мой заработок*\n\n"
-        f"*Доходы:*\n"
-        f"💵 Всего заработано: *{format_usdt(stats['total_earned'])} USDT*\n"
-        f"⏳ Ожидает выплаты: "
-        f"*{format_usdt(stats['pending_earnings'])} USDT*\n"
-        f"✅ Выплачено: *{format_usdt(stats['paid_earnings'])} USDT*\n\n"
-    )
+    text = f"""
+💰 *МОЙ ЗАРАБОТОК*
+{'━' * 26}
+
+📊 *Общая статистика:*
+├ 💵 Всего заработано: *{format_usdt(total_earned)}*
+├ ⏳ Ожидает: *{format_usdt(pending)}*
+└ ✅ Выплачено: *{format_usdt(paid)}*
+
+{'─' * 26}
+💡 *Как это работает:*
+
+Бонусы начисляются *мгновенно* при:
+├ 💳 Депозите партнёра → *вам %*
+└ 📈 ROI партнёра → *вам тоже %*
+
+Средства сразу идут на ваш баланс!
+"""
 
     if earnings:
-        text += "*Последние выплаты:*\n"
-        for earning in earnings[:5]:
-            date = earning["created_at"].strftime("%d.%m.%Y")
-            emoji = "✅" if earning["paid"] else "⏳"
-            status = 'Выплачено' if earning['paid'] else 'Ожидает'
-            text += (
-                f"{emoji} {format_usdt(earning['amount'])} USDT\n"
-                f"   Дата: {date}\n"
-                f"   Статус: {status}\n\n"
-            )
-
-        if total_amount > 0:
-            text += f"💰 Всего ожидает: *{format_usdt(total_amount)} USDT*\n"
-    else:
-        text += "У вас пока нет ожидающих выплат."
+        text += f"\n{'─' * 26}\n"
+        text += "*Последние начисления:*\n"
+        for e in earnings[:5]:
+            date = e["created_at"].strftime("%d.%m %H:%M")
+            emoji = "✅" if e["paid"] else "⏳"
+            text += f"{emoji} +{format_usdt(e['amount'])} | {date}\n"
 
     await message.answer(
-        text, parse_mode="Markdown", reply_markup=referral_keyboard()
+        text,
+        parse_mode="Markdown",
+        reply_markup=referral_keyboard(),
     )
 
 
-@router.message(F.text == "📊 Статистика рефералов")
-async def handle_referral_stats(
+# ═══════════════════════════════════════════════════════════════════════════
+# DETAILED STATISTICS
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@router.message(F.text == "📊 Подробная статистика")
+async def handle_detailed_stats(
     message: Message,
     session: AsyncSession,
     user: User,
     **data: Any,
 ) -> None:
     """Show comprehensive referral statistics."""
+    from app.config.settings import settings
+
     referral_service = ReferralService(session)
     user_service = UserService(session)
 
-    # Get referral stats
     stats = await referral_service.get_referral_stats(user.id)
-
-    # Get bot info for referral link
-    from app.config.settings import settings
-    from aiogram import Bot
-
     bot_username = settings.telegram_bot_username
-    # Fallback: get from bot if not in settings
-    if not bot_username:
-        bot: Bot = data.get("bot")
-        if bot:
-            bot_info = await bot.get_me()
-            bot_username = bot_info.username
-    
-    # Generate referral link (method now handles referral_code internally)
     referral_link = user_service.generate_referral_link(user, bot_username)
 
-    # Get user position in leaderboard
-    user_position = await referral_service.get_user_leaderboard_position(
-        user.id
-    )
+    # Get leaderboard position
+    position = await referral_service.get_user_leaderboard_position(user.id)
+    ref_rank = position.get("referral_rank")
+    earn_rank = position.get("earnings_rank")
+    total_users = position.get("total_users", 0)
 
-    text = (
-        f"📊 *Статистика рефералов*\n\n"
-        f"*Ваша реферальная ссылка:*\n"
-        f"`{referral_link}`\n\n"
-        f"*Статистика:*\n"
-        f"👥 Прямые партнеры: *{stats['direct_referrals']}*\n"
-        f"👥 Уровень 2: *{stats['level2_referrals']}*\n"
-        f"👥 Уровень 3: *{stats['level3_referrals']}*\n\n"
-        f"*Доходы:*\n"
-        f"💵 Всего заработано: *{format_usdt(stats['total_earned'])} USDT*\n"
-        f"⏳ Ожидает выплаты: "
-        f"*{format_usdt(stats['pending_earnings'])} USDT*\n"
-        f"✅ Выплачено: *{format_usdt(stats['paid_earnings'])} USDT*\n\n"
-    )
+    l1 = stats.get('direct_referrals', 0)
+    l2 = stats.get('level2_referrals', 0)
+    l3 = stats.get('level3_referrals', 0)
+    total = l1 + l2 + l3
 
-    # Add leaderboard position if available
-    referral_rank = user_position.get("referral_rank")
-    earnings_rank = user_position.get("earnings_rank")
-    total_users = user_position.get("total_users", 0)
+    text = f"""
+📊 *ПОДРОБНАЯ СТАТИСТИКА*
+{'━' * 26}
 
-    if referral_rank or earnings_rank:
-        text += "*Ваша позиция в рейтинге:*\n"
-        if referral_rank:
-            text += f"📊 По рефералам: *{referral_rank}* из {total_users}\n"
-        if earnings_rank:
-            text += f"💰 По заработку: *{earnings_rank}* из {total_users}\n"
-        text += "\n"
+🔗 *Ваша ссылка:*
+`{referral_link}`
 
-    text += (
-        f"*Комиссии:*\n"
-        f"• Уровень 1: *{int(REFERRAL_RATES[1] * 100)}%* от депозитов прямых "
-        "партнеров\n"
-        f"• Уровень 2: *{int(REFERRAL_RATES[2] * 100)}%* от партнеров второго "
-        "уровня\n"
-        f"• Уровень 3: *{int(REFERRAL_RATES[3] * 100)}%* от партнеров третьего "
-        "уровня\n\n"
-        f"💡 Приглашайте больше друзей и увеличивайте доход!"
-    )
+{'─' * 26}
+👥 *Команда:*
+├ L1 (прямые): *{l1}*
+├ L2 (2-я линия): *{l2}*
+├ L3 (3-я линия): *{l3}*
+└ 📊 Всего: *{total}*
+
+{'─' * 26}
+💰 *Доходы:*
+├ Всего: *{format_usdt(stats['total_earned'])}*
+├ Ожидает: *{format_usdt(stats['pending_earnings'])}*
+└ Выплачено: *{format_usdt(stats['paid_earnings'])}*
+"""
+
+    if ref_rank or earn_rank:
+        text += f"\n{'─' * 26}\n"
+        text += "🏆 *Рейтинг:*\n"
+        if ref_rank:
+            text += f"├ По команде: #{ref_rank} из {total_users}\n"
+        if earn_rank:
+            text += f"└ По доходу: #{earn_rank} из {total_users}\n"
+
+    text += f"""
+{'─' * 26}
+💎 *Ваши комиссии:*
+├ L1: *3%* от депозитов + ROI
+├ L2: *2%* от депозитов + ROI
+└ L3: *5%* от депозитов + ROI
+
+💡 _Комиссии начисляются автоматически_
+    """.strip()
 
     await message.answer(
-        text, parse_mode="Markdown", reply_markup=referral_keyboard()
+        text,
+        parse_mode="Markdown",
+        reply_markup=referral_keyboard(),
     )
+
+
+# Handle old button for compatibility
+@router.message(F.text == "📊 Статистика рефералов")
+async def handle_stats_compat(
+    message: Message,
+    session: AsyncSession,
+    user: User,
+    **data: Any,
+) -> None:
+    """Compatibility handler for old stats button."""
+    await handle_detailed_stats(message, session, user, **data)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# HOW IT WORKS
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@router.message(F.text == "❓ Как это работает?")
+async def handle_how_it_works(
+    message: Message,
+    **data: Any,
+) -> None:
+    """Show detailed explanation of referral program."""
+    text = f"""
+❓ *КАК РАБОТАЕТ ПАРТНЁРСКАЯ ПРОГРАММА*
+{'━' * 26}
+
+📋 *Пошагово:*
+
+*1️⃣ Приглашение*
+Отправьте свою ссылку другу.
+Он переходит и регистрируется.
+→ Теперь он ваш партнёр L1!
+
+*2️⃣ Бонус с депозита*
+Партнёр делает депозит 100 USDT
+→ Вам сразу *+3 USDT* (3%)
+
+*3️⃣ Бонус с ROI*
+Партнёру начисляется ROI +2 USDT
+→ Вам тоже *+0.06 USDT* (3%)
+
+{'─' * 26}
+*3 УРОВНЯ ГЛУБИНЫ:*
+
+👤 Вы
+├── 👥 L1 (ваш друг) → *3%*
+│   └── 👥 L2 (его друг) → *2%*
+│       └── 👥 L3 (друг друга) → *5%*
+
+{'─' * 26}
+*ПРИМЕР ДОХОДА:*
+
+3 партнёра L1 с депозитом 100$:
+├ От депозитов: 3 × 3$ = *9$*
+├ От ROI (~8%/день): 3 × 0.24$ = *0.72$/день*
+└ В месяц пассивно: *~22$*
+
+А если у каждого ещё по 3 партнёра...
+L2: 9 чел × 2% = *ещё больше!*
+
+{'─' * 26}
+💡 *Важно:*
+• Бонусы начисляются *автоматически*
+• Деньги сразу на вашем балансе
+• Можно вывести в любой момент
+• Нет лимитов на количество партнёров
+    """.strip()
+
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=referral_keyboard(),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# BACK NAVIGATION
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@router.message(F.text == "◀️ Назад к рефералам")
+async def handle_back_to_referrals(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    user: User,
+    **data: Any,
+) -> None:
+    """Go back to referral main menu."""
+    from bot.handlers.menu import show_referral_menu
+    await show_referral_menu(message, session, state, **{"user": user, **data})

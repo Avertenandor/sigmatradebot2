@@ -275,16 +275,20 @@ def referral_keyboard() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
 
     builder.row(
-        KeyboardButton(text="👥 Мои рефералы"),
+        KeyboardButton(text="📤 Поделиться ссылкой"),
     )
     builder.row(
+        KeyboardButton(text="👥 Мои партнёры"),
         KeyboardButton(text="💰 Мой заработок"),
     )
     builder.row(
-        KeyboardButton(text="📊 Статистика рефералов"),
+        KeyboardButton(text="📊 Подробная статистика"),
     )
     builder.row(
-        KeyboardButton(text="📊 Главное меню"),
+        KeyboardButton(text="❓ Как это работает?"),
+    )
+    builder.row(
+        KeyboardButton(text="🏠 Главное меню"),
     )
 
     return builder.as_markup(resize_keyboard=True)

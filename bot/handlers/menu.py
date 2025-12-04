@@ -27,7 +27,6 @@ from bot.keyboards.reply import (
     wallet_menu_keyboard,
     profile_keyboard,
 )
-from bot.states.profile_update import ProfileUpdateStates
 from bot.states.registration import RegistrationStates
 from bot.utils.text_utils import escape_markdown
 
@@ -250,8 +249,7 @@ async def show_deposit_menu(
             level_info = levels_status[level]
             amount = level_info["amount"]
             status = level_info["status"]
-            status_text = level_info.get("status_text", "")
-            
+
             if status == "active":
                 text += f"✅ Level {level}: `{amount} USDT` - Активен\n"
             elif status == "available":
@@ -352,10 +350,9 @@ async def show_referral_menu(
     state: FSMContext,
     **data: Any,
 ) -> None:
-    """Show referral menu."""
+    """Show referral menu with quick stats and link."""
     user: User | None = data.get("user")
     if not user:
-        # Try to get user from database
         from app.repositories.user_repository import UserRepository
         user_repo = UserRepository(session)
         if message.from_user:
@@ -367,22 +364,54 @@ async def show_referral_menu(
                 "Попробуйте отправить /start"
             )
             return
-    
+
     await state.clear()
 
     from app.config.settings import settings
     from app.services.user_service import UserService
+    from app.services.referral_service import ReferralService
+    from bot.utils.formatters import format_usdt
 
     user_service = UserService(session)
+    referral_service = ReferralService(session)
+
     bot_username = settings.telegram_bot_username
     referral_link = user_service.generate_referral_link(user, bot_username)
 
-    text = (
-        f"👥 *Реферальная программа*\n\n"
-        f"Ваша реферальная ссылка:\n"
-        f"`{referral_link}`\n\n"
-        f"Приглашайте друзей и получайте вознаграждение!"
+    # Get quick stats
+    stats = await referral_service.get_referral_stats(user.id)
+    total_partners = (
+        stats.get('direct_referrals', 0) +
+        stats.get('level2_referrals', 0) +
+        stats.get('level3_referrals', 0)
     )
+    total_earned = stats.get('total_earned', 0)
+
+    text = f"""
+👥 *ПАРТНЁРСКАЯ ПРОГРАММА*
+{'━' * 26}
+
+🔗 *Ваша ссылка:*
+`{referral_link}`
+_(нажмите чтобы скопировать)_
+
+{'─' * 26}
+📊 *Быстрая статистика:*
+├ 👥 Партнёров: *{total_partners}*
+│   ├ L1: {stats.get('direct_referrals', 0)}
+│   ├ L2: {stats.get('level2_referrals', 0)}
+│   └ L3: {stats.get('level3_referrals', 0)}
+└ 💰 Заработано: *{format_usdt(total_earned)} USDT*
+
+{'─' * 26}
+💎 *Ваши комиссии:*
+├ 1 линия: *3%* от депозитов + *3%* от ROI
+├ 2 линия: *2%* от депозитов + *2%* от ROI
+└ 3 линия: *5%* от депозитов + *5%* от ROI
+{'━' * 26}
+
+👇 *Выберите действие:*
+    """.strip()
 
     await message.answer(
         text, reply_markup=referral_keyboard(), parse_mode="Markdown"
