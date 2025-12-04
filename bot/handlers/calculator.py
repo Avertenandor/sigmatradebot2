@@ -130,9 +130,10 @@ async def show_calculator(
     
     text = (
         "📊 *Калькулятор доходности*\n\n"
-        f"*Текущие условия:*\n{levels_text}\n"
-        "Выберите уровень для детального расчёта\n"
-        "или нажмите *'📋 Сравнить все уровни'*"
+        "🚀 Инвестируйте в будущее с SigmaTrade!\n\n"
+        f"*Доступные уровни:*\n{levels_text}\n"
+        "👆 Выберите уровень для детального расчёта\n"
+        "или нажмите *«📋 Сравнить все уровни»*"
     )
     
     await message.answer(
@@ -159,7 +160,8 @@ async def show_comparison(
         await message.answer("❌ Уровни не найдены.")
         return
     
-    text = "📋 *Сравнение всех уровней*\n\n"
+    text = "📋 *Сравнение уровней*\n\n"
+    text += "🚀 Выберите свой путь к успеху!\n\n"
     
     for lvl in sorted(levels.keys()):
         info = levels[lvl]
@@ -168,41 +170,34 @@ async def show_comparison(
         cap = info["roi_cap"]
         is_active = info["is_active"]
         
-        status = "✅ Доступен" if is_active else "🔒 Закрыт"
+        status = "✅" if is_active else "🔒"
         
         # Calculate projections
         daily = amount * roi / Decimal("100")
-        weekly = daily * 7
         monthly = daily * 30
-        yearly = daily * 365
         
-        text += f"{'═' * 25}\n"
-        text += f"*Level {lvl}* — {status}\n"
-        text += f"💵 Депозит: *{int(amount)} USDT*\n"
-        text += f"📈 ROI: *{format_decimal(roi, 3)}%* в день\n\n"
-        
-        text += f"*Прогноз заработка:*\n"
-        text += f"• День: *{format_decimal(daily)} USDT*\n"
-        text += f"• Неделя: *{format_decimal(weekly)} USDT*\n"
-        text += f"• Месяц: *{format_decimal(monthly)} USDT*\n"
-        text += f"• Год: *{format_decimal(yearly)} USDT*\n"
+        text += f"{status} *Level {lvl}* — {int(amount)} USDT\n"
+        text += f"   📈 ROI: *{format_decimal(roi, 3)}%*/день\n"
+        text += f"   💰 Доход: *{format_decimal(daily)}/день* | "
+        text += f"*{format_decimal(monthly)}/мес*\n"
         
         if cap:
             max_roi = amount * Decimal(cap) / Decimal("100")
             days_to_cap = int(max_roi / daily) if daily > 0 else 0
-            text += (
-                f"\n🎯 *ROI Cap:* {cap}% = *{format_decimal(max_roi)} USDT*\n"
-                f"📅 Достижение: ~*{days_to_cap} дней*\n"
-            )
+            text += f"   🎯 Cap: {cap}% (~{days_to_cap} дн.)\n"
         else:
-            text += "\n♾️ *Без ограничения ROI*\n"
+            text += "   ♾️ Без лимита\n"
         
         text += "\n"
     
     text += (
         "━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "⚠️ _Расчёт приблизительный.\n"
-        "Фактический ROI зависит от настроек системы._"
+        "💎 *Реферальная программа:*\n"
+        "Получайте от депозитов И дохода:\n"
+        "• 1 линия: *3%* 👥\n"
+        "• 2 линия: *2%* 👥👥\n"
+        "• 3 линия: *5%* 👥👥👥\n\n"
+        "🔥 _Выберите уровень для расчёта!_"
     )
     
     await message.answer(
@@ -252,13 +247,21 @@ async def show_level_details(
     quarterly = daily * 90
     yearly = daily * 365
     
+    # Calculate referral bonuses (if you have 1 referral on each level)
+    ref_l1_deposit = amount * Decimal("0.03")  # 3% от депозита
+    ref_l2_deposit = amount * Decimal("0.02")  # 2% от депозита
+    ref_l3_deposit = amount * Decimal("0.05")  # 5% от депозита
+    ref_l1_daily = daily * Decimal("0.03")  # 3% от дохода
+    ref_l2_daily = daily * Decimal("0.02")  # 2% от дохода
+    ref_l3_daily = daily * Decimal("0.05")  # 5% от дохода
+    
     text = (
-        f"📊 *Калькулятор: Level {level_num}*\n\n"
+        f"📊 *Level {level_num}*\n\n"
         f"*Статус:* {status}\n"
         f"{'═' * 25}\n\n"
         f"💵 *Депозит:* {int(amount)} USDT\n"
         f"📈 *ROI:* {format_decimal(roi, 3)}% в день\n\n"
-        f"*💰 Прогноз заработка:*\n"
+        f"*💰 Ваш личный заработок:*\n"
         f"┌─────────────────────────\n"
         f"│ 📅 *1 день:*     {format_decimal(daily)} USDT\n"
         f"│ 📅 *7 дней:*     {format_decimal(weekly)} USDT\n"
@@ -296,8 +299,16 @@ async def show_level_details(
     
     text += (
         "\n━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "⚠️ _Расчёт приблизительный.\n"
-        "Фактический ROI может отличаться от прогноза._"
+        "💎 *Реферальная программа:*\n\n"
+        "*Бонус от депозита реферала:*\n"
+        f"• 1 линия (3%): *{format_decimal(ref_l1_deposit)} USDT*\n"
+        f"• 2 линия (2%): *{format_decimal(ref_l2_deposit)} USDT*\n"
+        f"• 3 линия (5%): *{format_decimal(ref_l3_deposit)} USDT*\n\n"
+        "*Бонус от дохода реферала (ежедневно):*\n"
+        f"• 1 линия (3%): *{format_decimal(ref_l1_daily, 4)} USDT*\n"
+        f"• 2 линия (2%): *{format_decimal(ref_l2_daily, 4)} USDT*\n"
+        f"• 3 линия (5%): *{format_decimal(ref_l3_daily, 4)} USDT*\n\n"
+        "🔥 _Стройте команду — увеличивайте доход!_"
     )
     
     await message.answer(
@@ -336,25 +347,38 @@ async def show_locked_level(
     
     # Calculate projections anyway
     daily = amount * roi / Decimal("100")
-    weekly = daily * 7
     monthly = daily * 30
     
+    # Referral bonuses
+    ref_l1 = amount * Decimal("0.03")
+    
     text = (
-        f"🔒 *Level {level_num} — Временно закрыт*\n\n"
-        f"Этот уровень пока недоступен для покупки.\n"
-        f"Следите за обновлениями!\n\n"
-        f"*Условия уровня (когда откроется):*\n"
-        f"💵 Депозит: {int(amount)} USDT\n"
-        f"📈 ROI: {format_decimal(roi, 3)}% в день\n\n"
+        f"🔒 *Level {level_num}*\n\n"
+        f"⏳ Этот уровень скоро станет доступен!\n"
+        f"Следите за анонсами в сообществе.\n\n"
+        f"*Условия уровня:*\n"
+        f"💵 Депозит: *{int(amount)} USDT*\n"
+        f"📈 ROI: *{format_decimal(roi, 3)}%* в день\n\n"
         f"*Потенциальный заработок:*\n"
-        f"• День: {format_decimal(daily)} USDT\n"
-        f"• Неделя: {format_decimal(weekly)} USDT\n"
-        f"• Месяц: {format_decimal(monthly)} USDT\n"
+        f"• День: *{format_decimal(daily)} USDT*\n"
+        f"• Месяц: *{format_decimal(monthly)} USDT*\n"
     )
     
     if cap:
         max_roi = amount * Decimal(cap) / Decimal("100")
-        text += f"\n🎯 ROI Cap: {cap}% ({format_decimal(max_roi)} USDT)\n"
+        days = int(max_roi / daily) if daily > 0 else 0
+        text += f"\n🎯 ROI Cap: *{cap}%* ({format_decimal(max_roi)} USDT)\n"
+        text += f"📅 Достижение: ~*{days} дней*\n"
+    
+    text += (
+        "\n━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "💡 *А пока:*\n"
+        "Начните с доступных уровней и\n"
+        f"зарабатывайте на рефералах!\n\n"
+        f"Пригласите партнёра на Level {level_num}:\n"
+        f"• Бонус от депозита: *{format_decimal(ref_l1)} USDT*\n"
+        f"• Бонус от дохода: *3%* ежедневно"
+    )
     
     await message.answer(
         text,
