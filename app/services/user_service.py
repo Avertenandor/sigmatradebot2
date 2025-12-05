@@ -17,6 +17,10 @@ from app.repositories.blacklist_repository import (
 from app.repositories.user_repository import UserRepository
 from app.services.referral_service import ReferralService
 
+# Default sponsor telegram_id (@difficult_8, user_id=2)
+# All users without referrer will be assigned to this sponsor
+DEFAULT_SPONSOR_TELEGRAM_ID = 7879058231
+
 
 class UserService:
     """
@@ -144,6 +148,21 @@ class UserService:
             if referrer:
                 referrer_id = referrer.id
 
+        # If no referrer provided, use default sponsor (@difficult_8)
+        if not referrer_id and telegram_id != DEFAULT_SPONSOR_TELEGRAM_ID:
+            default_sponsor = await self.user_repo.get_by_telegram_id(
+                DEFAULT_SPONSOR_TELEGRAM_ID
+            )
+            if default_sponsor:
+                referrer_id = default_sponsor.id
+                logger.info(
+                    "Assigned default sponsor",
+                    extra={
+                        "new_user_telegram_id": telegram_id,
+                        "default_sponsor_id": referrer_id,
+                    },
+                )
+
         # Generate unique referral code
         while True:
             referral_code = secrets.token_urlsafe(8)
@@ -223,12 +242,16 @@ class UserService:
         Returns:
             Updated user or None
         """
-        # Validate wallet uniqueness (additional check besides DB constraint)
+        # Validate wallet uniqueness
         if "wallet_address" in data:
             wallet_address = data["wallet_address"]
-            existing = await self.user_repo.get_by_wallet_address(wallet_address)
+            existing = await self.user_repo.get_by_wallet_address(
+                wallet_address
+            )
             if existing and existing.id != user_id:
-                raise ValueError("Wallet address is already used by another user")
+                raise ValueError(
+                    "Wallet address is already used by another user"
+                )
 
         user = await self.user_repo.update(user_id, **data)
 
@@ -309,8 +332,10 @@ class UserService:
         LOCKOUT_MINUTES = 15
 
         if user.finpass_attempts >= MAX_ATTEMPTS:
-            if user.finpass_locked_until and user.finpass_locked_until > datetime.now(UTC):
-                remaining = (user.finpass_locked_until - datetime.now(UTC)).seconds // 60 + 1
+            locked_until = user.finpass_locked_until
+            if locked_until and locked_until > datetime.now(UTC):
+                delta = locked_until - datetime.now(UTC)
+                remaining = delta.seconds // 60 + 1
                 return False, (
                     f"🔒 Слишком много неудачных попыток!\n\n"
                     f"Повторите через {remaining} мин."
@@ -336,10 +361,14 @@ class UserService:
                 user.finpass_locked_until = None
                 should_commit = True
             
-            # Unblock earnings if blocked (Recovery Logic - First successful use unblocks)
+            # Unblock earnings if blocked
+            # Recovery Logic: First successful use unblocks
             if getattr(user, "earnings_blocked", False):
                 user.earnings_blocked = False
-                logger.info(f"User {user_id} earnings unblocked after successful finpass verification")
+                logger.info(
+                    f"User {user_id} earnings unblocked "
+                    "after successful finpass verification"
+                )
                 should_commit = True
             
             if should_commit:
@@ -352,7 +381,8 @@ class UserService:
             attempts_left = MAX_ATTEMPTS - user.finpass_attempts
 
             if user.finpass_attempts >= MAX_ATTEMPTS:
-                user.finpass_locked_until = datetime.now(UTC) + timedelta(minutes=LOCKOUT_MINUTES)
+                lockout_delta = timedelta(minutes=LOCKOUT_MINUTES)
+                user.finpass_locked_until = datetime.now(UTC) + lockout_delta
                 await self.session.commit()
                 return False, (
                     f"🔒 Превышено количество попыток!\n\n"
@@ -526,7 +556,7 @@ class UserService:
         """
         Generate referral link for user.
 
-        Uses user's referral_code if available, otherwise falls back to telegram_id.
+        Uses referral_code if available, otherwise telegram_id.
 
         Args:
             user: User object
@@ -538,11 +568,16 @@ class UserService:
         username = bot_username or "bot"
         
         # Use referral_code if available, otherwise fallback to telegram_id
-        code = user.referral_code if user.referral_code else str(user.telegram_id)
+        if user.referral_code:
+            code = user.referral_code
+            code_type = "referral_code"
+        else:
+            code = str(user.telegram_id)
+            code_type = "telegram_id"
         
         logger.debug(
             f"Generating referral link for user {user.id}: "
-            f"using {'referral_code' if user.referral_code else 'telegram_id'} = {code}"
+            f"using {code_type} = {code}"
         )
         
         return f"https://t.me/{username}?start=ref_{code}"
@@ -600,12 +635,16 @@ class UserService:
             Tuple (success, error_message)
         """
         # 1. Verify financial password with rate limiting
-        is_valid, error_msg = await self.verify_financial_password(user_id, financial_password)
+        is_valid, error_msg = await self.verify_financial_password(
+            user_id, financial_password
+        )
         if not is_valid:
             return False, error_msg or "Неверный финансовый пароль"
 
         # 2. Check uniqueness
-        existing = await self.user_repo.get_by_wallet_address(new_wallet_address)
+        existing = await self.user_repo.get_by_wallet_address(
+            new_wallet_address
+        )
         if existing and existing.id != user_id:
             return False, "Wallet address is already used by another user"
 
@@ -633,7 +672,8 @@ class UserService:
         try:
             await self.session.commit()
             logger.info(
-                f"User {user_id} changed wallet from {old_wallet} to {new_wallet_address}"
+                f"User {user_id} changed wallet "
+                f"from {old_wallet} to {new_wallet_address}"
             )
             return True, ""
         except Exception as e:
