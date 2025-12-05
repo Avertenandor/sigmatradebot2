@@ -162,6 +162,9 @@ async def process_ticket_message(
         from bot.main import bot_instance
 
         if bot_instance:
+            # Escape user text for Markdown
+            safe_text = escape_md(message.text) if message.text else ""
+            
             # Format admin notification
             if user:
                 username = escape_md(user.username) if user.username else "пользователь"
@@ -169,7 +172,7 @@ async def process_ticket_message(
                     f"🆕 *Новое обращение #{ticket.id}*\n\n"
                     f"От: @{username} "
                     f"(`{user.telegram_id}`)\n"
-                    f"Текст: {message.text}"
+                    f"Текст: {safe_text}"
                 )
             else:
                 # Guest ticket
@@ -181,7 +184,7 @@ async def process_ticket_message(
                 admin_text = (
                     f"🆕 *Новое обращение #{ticket.id}* (Гость)\n\n"
                     f"От: @{username} (`{telegram_id}`)\n"
-                    f"Текст: {message.text}"
+                    f"Текст: {safe_text}"
                 )
 
             for admin_id in settings.get_admin_ids():

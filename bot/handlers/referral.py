@@ -16,7 +16,7 @@ from app.models.user import User
 from app.services.referral_service import ReferralService
 from app.services.user_service import UserService
 from bot.keyboards.reply import referral_keyboard, referral_list_keyboard
-from bot.utils.formatters import format_usdt
+from bot.utils.formatters import format_usdt, escape_md
 
 router = Router(name="referral")
 
@@ -63,8 +63,8 @@ async def handle_share_link(
         ],
     ])
 
-    # Escape share_text for Markdown (contains _ in URL)
-    share_text_escaped = share_text.replace("_", "\\_")
+    # Escape share_text for Markdown (URL contains _ and -)
+    share_text_escaped = escape_md(share_text)
 
     text = f"""
 📤 *ПОДЕЛИТЬСЯ ССЫЛКОЙ*
@@ -81,7 +81,7 @@ async def handle_share_link(
 {share_text_escaped}
 
 {'─' * 26}
-💡 *Совет:* Отправляйте ссылку в группы,
+💡 Совет: Отправляйте ссылку в группы,
 чаты и друзьям напрямую!
     """.strip()
 
