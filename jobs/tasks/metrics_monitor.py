@@ -6,6 +6,7 @@ Runs every 5 minutes.
 """
 
 import asyncio
+from typing import Any
 
 import dramatiq
 from aiogram import Bot
@@ -13,10 +14,7 @@ from loguru import logger
 
 from app.config.database import async_session_maker
 from app.config.settings import settings
-from typing import Any
-
 from app.services.metrics_monitor_service import MetricsMonitorService
-from app.services.notification_service import NotificationService
 
 
 @dramatiq.actor(max_retries=3, time_limit=120_000)  # 2 min timeout
@@ -122,14 +120,26 @@ SEVERITY_TRANSLATIONS = {
 }
 
 
+def _escape_markdown(text: str) -> str:
+    """Escape all Markdown special characters for Telegram."""
+    if not text:
+        return text
+    # Escape: _ * [ ] ( ) ~ ` > # + - = | { } . !
+    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+',
+                     '-', '=', '|', '{', '}', '.', '!']
+    result = str(text)
+    for char in special_chars:
+        result = result.replace(char, f'\\{char}')
+    return result
+
+
 async def _send_anomaly_alerts(
     anomalies: list[dict[str, Any]], metrics: dict[str, Any]
 ) -> None:
     """Send anomaly alerts to admins in Russian (R14-1)."""
     try:
-        async with async_session_maker() as session:
+        async with async_session_maker() as session:  # noqa: F841
             bot = Bot(token=settings.telegram_bot_token)
-            notification_service = NotificationService(session)
 
             admin_ids = settings.get_admin_ids()
 
@@ -154,14 +164,11 @@ async def _send_anomaly_alerts(
                 # Calculate deviation
                 if expected > 0:
                     deviation_pct = (current - expected) / expected * 100
-                    comparison = (
-                        f"в *{current/expected:.1f}x* раз больше"
-                        if current > expected
-                        else f"в *{expected/current:.1f}x* раз меньше"
-                    )
+                    times_more = current / expected
+                    comparison = f"в {times_more:.1f}x раз больше"
                 else:
                     deviation_pct = 0
-                    comparison = "—"
+                    comparison = "N/A"
 
                 # Format current value nicely
                 if isinstance(current, float):
@@ -174,13 +181,15 @@ async def _send_anomaly_alerts(
                 else:
                     expected_str = str(expected)
 
-                # Build message
-                message = f"""
-🚨 *ВНИМАНИЕ: {title}*
-{'━' * 28}
+                # Build message using simple formatting (no parse_mode issues)
+                lines = [
+                    f"🚨 ВНИМАНИЕ: {title}",
+                    "=" * 30,
+                    "",
+                    f"📋 {description}",
+                    "",
+                ]
 
-📋 *{description}*
-"""
                 # Add user info for withdrawal-related anomalies
                 if anomaly_type in (
                     "withdrawal_amount_spike",
@@ -191,46 +200,57 @@ async def _send_anomaly_alerts(
                     )
                     if last_w:
                         username = last_w.get("username") or "без username"
-                        # Escape underscores for Markdown
-                        username_safe = username.replace("_", "\\_")
                         tg_id = last_w.get("telegram_id", "?")
                         user_id = last_w.get("user_id", "?")
                         amount = last_w.get("amount", 0)
-                        message += f"""
-{'─' * 28}
-👤 *Последний вывод:*
-├ Пользователь: @{username_safe}
-├ Telegram ID: `{tg_id}`
-├ User ID: {user_id}
-└ Сумма: *{amount:.2f} USDT*
-"""
+                        lines.extend([
+                            "-" * 30,
+                            "👤 Последний вывод:",
+                            f"   Пользователь: @{username}",
+                            f"   Telegram ID: {tg_id}",
+                            f"   User ID: {user_id}",
+                            f"   Сумма: {amount:.2f} USDT",
+                            "",
+                        ])
 
-                message += f"""
-{'─' * 28}
-📊 *Статистика:*
-├ Сейчас: *{current_str}*
-├ Обычно: *{expected_str}*
-├ Отклонение: *{deviation_pct:+.0f}%* ({comparison})
-└ Важность: {severity_text}
+                lines.extend([
+                    "-" * 30,
+                    "📊 Статистика:",
+                    f"   Сейчас: {current_str}",
+                    f"   Обычно: {expected_str}",
+                    f"   Отклонение: {deviation_pct:+.0f}% ({comparison})",
+                    f"   Важность: {severity_text}",
+                    "",
+                    "-" * 30,
+                    "💡 Рекомендации:",
+                ])
 
-{'─' * 28}
-💡 *Рекомендации:*
-"""
                 for i, rec in enumerate(recommendations, 1):
-                    message += f"{i}. {rec}\n"
+                    lines.append(f"   {i}. {rec}")
 
-                message += f"""
-{'─' * 28}
-🕐 _{metrics.get('timestamp', 'N/A')[:19]}_
-                """.strip()
+                # Add timestamp
+                timestamp = metrics.get('timestamp', 'N/A')
+                if isinstance(timestamp, str) and len(timestamp) >= 19:
+                    timestamp = timestamp[:19]
+                lines.extend([
+                    "",
+                    "-" * 30,
+                    f"🕐 {timestamp}",
+                ])
+
+                message = "\n".join(lines)
 
                 for admin_id in admin_ids:
-                    await notification_service.send_notification(
-                        bot,
-                        admin_id,
-                        message,
-                        critical=(severity == "critical"),
-                    )
+                    try:
+                        # Send without parse_mode to avoid Markdown issues
+                        await bot.send_message(
+                            chat_id=admin_id,
+                            text=message,
+                        )
+                    except Exception as send_err:
+                        logger.error(
+                            f"Failed to send alert to {admin_id}: {send_err}"
+                        )
 
             await bot.session.close()
 
