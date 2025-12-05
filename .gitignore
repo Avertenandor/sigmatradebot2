@@ -10,12 +10,15 @@ build/
 *.js.map
 *.d.ts
 
-# Environment variables
+# Environment variables (ALL .env files except example)
 .env
+.env.*
+!.env.example
 .env.local
 .env.*.local
 .env.production
 .env.server
+.env.test
 
 # Secrets (CRITICAL - never commit!)
 *.key
@@ -93,6 +96,11 @@ README.typescript.md
 FIX_*.md
 *_PLAN.md
 PLAN_*.md
+adopt_wallet_features.plan.md
+
+# Tests directory (excluded for production code branch)
+tests/
+.git-rewrite/
 
 # PM2
 .pm2/
