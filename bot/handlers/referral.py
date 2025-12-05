@@ -41,7 +41,7 @@ async def handle_share_link(
     bot_username = settings.telegram_bot_username
     referral_link = user_service.generate_referral_link(user, bot_username)
 
-    # Create share text
+    # Create share text (plain, without markdown)
     share_text = (
         "🚀 Присоединяйся к SigmaTrade!\n\n"
         "💰 Инвестируй в USDT и получай до 8% в день!\n"
@@ -63,6 +63,9 @@ async def handle_share_link(
         ],
     ])
 
+    # Escape share_text for Markdown (contains _ in URL)
+    share_text_escaped = share_text.replace("_", "\\_")
+
     text = f"""
 📤 *ПОДЕЛИТЬСЯ ССЫЛКОЙ*
 {'━' * 26}
@@ -70,12 +73,12 @@ async def handle_share_link(
 🔗 *Ваша реферальная ссылка:*
 `{referral_link}`
 
-👆 _Нажмите на ссылку чтобы скопировать_
+👆 Нажмите на ссылку чтобы скопировать
 
 {'─' * 26}
 📱 *Готовый текст для друзей:*
 
-{share_text}
+{share_text_escaped}
 
 {'─' * 26}
 💡 *Совет:* Отправляйте ссылку в группы,
