@@ -89,7 +89,10 @@ class Deposit(Base):
 
     # R17-1: Deposit version reference
     deposit_version_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("deposit_level_versions.id"), nullable=True, index=True
+        Integer,
+        ForeignKey("deposit_level_versions.id"),
+        nullable=True,
+        index=True,
     )
 
     # ROI tracking
@@ -113,7 +116,9 @@ class Deposit(Base):
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
     )
     confirmed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

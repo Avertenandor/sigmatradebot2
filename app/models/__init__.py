@@ -97,7 +97,8 @@ __all__ = [
     # PART5 Critical Models
     "PaymentRetry",
     "FailedNotification",
-    "NotificationQueueFallback",  # R11-3: PostgreSQL fallback for notifications
+    # R11-3: PostgreSQL fallback for notifications
+    "NotificationQueueFallback",
     # Support Models
     "SupportTicket",
     "SupportMessage",

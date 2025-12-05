@@ -142,7 +142,9 @@ class User(Base):
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -182,7 +184,9 @@ class User(Base):
     )
 
     # Notification settings relationship
-    notification_settings: Mapped["UserNotificationSettings | None"] = relationship(
+    notification_settings: Mapped[
+        "UserNotificationSettings | None"
+    ] = relationship(
         "UserNotificationSettings",
         back_populates="user",
         uselist=False,

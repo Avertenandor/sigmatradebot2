@@ -30,7 +30,9 @@ class UserWalletHistory(Base):
         String(255), nullable=False
     )
     changed_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
     )
     
     # Relationship

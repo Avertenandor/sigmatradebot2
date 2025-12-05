@@ -20,19 +20,26 @@ class UserFsmState(Base):
     """
     User FSM state storage.
 
-    R11-2: Stores FSM states in PostgreSQL as fallback when Redis is unavailable.
+    R11-2: Stores FSM states in PostgreSQL as fallback
+    when Redis is unavailable.
     """
 
     __tablename__ = "user_fsm_states"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(
+        Integer, primary_key=True, autoincrement=True
+    )
     user_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id"), nullable=False, index=True
     )
-    state: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    state: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, index=True
+    )
     data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

@@ -139,8 +139,8 @@ class TransactionRepository(BaseRepository[Transaction]):
         today_start = datetime.now(UTC).replace(
             hour=0, minute=0, second=0, microsecond=0
         )
-        # Convert to naive datetime to match Transaction model's naive DateTime column
-        # This avoids "can't subtract offset-naive and offset-aware datetimes" error
+        # Convert to naive datetime for Transaction model
+        # (avoids offset-naive/aware datetime error)
         today_start_naive = today_start.replace(tzinfo=None)
         
         stmt = (

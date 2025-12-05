@@ -15,7 +15,8 @@ class TransactionStatus(StrEnum):
     CONFIRMED = "confirmed"
     FAILED = "failed"
     FROZEN = "frozen"  # Frozen due to user block (R15-1)
-    PENDING_NETWORK_RECOVERY = "pending_network_recovery"  # R11-2: Deposit waiting for blockchain network recovery
+    # R11-2: Waiting for blockchain network recovery
+    PENDING_NETWORK_RECOVERY = "pending_network_recovery"
 
 
 class TransactionType(StrEnum):

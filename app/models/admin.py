@@ -128,7 +128,9 @@ class Admin(Base):
     @property
     def is_admin(self) -> bool:
         """Check if admin has at least basic admin role."""
-        return self.role in ("admin", "extended_admin", "super_admin", "moderator")
+        return self.role in (
+            "admin", "extended_admin", "super_admin", "moderator"
+        )
 
     @property
     def can_stage_wallet_changes(self) -> bool:

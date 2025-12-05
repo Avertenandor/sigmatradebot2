@@ -107,10 +107,10 @@ class FailedNotificationRepository(
             select(FailedNotification)
             .where(FailedNotification.resolved == False)  # noqa: E712
             .where(FailedNotification.attempt_count < max_attempts)
-            # R8-3: Sort by priority (critical first), then by creation time
+            # R8-3: Sort by priority (critical first), then by time
             .order_by(
-                desc(FailedNotification.critical),  # Critical first (True before False)
-                FailedNotification.created_at.asc()  # Then by age (oldest first)
+                desc(FailedNotification.critical),  # Critical first
+                FailedNotification.created_at.asc(),  # Oldest first
             )
             .limit(limit)
         )

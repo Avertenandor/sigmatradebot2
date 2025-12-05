@@ -44,13 +44,16 @@ class Settings(BaseSettings):
     system_wallet_address: str  # System wallet for deposits
     # Blockchain polling settings
     blockchain_poll_interval: int = Field(
-        default=3, ge=1, description="Blockchain event polling interval in seconds"
+        default=3,
+        ge=1,
+        description="Blockchain poll interval (seconds)",
     )
     # Payout wallet (optional, defaults to wallet_address)
     payout_wallet_address: str | None = None
 
     # Deposit levels (USDT amounts)
-    # NOTE: Values must match app/services/deposit_validation_service.py and bot/utils/constants.py
+    # NOTE: Values must match deposit_validation_service.py
+    # and bot/utils/constants.py
     deposit_level_1: float = Field(
         default=10.0, gt=0, description="Deposit level 1 amount"
     )
@@ -82,7 +85,10 @@ class Settings(BaseSettings):
     debug: bool = False
     log_level: str = "INFO"
     health_check_port: int = Field(
-        default=8080, ge=1, le=65535, description="Health check HTTP server port"
+        default=8080,
+        ge=1,
+        le=65535,
+        description="Health check HTTP server port",
     )
 
     # Broadcast settings
@@ -229,9 +235,10 @@ class Settings(BaseSettings):
                     'production. Generate one with: openssl rand -hex 32'
                 )
 
-            # Wallet private key is optional - can be set via bot interface
-            # Only warn if it's a placeholder, but don't block startup
-            if self.wallet_private_key and 'your_' in self.wallet_private_key.lower():
+            # Wallet private key is optional - set via bot interface
+            # Only warn if placeholder, don't block startup
+            key = self.wallet_private_key
+            if key and 'your_' in key.lower():
                 logger.warning(
                     'WALLET_PRIVATE_KEY appears to be a placeholder. '
                     'Set a real key via /wallet_menu in the bot interface.'
@@ -249,26 +256,28 @@ class Settings(BaseSettings):
                     password_lower = password.lower()
                     username = unquote(parsed.username or '')
                     username_lower = username.lower() if username else ''
-                    # Check for exact insecure password patterns (exact match only)
-                    insecure_passwords = ['password', 'changeme', 'admin', 'root', '']
-                    # Check for username == password (common insecure pattern)
-                    if password_lower in insecure_passwords:
-                        # Only warn, don't block startup - admin can fix via .env
+                    # Check for insecure password patterns
+                    insecure = [
+                        'password', 'changeme', 'admin', 'root', '',
+                    ]
+                    # Check for username == password
+                    if password_lower in insecure:
+                        # Warn only, don't block startup
                         logger.warning(
-                            f'DATABASE_URL uses insecure password "{password_lower}". '
-                            'Please change it in .env file for production security.'
+                            'DATABASE_URL uses insecure password. '
+                            'Please change it in .env file.'
                         )
                     elif username_lower and password_lower == username_lower:
                         # Only warn, don't block startup
                         logger.warning(
-                            'DATABASE_URL password is the same as username. '
-                            'Please change it in .env file for production security.'
+                            'DATABASE_URL password matches username. '
+                            'Please change it in .env file.'
                         )
             except (AttributeError, ImportError, Exception) as e:
-                # If parsing fails, skip validation (better than blocking startup)
+                # Skip validation if parsing fails
                 logger.warning(
-                    f'Could not parse DATABASE_URL for password validation: {e}. '
-                    'Skipping insecure password check.'
+                    f'Could not parse DATABASE_URL: {e}. '
+                    'Skipping password check.'
                 )
 
         return self
@@ -312,9 +321,14 @@ class Settings(BaseSettings):
     @classmethod
     def validate_database_url(cls, v: str) -> str:
         """Validate database URL."""
-        if not v.startswith(('postgresql://', 'postgresql+asyncpg://')):
+        valid_prefixes = (
+            'postgresql://',
+            'postgresql+asyncpg://',
+        )
+        if not v.startswith(valid_prefixes):
             raise ValueError(
-                'DATABASE_URL must start with postgresql:// or postgresql+asyncpg://'
+                'DATABASE_URL must start with postgresql:// '
+                'or postgresql+asyncpg://'
             )
         return v
 

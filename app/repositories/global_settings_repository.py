@@ -82,12 +82,8 @@ class GlobalSettingsRepository:
         if max_open_deposit_level is not None:
             settings.max_open_deposit_level = max_open_deposit_level
         if roi_settings is not None:
-            # Merge or replace? For safety, we'll update the dict
-            # Use existing if None passed? No, None check is above.
-            # If we want partial updates to JSON, we need to fetch, update, set.
-            # Here we assume full replacement or caller handles merging if they pass a dict.
-            # Actually, merging is safer for concurrent updates, but let's replace for now as it's simpler.
-            # Ideally we should merge:
+            # Merge with existing settings for safety
+            # Full replacement would lose concurrent updates
             current = dict(settings.roi_settings)
             current.update(roi_settings)
             settings.roi_settings = current

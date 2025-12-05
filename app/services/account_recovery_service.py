@@ -4,7 +4,6 @@ Account recovery service.
 R16-3: Handles recovery of lost Telegram account access.
 """
 
-from datetime import UTC, datetime
 from typing import Any
 
 from loguru import logger
@@ -117,7 +116,9 @@ class AccountRecoveryService:
             return False, None, "Не удалось подтвердить владение кошельком"
 
         # Step 2: Check if new telegram_id is already in use
-        existing_user = await self.user_repo.get_by_telegram_id(new_telegram_id)
+        existing_user = await self.user_repo.get_by_telegram_id(
+            new_telegram_id
+        )
         if existing_user and existing_user.id != user.id:
             return (
                 False,
@@ -140,7 +141,7 @@ class AccountRecoveryService:
         # (This would be done by admin review in production)
         logger.info(
             f"R16-3: Account recovery proceeding: user_id={user.id}, "
-            f"old_telegram_id={user.telegram_id}, new_telegram_id={new_telegram_id}, "
+            f"old_tg={user.telegram_id}, new_tg={new_telegram_id}, "
             f"wallet={wallet_address}"
         )
 
@@ -185,19 +186,19 @@ class AccountRecoveryService:
         await self.session.commit()
 
         logger.info(
-            f"R16-3: Account recovery completed successfully: "
+            f"R16-3: Account recovery completed: "
             f"user_id={user.id}, "
-            f"old_telegram_id={old_telegram_id}, "
-            f"new_telegram_id={new_telegram_id}, "
-            f"wallet={wallet_address}, "
-            f"has_deposits={len(user.deposits) > 0 if hasattr(user, 'deposits') else False}, "
-            f"balance={user.balance if hasattr(user, 'balance') else 0}"
+            f"old_tg={old_telegram_id}, "
+            f"new_tg={new_telegram_id}, "
+            f"wallet={wallet_address}"
         )
 
         # Return success, user, and new financial password
         return True, user, new_finpass
 
-    async def get_recovery_info(self, wallet_address: str) -> dict[str, Any] | None:
+    async def get_recovery_info(
+        self, wallet_address: str
+    ) -> dict[str, Any] | None:
         """
         Get recovery information for wallet (for verification).
 
@@ -213,10 +214,15 @@ class AccountRecoveryService:
             return None
 
         # Return partial info for verification (not sensitive)
+        has_deposits = (
+            len(user.deposits) > 0 if hasattr(user, "deposits") else False
+        )
+        created_at = (
+            user.created_at.isoformat() if user.created_at else None
+        )
         return {
-            "has_deposits": len(user.deposits) > 0 if hasattr(user, "deposits") else False,
+            "has_deposits": has_deposits,
             "has_balance": user.balance > 0,
-            "created_at": user.created_at.isoformat() if user.created_at else None,
+            "created_at": created_at,
             # Don't return sensitive info like email/phone directly
         }
-

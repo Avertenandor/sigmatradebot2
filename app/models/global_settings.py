@@ -20,7 +20,9 @@ class GlobalSettings(Base):
 
     __tablename__ = "global_settings"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(
+        Integer, primary_key=True, autoincrement=True
+    )
     
     # Withdrawal settings
     min_withdrawal_amount: Mapped[Decimal] = mapped_column(
@@ -54,7 +56,10 @@ class GlobalSettings(Base):
     
     # ROI Corridor settings (JSON)
     # Structure: {
-    #   "level_1": {"mode": "custom", "min": "0.8", "max": "1.2", "fixed": "1.0"},
+    #   "level_1": {
+    #       "mode": "custom", "min": "0.8",
+    #       "max": "1.2", "fixed": "1.0"
+    #   },
     #   "level_1_next": {...},
     #   ...
     #   "accrual_period_hours": 6
