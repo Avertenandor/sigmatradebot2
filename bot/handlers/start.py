@@ -26,6 +26,77 @@ from bot.states.registration import RegistrationStates
 
 router = Router()
 
+# Redis key prefix for persistent referrer storage (survives FSM reset)
+REFERRER_REDIS_KEY_PREFIX = "referrer:"
+REFERRER_REDIS_TTL = 60 * 60 * 24 * 7  # 7 days in seconds
+
+
+async def save_referrer_to_redis(
+    redis_client, telegram_id: int, referrer_telegram_id: int
+) -> bool:
+    """
+    Save referrer to Redis with long TTL.
+    This survives FSM resets and Redis restarts (if persistent).
+    """
+    if not redis_client:
+        logger.warning("Redis client not available for referrer storage")
+        return False
+    
+    try:
+        key = f"{REFERRER_REDIS_KEY_PREFIX}{telegram_id}"
+        await redis_client.set(
+            key, str(referrer_telegram_id), ex=REFERRER_REDIS_TTL
+        )
+        logger.info(
+            f"Saved referrer to Redis: user={telegram_id}, "
+            f"referrer={referrer_telegram_id}, TTL=7 days"
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Failed to save referrer to Redis: {e}")
+        return False
+
+
+async def get_referrer_from_redis(
+    redis_client, telegram_id: int
+) -> int | None:
+    """
+    Get referrer from Redis.
+    Returns referrer telegram_id or None if not found.
+    """
+    if not redis_client:
+        return None
+    
+    try:
+        key = f"{REFERRER_REDIS_KEY_PREFIX}{telegram_id}"
+        value = await redis_client.get(key)
+        if value:
+            referrer_id = int(value)
+            logger.info(
+                f"Found referrer in Redis: user={telegram_id}, "
+                f"referrer={referrer_id}"
+            )
+            return referrer_id
+        return None
+    except Exception as e:
+        logger.error(f"Failed to get referrer from Redis: {e}")
+        return None
+
+
+async def delete_referrer_from_redis(
+    redis_client, telegram_id: int
+) -> None:
+    """Delete referrer from Redis after successful registration."""
+    if not redis_client:
+        return
+    
+    try:
+        key = f"{REFERRER_REDIS_KEY_PREFIX}{telegram_id}"
+        await redis_client.delete(key)
+        logger.debug(f"Deleted referrer from Redis for user {telegram_id}")
+    except Exception as e:
+        logger.error(f"Failed to delete referrer from Redis: {e}")
+
 
 @router.message(CommandStart())
 async def cmd_start(
@@ -56,6 +127,8 @@ async def cmd_start(
     await state.clear()
 
     user: User | None = data.get("user")
+    redis_client = data.get("redis_client")
+    
     # Extract referral code from command args
     # Format: /start ref123456 or /start ref_123456 or /start ref_CODE
     referrer_telegram_id = None
@@ -64,58 +137,54 @@ async def cmd_start(
         # Support formats: ref123456, ref_123456, ref-123456
         if ref_arg.startswith("ref"):
             try:
-                # Extract value from ref code
-                # Note: We remove 'ref', '_', '-' prefix/separators.
-                # If the code itself contains '_' or '-', this might be an issue if we strip them globally.
-                # But legacy IDs were digits.
-                # New codes are urlsafe base64, which can contain '-' and '_'.
-                # So we should be careful about stripping.
-                
                 # Better parsing strategy:
-                # 1. Remove 'ref' prefix (case insensitive?)
-                # 2. If starts with '_' or '-', remove ONE leading separator.
-                
-                clean_arg = ref_arg[3:] # Remove 'ref'
-                if clean_arg.startswith("_") or clean_arg.startswith("-"):
+                # 1. Remove 'ref' prefix
+                # 2. If starts with '_' or '-', remove ONE separator
+                clean_arg = ref_arg[3:]  # Remove 'ref'
+                if clean_arg.startswith(("_", "-")):
                     clean_arg = clean_arg[1:]
                 
                 if clean_arg.isdigit():
-                    # Legacy ID
+                    # Legacy ID (telegram_id)
                     referrer_telegram_id = int(clean_arg)
                     logger.info(
-                        "Legacy referral ID detected",
-                        extra={
-                            "ref_arg": ref_arg,
-                            "referrer_telegram_id": referrer_telegram_id,
-                        },
+                        f"Legacy referral ID detected: {referrer_telegram_id}"
                     )
                 else:
-                    # New Referral Code
-                    # We need UserService here. 
-                    # Note: Creating service inside handler is fine.
+                    # New Referral Code (base64)
                     user_service = UserService(session)
-                    referrer = await user_service.get_by_referral_code(clean_arg)
+                    referrer = await user_service.get_by_referral_code(
+                        clean_arg
+                    )
                     
                     if referrer:
                         referrer_telegram_id = referrer.telegram_id
                         logger.info(
-                            "Referral code detected",
-                            extra={
-                                "ref_code": clean_arg,
-                                "referrer_telegram_id": referrer_telegram_id,
-                            },
+                            f"Referral code resolved: "
+                            f"{clean_arg} -> {referrer_telegram_id}"
                         )
                     else:
                         logger.warning(
-                            "Referral code not found",
-                            extra={"ref_code": clean_arg},
+                            f"Referral code not found: {clean_arg}"
                         )
 
             except (ValueError, AttributeError) as e:
-                logger.warning(
-                    f"Invalid referral code format: {e}",
-                    extra={"ref_code": ref_arg},
-                )
+                logger.warning(f"Invalid referral code format: {e}")
+
+    # ЖЕЛЕЗОБЕТОННО: Сохраняем реферера в Redis (TTL 7 дней)
+    # Это переживёт сброс FSM, перезапуск бота, и т.д.
+    if referrer_telegram_id and message.from_user:
+        await save_referrer_to_redis(
+            redis_client,
+            message.from_user.id,
+            referrer_telegram_id
+        )
+        # Также сохраняем в FSM для быстрого доступа
+        await state.update_data(referrer_telegram_id=referrer_telegram_id)
+        logger.info(
+            f"Referrer saved: user={message.from_user.id}, "
+            f"referrer={referrer_telegram_id} (Redis + FSM)"
+        )
 
     # Check if already registered
     if user:
@@ -123,7 +192,7 @@ async def cmd_start(
             f"cmd_start: registered user {user.telegram_id}, "
             f"clearing FSM state"
         )
-        # КРИТИЧНО: очистим любое FSM состояние, чтобы /start всегда работал
+        # КРИТИЧНО: очистим FSM, чтобы /start всегда работал
         await state.clear()
         
         # R8-2: Reset bot_blocked flag if user successfully sent /start
@@ -722,7 +791,25 @@ async def process_password_confirmation(
 
     # SHORT transaction for user registration
     wallet_address = state_data.get("wallet_address")
-    referrer_telegram_id = state_data.get("referrer_telegram_id")
+    
+    # ЖЕЛЕЗОБЕТОННО: Получаем реферера из нескольких источников
+    # Приоритет: 1) Redis (самый надёжный), 2) FSM state
+    redis_client = data.get("redis_client")
+    referrer_telegram_id = await get_referrer_from_redis(
+        redis_client, message.from_user.id
+    )
+    if not referrer_telegram_id:
+        referrer_telegram_id = state_data.get("referrer_telegram_id")
+        if referrer_telegram_id:
+            logger.info(
+                f"Referrer from FSM state: {referrer_telegram_id}"
+            )
+    
+    # Логируем финальный результат
+    logger.info(
+        f"Registration: user={message.from_user.id}, "
+        f"referrer={referrer_telegram_id or 'DEFAULT'}"
+    )
 
     # Hash financial password with bcrypt
     import bcrypt
@@ -887,12 +974,13 @@ async def process_password_confirmation(
         return
 
     logger.info(
-        "User registered successfully",
-        extra={
-            "user_id": user.id,
-            "telegram_id": message.from_user.id,
-        },
+        f"User registered successfully: id={user.id}, "
+        f"telegram_id={message.from_user.id}, "
+        f"referrer={referrer_telegram_id or 'DEFAULT'}"
     )
+    
+    # ЖЕЛЕЗОБЕТОННО: Очищаем реферера из Redis после успешной регистрации
+    await delete_referrer_from_redis(redis_client, message.from_user.id)
 
     # R1-19: Сохраняем plain password в Redis на 1 час для повторного показа
     redis_client = data.get("redis_client")
