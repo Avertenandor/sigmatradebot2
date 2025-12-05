@@ -191,13 +191,15 @@ async def _send_anomaly_alerts(
                     )
                     if last_w:
                         username = last_w.get("username") or "без username"
+                        # Escape underscores for Markdown
+                        username_safe = username.replace("_", "\\_")
                         tg_id = last_w.get("telegram_id", "?")
                         user_id = last_w.get("user_id", "?")
                         amount = last_w.get("amount", 0)
                         message += f"""
 {'─' * 28}
 👤 *Последний вывод:*
-├ Пользователь: @{username}
+├ Пользователь: @{username_safe}
 ├ Telegram ID: `{tg_id}`
 ├ User ID: {user_id}
 └ Сумма: *{amount:.2f} USDT*
