@@ -28,6 +28,8 @@ from bot.keyboards.reply import (
 )
 from bot.states.withdrawal import WithdrawalStates
 from bot.utils.menu_buttons import is_menu_button
+from bot.utils.safe_message import safe_answer, safe_send_message
+from bot.utils.formatters import escape_md
 
 router = Router()
 
@@ -177,13 +179,14 @@ async def process_auto_payout(
 
                 # Notify user about success (show net amount actually sent to blockchain)
                 try:
-                    await bot.send_message(
-                        chat_id=telegram_id,
+                    await safe_send_message(
+                        bot,
+                        telegram_id,
                         text=(
                             f"✅ *Выплата отправлена!*\n\n"
                             f"💰 Сумма: `{notification_net_amount} USDT`\n"
-                            f"💳 Кошелек: `{to_address[:6]}...{to_address[-4:]}`\n"
-                            f"🔗 TX: [Посмотреть транзакцию](https://bscscan.com/tx/{result['tx_hash']})\n\n"
+                            f"💳 Кошелек: `{escape_md(to_address[:6])}...{escape_md(to_address[-4:])}`\n"
+                            f"🔗 TX: [Посмотреть транзакцию](https://bscscan.com/tx/{escape_md(result['tx_hash'])})\n\n"
                             f"🤝 Спасибо за ваше доверие к SigmaTrade!"
                         ),
                         parse_mode="Markdown",
@@ -246,7 +249,8 @@ async def show_withdrawal_menu(
         f"Выберите действие:"
     )
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         reply_markup=withdrawal_keyboard(),
         parse_mode="Markdown",
@@ -280,7 +284,7 @@ async def withdraw_all(
     # Check withdrawal eligibility (finpass for all, phone/email for level 2+)
     can_withdraw, error_msg = await check_withdrawal_eligibility(session, user)
     if not can_withdraw:
-        await message.answer(error_msg, reply_markup=withdrawal_keyboard(), parse_mode="Markdown")
+        await safe_answer(message, error_msg, reply_markup=withdrawal_keyboard(), parse_mode="Markdown")
         return
         
     user_service = UserService(session)
@@ -307,13 +311,13 @@ async def withdraw_all(
     text = (
         f"⚠️ *Подтверждение вывода*\n\n"
         f"💰 Сумма: *{amount:.2f} USDT*\n"
-        f"💳 Кошелёк: `{user.wallet_address[:10]}...{user.wallet_address[-6:]}`\n\n"
+        f"💳 Кошелёк: `{escape_md(user.wallet_address[:10])}...{escape_md(user.wallet_address[-6:])}`\n\n"
         f"❗️ Убедитесь, что это ваш *ЛИЧНЫЙ* кошелёк (не биржевой)!\n\n"
         f"Для подтверждения напишите: *да* или *yes*\n"
         f"Для отмены: *нет* или *отмена*"
     )
 
-    await message.answer(text, parse_mode="Markdown")
+    await safe_answer(message, text, parse_mode="Markdown")
 
 
 @router.message(WithdrawalStates.waiting_for_confirmation)
@@ -347,7 +351,7 @@ async def confirm_withdrawal(
             f"🔐 Введите ваш финансовый пароль:"
         )
 
-        await message.answer(text, reply_markup=finpass_input_keyboard(), parse_mode="Markdown")
+        await safe_answer(message, text, reply_markup=finpass_input_keyboard(), parse_mode="Markdown")
         await state.set_state(WithdrawalStates.waiting_for_financial_password)
     
     elif answer in ("нет", "no", "н", "n", "отмена", "cancel"):
@@ -358,7 +362,8 @@ async def confirm_withdrawal(
         )
     
     else:
-        await message.answer(
+        await safe_answer(
+            message,
             "⚠️ Напишите *да* для подтверждения или *нет* для отмены.",
             parse_mode="Markdown",
         )
@@ -391,7 +396,7 @@ async def withdraw_amount(
     # Check withdrawal eligibility (finpass for all, phone/email for level 2+)
     can_withdraw, error_msg = await check_withdrawal_eligibility(session, user)
     if not can_withdraw:
-        await message.answer(error_msg, reply_markup=withdrawal_keyboard(), parse_mode="Markdown")
+        await safe_answer(message, error_msg, reply_markup=withdrawal_keyboard(), parse_mode="Markdown")
         return
 
     withdrawal_service = WithdrawalService(session)
@@ -433,7 +438,7 @@ async def process_withdrawal_amount(
     # Check withdrawal eligibility (finpass for all, phone/email for level 2+)
     can_withdraw, error_msg = await check_withdrawal_eligibility(session, user)
     if not can_withdraw:
-        await message.answer(error_msg, reply_markup=withdrawal_keyboard(), parse_mode="Markdown")
+        await safe_answer(message, error_msg, reply_markup=withdrawal_keyboard(), parse_mode="Markdown")
         await state.clear()
         return
 
@@ -489,7 +494,7 @@ async def process_withdrawal_amount(
         f"🔐 Введите ваш финансовый пароль:"
     )
 
-    await message.answer(text, reply_markup=finpass_input_keyboard(), parse_mode="Markdown")
+    await safe_answer(message, text, reply_markup=finpass_input_keyboard(), parse_mode="Markdown")
     await state.set_state(WithdrawalStates.waiting_for_financial_password)
 
 
@@ -606,10 +611,11 @@ async def process_financial_password(
             )
         elif transaction:
             if is_auto:
-                await message.answer(
+                await safe_answer(
+                    message,
                     f"✅ *Заявка #{transaction.id} принята!*\n\n"
                     f"💰 Сумма: *{transaction.amount} USDT*\n"
-                    f"💳 Кошелек: `{transaction.to_address[:10]}...{transaction.to_address[-6:]}`\n\n"
+                    f"💳 Кошелек: `{escape_md(transaction.to_address[:10])}...{escape_md(transaction.to_address[-6:])}`\n\n"
                     f"⚡️ *Автоматическая выплата одобрена*\n"
                     f"Средства поступят в течение 1-5 минут.\n\n"
                     f"📊 Статус: '📜 История выводов'",
@@ -636,10 +642,11 @@ async def process_financial_password(
                         exc_info=True
                     )
             else:
-                await message.answer(
+                await safe_answer(
+                    message,
                     f"✅ *Заявка #{transaction.id} создана!*\n\n"
                     f"💰 Сумма: *{transaction.amount} USDT*\n"
-                    f"💳 Кошелек: `{transaction.to_address[:10]}...{transaction.to_address[-6:]}`\n\n"
+                    f"💳 Кошелек: `{escape_md(transaction.to_address[:10])}...{escape_md(transaction.to_address[-6:])}`\n\n"
                     f"⏱ *Время обработки:* до 24 часов\n"
                     f"📊 Статус можно проверить в '📜 История выводов'",
                     parse_mode="Markdown",
@@ -735,11 +742,11 @@ async def _show_withdrawal_history(
         text += f"{status_icon} *{tx.amount} USDT* | {date}\n"
         text += f"ID: `{tx.id}`\n"
         if tx.tx_hash:
-            text += f"🔗 [BscScan](https://bscscan.com/tx/{tx.tx_hash})\n"
+            text += f"🔗 [BscScan](https://bscscan.com/tx/{escape_md(tx.tx_hash)})\n"
         text += "───────────────────\n"
 
     # Pagination keyboard would go here (omitted for brevity, assume simple list)
-    await message.answer(text, parse_mode="Markdown")
+    await safe_answer(message, text, parse_mode="Markdown")
 
 
 @router.message(F.text.regexp(r"^\d+([.,]\d+)?$"))
@@ -777,7 +784,7 @@ async def handle_smart_withdrawal_amount(
     # Check withdrawal eligibility (finpass for all, phone/email for level 2+)
     can_withdraw, error_msg = await check_withdrawal_eligibility(session, user)
     if not can_withdraw:
-        await message.answer(error_msg, reply_markup=withdrawal_keyboard(), parse_mode="Markdown")
+        await safe_answer(message, error_msg, reply_markup=withdrawal_keyboard(), parse_mode="Markdown")
         return
     
     # Parse amount
@@ -829,8 +836,9 @@ async def handle_smart_withdrawal_amount(
         amount=str(amount),
     )
     await state.set_state(WithdrawalStates.waiting_for_financial_password)
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         f"💸 *Вывод средств*\n\n"
         f"Сумма: *{amount:.2f} USDT*\n\n"
         f"🔐 Введите ваш финансовый пароль:",

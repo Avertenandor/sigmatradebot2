@@ -22,6 +22,8 @@ from bot.keyboards.reply import (
 )
 from bot.states.admin import AdminUserMessagesStates
 from bot.utils.admin_utils import clear_state_preserve_admin_token
+from bot.utils.safe_message import safe_answer, safe_send_message, safe_edit_text
+from bot.utils.formatters import escape_md
 
 router = Router(name="admin_user_messages")
 
@@ -61,7 +63,8 @@ async def show_user_messages_menu(
 _Введите любой из этих идентификаторов:_
     """.strip()
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=get_admin_keyboard_from_data(data),
@@ -97,7 +100,8 @@ async def process_user_id_for_messages(
     # Check for cancel/back
     if message.text in ("◀️ Назад в админ-панель", "❌ Отмена"):
         await clear_state_preserve_admin_token(state)
-        await message.answer(
+        await safe_answer(
+            message,
             "👑 **Панель администратора**\n\nВыберите действие:",
             parse_mode="Markdown",
             reply_markup=get_admin_keyboard_from_data(data),
@@ -141,8 +145,9 @@ async def process_user_id_for_messages(
                 telegram_id = user.telegram_id
 
     if not user or not telegram_id:
-        await message.answer(
-            f"⚠️ Пользователь по запросу `{search_query}` не найден.\n\n"
+        await safe_answer(
+            message,
+            f"⚠️ Пользователь по запросу `{escape_md(search_query)}` не найден.\n\n"
             f"Попробуйте:\n"
             f"• Telegram ID (число)\n"
             f"• @username\n"
@@ -164,8 +169,9 @@ async def process_user_id_for_messages(
     )
 
     if not messages:
-        await message.answer(
-            f"📝 **Сообщения пользователя {user.username or telegram_id}**\n\n"
+        await safe_answer(
+            message,
+            f"📝 **Сообщения пользователя {escape_md(user.username) if user.username else telegram_id}**\n\n"
             f"Пользователь еще не отправлял текстовых сообщений боту.\n\n"
             f"_Логируются только текстовые сообщения, не кнопки._",
             parse_mode="Markdown",
@@ -176,7 +182,7 @@ async def process_user_id_for_messages(
 
     # Format messages
     text_lines = [
-        f"📝 **Сообщения пользователя {user.username or telegram_id}**",
+        f"📝 **Сообщения пользователя {escape_md(user.username) if user.username else telegram_id}**",
         f"Telegram ID: `{telegram_id}`",
         f"Всего сообщений: {total}",
         f"Показано: {min(len(messages), 20)}",
@@ -192,7 +198,7 @@ async def process_user_id_for_messages(
         if len(msg_text) > 100:
             msg_text = msg_text[:100] + "..."
         text_lines.append(f"🕒 {timestamp}")
-        text_lines.append(f"💬 `{msg_text}`")
+        text_lines.append(f"💬 `{escape_md(msg_text)}`")
         text_lines.append("")
 
     text = "\n".join(text_lines)
@@ -212,7 +218,8 @@ async def process_user_id_for_messages(
     has_next = page < total_pages - 1
     is_super_admin = data.get("is_super_admin", False)
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=user_messages_navigation_keyboard(
@@ -331,7 +338,7 @@ async def show_messages_page(
     # Format messages
     total_pages = (total + page_size - 1) // page_size
     text_lines = [
-        f"📝 **Сообщения пользователя {user.username if user else telegram_id}**",
+        f"📝 **Сообщения пользователя {escape_md(user.username) if user and user.username else telegram_id}**",
         f"Telegram ID: `{telegram_id}`",
         f"Всего сообщений: {total}",
         f"Страница: {page + 1}/{total_pages}",
@@ -346,7 +353,7 @@ async def show_messages_page(
         if len(msg_text) > 100:
             msg_text = msg_text[:100] + "..."
         text_lines.append(f"🕒 {timestamp}")
-        text_lines.append(f"💬 `{msg_text}`")
+        text_lines.append(f"💬 `{escape_md(msg_text)}`")
         text_lines.append("")
 
     text = "\n".join(text_lines)
@@ -359,7 +366,8 @@ async def show_messages_page(
     has_next = page < total_pages - 1
     is_super_admin = data.get("is_super_admin", False)
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=user_messages_navigation_keyboard(
@@ -390,7 +398,8 @@ async def search_another_user(
         return
 
     await state.set_state(AdminUserMessagesStates.waiting_for_user_id)
-    await message.answer(
+    await safe_answer(
+        message,
         "🔍 **Поиск сообщений пользователя**\n\n"
         "Введите Telegram ID, @username или ID пользователя:\n\n"
         "_Например: 1040687384 или @username_",
@@ -435,7 +444,7 @@ async def show_messages_stats(
     username = user.username if user else "N/A"
     text = (
         f"📊 **Статистика сообщений**\n\n"
-        f"👤 Пользователь: @{username}\n"
+        f"👤 Пользователь: @{escape_md(username)}\n"
         f"🆔 Telegram ID: `{telegram_id}`\n\n"
         f"📝 Всего сообщений: **{stats.get('total', 0)}**\n"
         f"📅 За сегодня: **{stats.get('today', 0)}**\n"
@@ -453,7 +462,8 @@ async def show_messages_stats(
     has_prev = page > 0
     has_next = page < total_pages - 1
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=user_messages_navigation_keyboard(
@@ -503,7 +513,8 @@ async def delete_user_messages(
 
     await clear_state_preserve_admin_token(state)
 
-    await message.answer(
+    await safe_answer(
+        message,
         f"✅ Все сообщения пользователя `{telegram_id}` удалены.\n\n"
         f"Удалено: {count} сообщений",
         parse_mode="Markdown",
@@ -526,7 +537,8 @@ async def back_to_admin_panel_from_messages(
     """Return to admin panel from message viewing."""
     await clear_state_preserve_admin_token(state)
 
-    await message.answer(
+    await safe_answer(
+        message,
         "👑 **Панель администратора**\n\n"
         "Выберите действие:",
         parse_mode="Markdown",

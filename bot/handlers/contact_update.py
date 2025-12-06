@@ -19,6 +19,8 @@ from bot.keyboards.reply import (
     settings_keyboard,
 )
 from bot.states.profile_update import ProfileUpdateStates
+from bot.utils.safe_message import safe_answer, safe_send_message, safe_edit_text
+from bot.utils.formatters import escape_md
 
 router = Router(name="contact_update")
 
@@ -47,8 +49,8 @@ async def start_update_contacts(
     await state.clear()
 
     # Show current contacts
-    phone_display = user.phone or "не указан"
-    email_display = user.email or "не указан"
+    phone_display = escape_md(user.phone) if user.phone else "не указан"
+    email_display = escape_md(user.email) if user.email else "не указан"
 
     text = (
         f"📝 *Обновление контактов*\n\n"
@@ -58,7 +60,8 @@ async def start_update_contacts(
         f"Что вы хотите обновить?"
     )
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=contact_update_menu_keyboard(),
@@ -85,7 +88,8 @@ async def back_from_choice(
     if user:
         language = await get_user_language(session, user.id)
         
-    await message.answer(
+    await safe_answer(
+        message,
         "⚙️ *Настройки*\n\nВыберите раздел:",
         parse_mode="Markdown",
         reply_markup=settings_keyboard(language),
@@ -130,7 +134,7 @@ async def start_phone_update(
         await state.clear()
         return
 
-    current_phone = user.phone or "не указан"
+    current_phone = escape_md(user.phone) if user.phone else "не указан"
 
     text = (
         f"📞 **Обновление телефона**\n\n"
@@ -140,7 +144,8 @@ async def start_phone_update(
         f"Или нажмите кнопку ниже:"
     )
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=contact_input_keyboard(),
@@ -164,7 +169,7 @@ async def start_email_update(
         await state.clear()
         return
 
-    current_email = user.email or "не указан"
+    current_email = escape_md(user.email) if user.email else "не указан"
 
     text = (
         f"📧 **Обновление email**\n\n"
@@ -174,7 +179,8 @@ async def start_email_update(
         f"Или нажмите кнопку ниже:"
     )
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=contact_input_keyboard(),
@@ -198,7 +204,7 @@ async def start_both_update(
         await state.clear()
         return
 
-    current_phone = user.phone or "не указан"
+    current_phone = escape_md(user.phone) if user.phone else "не указан"
 
     text = (
         f"📞 **Обновление контактов (шаг 1/2)**\n\n"
@@ -208,7 +214,8 @@ async def start_both_update(
         f"Или нажмите кнопку ниже:"
     )
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=contact_input_keyboard(),
@@ -232,7 +239,7 @@ async def skip_phone_update(
     if updating_both:
         # Move to email
         user: User | None = data.get("user")
-        current_email = user.email if user else "не указан"
+        current_email = escape_md(user.email) if user and user.email else "не указан"
 
         text = (
             f"📧 **Обновление контактов (шаг 2/2)**\n\n"
@@ -242,7 +249,8 @@ async def skip_phone_update(
             f"Или нажмите кнопку ниже:"
         )
 
-        await message.answer(
+        await safe_answer(
+            message,
             text,
             parse_mode="Markdown",
             reply_markup=contact_input_keyboard(),
@@ -345,10 +353,10 @@ async def process_phone_update(
 
     if updating_both:
         # Move to email
-        current_email = user.email or "не указан"
+        current_email = escape_md(user.email) if user.email else "не указан"
 
         text = (
-            f"✅ Телефон обновлен: `{phone_clean}`\n\n"
+            f"✅ Телефон обновлен: `{escape_md(phone_clean)}`\n\n"
             f"📧 **Обновление контактов (шаг 2/2)**\n\n"
             f"Текущий email: `{current_email}`\n\n"
             f"Введите новый email адрес в формате:\n"
@@ -356,7 +364,8 @@ async def process_phone_update(
             f"Или нажмите кнопку ниже:"
         )
 
-        await message.answer(
+        await safe_answer(
+            message,
             text,
             parse_mode="Markdown",
             reply_markup=contact_input_keyboard(),
@@ -368,11 +377,12 @@ async def process_phone_update(
 
         text = (
             f"✅ **Телефон успешно обновлен!**\n\n"
-            f"📞 Новый номер: `{phone_clean}`\n\n"
+            f"📞 Новый номер: `{escape_md(phone_clean)}`\n\n"
             f"💡 Данные сохранены в вашем профиле."
         )
 
-        await message.answer(
+        await safe_answer(
+            message,
             text,
             parse_mode="Markdown",
             reply_markup=settings_keyboard(),
@@ -455,7 +465,8 @@ async def process_email_update(
 
     # Basic email validation
     if "@" not in email or "." not in email.split("@")[-1]:
-        await message.answer(
+        await safe_answer(
+            message,
             "❌ Неверный формат email. Должен содержать @ и домен.\n\n"
             "Пример: `example@mail.com`\n\n"
             "Попробуйте еще раз или нажмите '⏭ Пропустить'",
@@ -475,12 +486,12 @@ async def process_email_update(
     # Show final result
     user_updated = await user_repo.get_by_id(user.id)
     phone_display = (
-        user_updated.phone
+        escape_md(user_updated.phone)
         if user_updated and user_updated.phone
         else "не указан"
     )
     email_display = (
-        user_updated.email
+        escape_md(user_updated.email)
         if user_updated and user_updated.email
         else "не указан"
     )
@@ -493,7 +504,8 @@ async def process_email_update(
         f"💡 Эти данные сохранены в вашем профиле и доступны администраторам."
     )
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=settings_keyboard(),

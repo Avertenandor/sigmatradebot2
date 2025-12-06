@@ -28,6 +28,7 @@ from bot.keyboards.reply import (
 from bot.states.admin_states import AdminStates
 from bot.utils.menu_buttons import is_menu_button
 from bot.utils.admin_utils import clear_state_preserve_admin_token
+from bot.utils.safe_message import safe_answer, safe_send_message, safe_edit_text
 
 router = Router(name="admin_broadcast")
 
@@ -95,8 +96,8 @@ async def handle_start_broadcast(
 После отправки сообщения бот предложит добавить кнопку с ссылкой на сайт или канал.
     """.strip()
 
-    await message.answer(
-        text, parse_mode="Markdown", reply_markup=admin_broadcast_keyboard()
+    await safe_answer(
+        message, text, parse_mode="Markdown", reply_markup=admin_broadcast_keyboard()
     )
 
 
@@ -157,7 +158,8 @@ async def handle_broadcast_message(
     await state.update_data(broadcast_data=broadcast_data)
     await state.set_state(AdminStates.awaiting_broadcast_button_choice)
 
-    await message.reply(
+    await safe_answer(
+        message,
         "📝 **Сообщение получено!**\n\n"
         "Хотите добавить к сообщению кнопку с ссылкой?\n"
         "Это удобно для перенаправления на сайт или канал.",
@@ -176,7 +178,8 @@ async def handle_button_choice(
     """Handle button choice (add or skip)."""
     if message.text == "✅ Добавить кнопку":
         await state.set_state(AdminStates.awaiting_broadcast_button_link)
-        await message.reply(
+        await safe_answer(
+            message,
             "🔗 **Введите текст кнопки и ссылку**\n\n"
             "Формат: `Текст кнопки | https://ссылка.com`\n\n"
             "Пример: `Наш сайт | https://google.com`\n"
@@ -221,7 +224,8 @@ async def handle_button_link(
 
     text = message.text.strip()
     if "|" not in text:
-        await message.reply(
+        await safe_answer(
+            message,
             "❌ Неверный формат! Используйте разделитель `|`\n\n"
             "Пример: `Перейти на сайт | https://google.com`",
             parse_mode="Markdown",
@@ -234,7 +238,8 @@ async def handle_button_link(
 
     # Validate button text
     if not button_text or len(button_text) > 64:
-        await message.reply(
+        await safe_answer(
+            message,
             "❌ Текст кнопки должен быть от 1 до 64 символов",
             parse_mode="Markdown",
         )
@@ -252,14 +257,16 @@ async def handle_button_link(
     tg_pattern = re.compile(r'^(https?:\/\/)?(t\.me|telegram\.me)\/[a-zA-Z0-9_]+')
 
     if not (url.startswith(("http://", "https://", "t.me/", "telegram.me/"))):
-        await message.reply(
+        await safe_answer(
+            message,
             "❌ Ссылка должна начинаться с `http://`, `https://`, `t.me/` или `telegram.me/`",
             parse_mode="Markdown",
         )
         return
 
     if not (url_pattern.match(url) or tg_pattern.match(url)):
-        await message.reply(
+        await safe_answer(
+            message,
             "❌ Неверный формат URL. Проверьте правильность ссылки.",
             parse_mode="Markdown",
         )
@@ -312,7 +319,8 @@ async def execute_broadcast(
             ex=BROADCAST_COOLDOWN_SECONDS
         )
 
-    await message.reply(
+    await safe_answer(
+        message,
         f"✅ **Рассылка запущена в фоне!**\n\n"
         f"✉️ ID: `{broadcast_id}`\n"
         f"Вы получите уведомление по завершении.",

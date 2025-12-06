@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User
 from bot.i18n import get_translator, set_user_language, get_user_language, SUPPORTED_LANGUAGES
 from bot.keyboards.reply import settings_keyboard
+from bot.utils.safe_message import safe_answer, safe_send_message, safe_edit_text
 
 router = Router(name="language")
 
@@ -45,7 +46,7 @@ async def handle_language_menu(
     )
 
     text = t("language.title")
-    await message.answer(text, reply_markup=keyboard, parse_mode="Markdown")
+    await safe_answer(message, text, reply_markup=keyboard, parse_mode="Markdown")
 
 
 @router.message(F.text.in_(["🇷🇺 Русский", "🇬🇧 English"]))
@@ -79,7 +80,8 @@ async def handle_language_selection(
         language_name = SUPPORTED_LANGUAGES[selected_lang]
 
         text = t("language.changed", language=language_name)
-        await message.answer(
+        await safe_answer(
+            message,
             text,
             reply_markup=settings_keyboard(),
             parse_mode="Markdown",
@@ -91,7 +93,8 @@ async def handle_language_selection(
         t = get_translator(current_lang)
 
         text = t("language.error")
-        await message.answer(
+        await safe_answer(
+            message,
             text,
             reply_markup=settings_keyboard(),
             parse_mode="Markdown",

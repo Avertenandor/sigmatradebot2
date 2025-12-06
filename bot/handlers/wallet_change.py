@@ -16,6 +16,8 @@ from app.models.user import User
 from app.services.user_service import UserService
 from bot.keyboards.reply import cancel_keyboard, main_menu_reply_keyboard, settings_keyboard
 from bot.states.wallet_change import WalletChangeStates
+from bot.utils.formatters import escape_md
+from bot.utils.safe_message import safe_answer
 
 router = Router(name="wallet_change")
 
@@ -26,7 +28,8 @@ async def start_wallet_change(
     state: FSMContext,
 ) -> None:
     """Start wallet change process."""
-    await message.answer(
+    await safe_answer(
+        message,
         "📝 *Смена кошелька*\n\n"
         "Введите новый адрес вашего BEP-20 кошелька.\n\n"
         "⚠️ **КРИТИЧНО:**\n"
@@ -106,8 +109,9 @@ async def process_financial_password(
         blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
         is_admin = data.get("is_admin", False)
 
-        await message.answer(
-            f"✅ Ваш кошелек успешно изменен на:\n`{new_wallet}`",
+        await safe_answer(
+            message,
+            f"✅ Ваш кошелек успешно изменен на:\n`{escape_md(new_wallet)}`",
             parse_mode="Markdown",
             reply_markup=main_menu_reply_keyboard(
                 user=user, blacklist_entry=blacklist_entry, is_admin=is_admin

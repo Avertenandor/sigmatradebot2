@@ -23,6 +23,7 @@ from app.services.user_service import UserService
 from bot.i18n.loader import get_translator, get_user_language
 from bot.keyboards.reply import main_menu_reply_keyboard
 from bot.states.registration import RegistrationStates
+from bot.utils.safe_message import safe_answer, safe_send_message, safe_edit_text
 
 router = Router()
 
@@ -162,7 +163,8 @@ async def cmd_start(
         )
         logger.debug("cmd_start: sending welcome with ReplyKeyboardRemove")
         # 1) Очистим старую клавиатуру
-        await message.answer(
+        await safe_answer(
+            message,
             welcome_text,
             parse_mode="Markdown",
             disable_web_page_preview=False,
@@ -274,7 +276,8 @@ async def cmd_start(
         )
 
     # 1) Очистим клавиатуру в приветствии
-    await message.answer(
+    await safe_answer(
+        message,
         welcome_text,
         parse_mode="Markdown",
         disable_web_page_preview=False,
@@ -377,7 +380,8 @@ async def process_wallet(
     # Handle "Регистрация" button specially while in waiting_for_wallet state
     # This prevents the loop where clicking "Registration" clears state and shows menu again
     if message.text == "📝 Регистрация":
-        await message.answer(
+        await safe_answer(
+            message,
             "📝 **Регистрация**\n\n"
             "Введите ваш BSC (BEP-20) адрес кошелька:\n"
             "Формат: `0x...` (42 символа)\n\n"
@@ -956,7 +960,8 @@ async def process_password_confirmation(
     # Ask if user wants to provide contacts (optional but recommended)
     from bot.keyboards.reply import contacts_choice_keyboard
 
-    await message.answer(
+    await safe_answer(
+        message,
         "📝 **Рекомендуем оставить контакты!**\n\n"
         "🔒 **Зачем это нужно?**\n"
         "Если ваш Telegram-аккаунт будет угнан или заблокирован, "
@@ -988,7 +993,8 @@ async def handle_contacts_choice(
         return  # Позволяем CommandStart() обработать это
     
     if message.text == "✅ Да, оставить контакты":
-        await message.answer(
+        await safe_answer(
+            message,
             "📞 **Введите номер телефона**\n\n"
             "Формат: `+7XXXXXXXXXX` или `+380XXXXXXXXX`\n"
             "(международный формат с кодом страны)\n\n"
@@ -1009,7 +1015,8 @@ async def handle_contacts_choice(
     else:
         # If user sent something else, show menu again
         from bot.keyboards.reply import contacts_choice_keyboard
-        await message.answer(
+        await safe_answer(
+            message,
             "📝 **Рекомендуем оставить контакты!**\n\n"
             "🔒 Если ваш Telegram будет угнан, мы сможем помочь "
             "восстановить доступ к средствам.\n\n"
@@ -1070,7 +1077,8 @@ async def process_phone(
     # Must start with + and contain only digits after
     phone_pattern = r'^\+\d{10,15}$'
     if phone and not re.match(phone_pattern, phone_clean):
-        await message.answer(
+        await safe_answer(
+            message,
             "❌ **Неверный формат телефона!**\n\n"
             "Введите номер в международном формате:\n"
             "• `+7XXXXXXXXXX` (Россия)\n"
@@ -1088,7 +1096,8 @@ async def process_phone(
     await state.set_state(RegistrationStates.waiting_for_email)
 
     if phone:
-        await message.answer(
+        await safe_answer(
+            message,
             "✅ Телефон сохранён!\n\n"
             "📧 **Введите email**\n\n"
             "Формат: `example@mail.com`\n"
@@ -1097,7 +1106,8 @@ async def process_phone(
             parse_mode="Markdown",
         )
     else:
-        await message.answer(
+        await safe_answer(
+            message,
             "📧 **Введите email**\n\n"
             "Формат: `example@mail.com`\n"
             "(реальный адрес, к которому у вас есть доступ)\n\n"
@@ -1148,7 +1158,8 @@ async def process_email(
         import re
         email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
         if email and not re.match(email_pattern, email):
-            await message.answer(
+            await safe_answer(
+                message,
                 "❌ **Неверный формат email!**\n\n"
                 "Введите корректный адрес, например:\n"
                 "• `user@gmail.com`\n"

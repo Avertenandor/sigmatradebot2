@@ -33,6 +33,7 @@ from bot.states.admin_states import AdminStates
 from bot.utils.admin_utils import clear_state_preserve_admin_token
 from bot.utils.menu_buttons import is_menu_button
 from bot.utils.formatters import escape_md
+from bot.utils.safe_message import safe_answer, safe_send_message, safe_edit_text
 
 router = Router(name="admin_users")
 
@@ -49,8 +50,9 @@ async def handle_admin_users_menu(
         return
 
     await clear_state_preserve_admin_token(state)
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         "👥 **Управление пользователями**\n\n"
         "Выберите действие:",
         parse_mode="Markdown",
@@ -75,7 +77,8 @@ async def cmd_search_user(
     # Parse argument
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
-        await message.answer(
+        await safe_answer(
+            message,
             "🔍 *Быстрый поиск пользователя*\n\n"
             "Использование:\n"
             "`/search @username` - по юзернейму\n"
@@ -103,7 +106,8 @@ async def cmd_search_user(
         user = await user_service.find_by_username(username)
 
     if not user:
-        await message.answer(
+        await safe_answer(
+            message,
             f"❌ Пользователь не найден: `{escape_md(query)}`",
             parse_mode="Markdown",
         )
@@ -125,8 +129,9 @@ async def handle_find_user(
         return
 
     await state.set_state(AdminStates.finding_user)
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         "🔍 **Поиск пользователя**\n\n"
         "Отправьте **Username** (с @ или без), **Telegram ID**, **User ID** "
         "или **адрес кошелька (0x...)**.\n\n"
@@ -174,7 +179,8 @@ async def process_find_user_input(
         user = await user_service.find_by_username(username)
 
     if not user:
-        await message.reply(
+        await safe_answer(
+            message,
             "❌ **Пользователь не найден**\n"
             "Проверьте введенные данные и попробуйте снова.",
             parse_mode="Markdown",
@@ -222,7 +228,8 @@ async def handle_list_users(
     text = f"👥 **Список пользователей** (Страница {page}/{total_pages})\n\n"
     text += "Выберите пользователя для просмотра профиля:"
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_user_list_keyboard(users, page, total_pages),
@@ -380,8 +387,9 @@ async def show_user_profile(
         f"• Заработано: `{balance_data['total_earnings']:.2f} USDT`\n\n"
         f"Выберите действие:"
     )
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_user_profile_keyboard(user.is_banned),
@@ -408,8 +416,9 @@ async def handle_profile_balance(
         return
 
     await state.set_state(AdminStates.changing_user_balance)
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         "💳 **Изменение баланса**\n\n"
         "Введите сумму для начисления (положительное число) "
         "или списания (отрицательное число).\n\n"
@@ -626,8 +635,8 @@ async def handle_profile_history(
         text += f"{status} `{tx.created_at.strftime('%d.%m %H:%M')}`: {tx.type} **{tx.amount} USDT**\n"
         if tx.tx_hash:
             text += f"   🔗 `{tx.tx_hash}`\n"
-        
-    await message.answer(text, parse_mode="Markdown")
+
+    await safe_answer(message, text, parse_mode="Markdown")
 
 
 @router.message(F.text == "👥 Рефералы")
@@ -652,8 +661,8 @@ async def handle_profile_referrals(
         f"Level 3: **{stats['level_3_count']}** партнёров\n\n"
         f"💰 Всего заработано: **{stats['total_earned']:.2f} USDT**"
     )
-    
-    await message.answer(text, parse_mode="Markdown")
+
+    await safe_answer(message, text, parse_mode="Markdown")
 
 
 @router.message(F.text == "◀️ К списку пользователей")
@@ -709,8 +718,11 @@ async def handle_start_block_user(
 Пример: `@username` или `123456789`
     """.strip()
 
-    await message.answer(
-        text, parse_mode="Markdown", reply_markup=cancel_keyboard()
+    await safe_answer(
+        message,
+        text,
+        parse_mode="Markdown",
+        reply_markup=cancel_keyboard()
     )
 
 
@@ -1001,6 +1013,9 @@ async def handle_start_terminate_user_direct(
 Пример: `@username` или `123456789`
     """.strip()
 
-    await message.answer(
-        text, parse_mode="Markdown", reply_markup=cancel_keyboard()
+    await safe_answer(
+        message,
+        text,
+        parse_mode="Markdown",
+        reply_markup=cancel_keyboard()
     )

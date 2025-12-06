@@ -15,6 +15,8 @@ from app.repositories.global_settings_repository import GlobalSettingsRepository
 from bot.states.admin_withdrawal_settings import AdminWithdrawalSettingsStates
 from bot.keyboards.reply import cancel_keyboard, admin_withdrawals_keyboard
 from bot.utils.admin_utils import clear_state_preserve_admin_token
+from bot.utils.safe_message import safe_answer, safe_edit_text
+from bot.utils.formatters import escape_md
 
 router = Router()
 
@@ -32,40 +34,40 @@ async def show_withdrawal_settings(
         return
 
     await clear_state_preserve_admin_token(state)
-    
+
     repo = GlobalSettingsRepository(session)
     settings = await repo.get_settings()
-    
+
     limit_status = "✅ Включено" if settings.is_daily_limit_enabled else "❌ Выключено"
     auto_status = "✅ Включен" if settings.auto_withdrawal_enabled else "❌ Выключен"
-    limit_val = f"{settings.daily_withdrawal_limit} USDT" if settings.daily_withdrawal_limit else "Не задан"
+    limit_val = f"{escape_md(str(settings.daily_withdrawal_limit))} USDT" if settings.daily_withdrawal_limit else "Не задан"
     service_fee = getattr(settings, "withdrawal_service_fee", Decimal("0.00"))
-    
+
     text = (
         f"⚙️ *Настройки выплат*\n\n"
-        f"💵 Мин. вывод: `{settings.min_withdrawal_amount} USDT`\n"
+        f"💵 Мин. вывод: `{escape_md(str(settings.min_withdrawal_amount))} USDT`\n"
         f"🛡 Дневной лимит: `{limit_val}`\n"
         f"🔒 Ограничение лимита: {limit_status}\n"
         f"⚡️ Авто-вывод: {auto_status}\n"
-        f"💸 Комиссия сервиса: `{service_fee}%`\n\n"
+        f"💸 Комиссия сервиса: `{escape_md(str(service_fee))}%`\n\n"
         f"_Авто-вывод работает по правилу x5 (Депозиты * 5 >= Выводы + Запрос)._"
     )
-    
+
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💵 Изм. Мин. Вывод", callback_data="admin_ws_min")],
         [InlineKeyboardButton(text="🛡 Изм. Дневной Лимит", callback_data="admin_ws_limit_val")],
         [InlineKeyboardButton(text="💸 Изм. Комиссию (%)", callback_data="admin_ws_fee")],
         [InlineKeyboardButton(
-            text=f"{'🔴 Выключить' if settings.is_daily_limit_enabled else '🟢 Включить'} Лимит", 
+            text=f"{'🔴 Выключить' if settings.is_daily_limit_enabled else '🟢 Включить'} Лимит",
             callback_data="admin_ws_toggle_limit"
         )],
         [InlineKeyboardButton(
-            text=f"{'🔴 Выключить' if settings.auto_withdrawal_enabled else '🟢 Включить'} Авто-вывод", 
+            text=f"{'🔴 Выключить' if settings.auto_withdrawal_enabled else '🟢 Включить'} Авто-вывод",
             callback_data="admin_ws_toggle_auto"
         )],
     ])
-    
-    await message.answer(text, reply_markup=keyboard, parse_mode="Markdown")
+
+    await safe_answer(message, text, reply_markup=keyboard, parse_mode="Markdown")
 
 
 @router.callback_query(F.data == "admin_ws_toggle_limit")
@@ -99,40 +101,40 @@ async def toggle_auto(
 async def _refresh_menu(message: Message, session: AsyncSession):
     repo = GlobalSettingsRepository(session)
     settings = await repo.get_settings()
-    
+
     limit_status = "✅ Включено" if settings.is_daily_limit_enabled else "❌ Выключено"
     auto_status = "✅ Включен" if settings.auto_withdrawal_enabled else "❌ Выключен"
-    limit_val = f"{settings.daily_withdrawal_limit} USDT" if settings.daily_withdrawal_limit else "Не задан"
+    limit_val = f"{escape_md(str(settings.daily_withdrawal_limit))} USDT" if settings.daily_withdrawal_limit else "Не задан"
     service_fee = getattr(settings, "withdrawal_service_fee", Decimal("0.00"))
-    
+
     text = (
         f"⚙️ *Настройки выплат*\n\n"
-        f"💵 Мин. вывод: `{settings.min_withdrawal_amount} USDT`\n"
+        f"💵 Мин. вывод: `{escape_md(str(settings.min_withdrawal_amount))} USDT`\n"
         f"🛡 Дневной лимит: `{limit_val}`\n"
         f"🔒 Ограничение лимита: {limit_status}\n"
         f"⚡️ Авто-вывод: {auto_status}\n"
-        f"💸 Комиссия сервиса: `{service_fee}%`\n\n"
+        f"💸 Комиссия сервиса: `{escape_md(str(service_fee))}%`\n\n"
         f"_Авто-вывод работает по правилу x5 (Депозиты * 5 >= Выводы + Запрос)._"
     )
-    
+
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💵 Изм. Мин. Вывод", callback_data="admin_ws_min")],
         [InlineKeyboardButton(text="🛡 Изм. Дневной Лимит", callback_data="admin_ws_limit_val")],
         [InlineKeyboardButton(text="💸 Изм. Комиссию (%)", callback_data="admin_ws_fee")],
         [InlineKeyboardButton(
-            text=f"{'🔴 Выключить' if settings.is_daily_limit_enabled else '🟢 Включить'} Лимит", 
+            text=f"{'🔴 Выключить' if settings.is_daily_limit_enabled else '🟢 Включить'} Лимит",
             callback_data="admin_ws_toggle_limit"
         )],
         [InlineKeyboardButton(
-            text=f"{'🔴 Выключить' if settings.auto_withdrawal_enabled else '🟢 Включить'} Авто-вывод", 
+            text=f"{'🔴 Выключить' if settings.auto_withdrawal_enabled else '🟢 Включить'} Авто-вывод",
             callback_data="admin_ws_toggle_auto"
         )],
     ])
-    
+
     try:
-        await message.edit_text(text, reply_markup=keyboard, parse_mode="Markdown")
+        await safe_edit_text(message, text, reply_markup=keyboard, parse_mode="Markdown")
     except Exception:
-        await message.answer(text, reply_markup=keyboard, parse_mode="Markdown")
+        await safe_answer(message, text, reply_markup=keyboard, parse_mode="Markdown")
 
 
 @router.callback_query(F.data == "admin_ws_min")
@@ -267,32 +269,32 @@ async def set_daily_limit(
 async def _refresh_menu_new_msg(message: Message, settings):
     limit_status = "✅ Включено" if settings.is_daily_limit_enabled else "❌ Выключено"
     auto_status = "✅ Включен" if settings.auto_withdrawal_enabled else "❌ Выключен"
-    limit_val = f"{settings.daily_withdrawal_limit} USDT" if settings.daily_withdrawal_limit else "Не задан"
+    limit_val = f"{escape_md(str(settings.daily_withdrawal_limit))} USDT" if settings.daily_withdrawal_limit else "Не задан"
     service_fee = getattr(settings, "withdrawal_service_fee", Decimal("0.00"))
-    
+
     text = (
         f"⚙️ *Настройки выплат*\n\n"
-        f"💵 Мин. вывод: `{settings.min_withdrawal_amount} USDT`\n"
+        f"💵 Мин. вывод: `{escape_md(str(settings.min_withdrawal_amount))} USDT`\n"
         f"🛡 Дневной лимит: `{limit_val}`\n"
         f"🔒 Ограничение лимита: {limit_status}\n"
         f"⚡️ Авто-вывод: {auto_status}\n"
-        f"💸 Комиссия сервиса: `{service_fee}%`\n\n"
+        f"💸 Комиссия сервиса: `{escape_md(str(service_fee))}%`\n\n"
         f"_Авто-вывод работает по правилу x5 (Депозиты * 5 >= Выводы + Запрос)._"
     )
-    
+
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💵 Изм. Мин. Вывод", callback_data="admin_ws_min")],
         [InlineKeyboardButton(text="🛡 Изм. Дневной Лимит", callback_data="admin_ws_limit_val")],
         [InlineKeyboardButton(text="💸 Изм. Комиссию (%)", callback_data="admin_ws_fee")],
         [InlineKeyboardButton(
-            text=f"{'🔴 Выключить' if settings.is_daily_limit_enabled else '🟢 Включить'} Лимит", 
+            text=f"{'🔴 Выключить' if settings.is_daily_limit_enabled else '🟢 Включить'} Лимит",
             callback_data="admin_ws_toggle_limit"
         )],
         [InlineKeyboardButton(
-            text=f"{'🔴 Выключить' if settings.auto_withdrawal_enabled else '🟢 Включить'} Авто-вывод", 
+            text=f"{'🔴 Выключить' if settings.auto_withdrawal_enabled else '🟢 Включить'} Авто-вывод",
             callback_data="admin_ws_toggle_auto"
         )],
     ])
-    
-    await message.answer(text, reply_markup=keyboard, parse_mode="Markdown")
+
+    await safe_answer(message, text, reply_markup=keyboard, parse_mode="Markdown")
 

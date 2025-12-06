@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.account_recovery_service import AccountRecoveryService
 from bot.keyboards.reply import main_menu_reply_keyboard
 from bot.states.account_recovery import AccountRecoveryStates
+from bot.utils.safe_message import safe_answer, safe_send_message, safe_edit_text
 
 router = Router()
 
@@ -55,7 +56,7 @@ async def cmd_recover_account(
         "📝 **Шаг 1:** Отправьте адрес вашего кошелька (0x...)"
     )
 
-    await message.answer(text, parse_mode="Markdown")
+    await safe_answer(message, text, parse_mode="Markdown")
 
 
 @router.message(AccountRecoveryStates.waiting_for_wallet)
@@ -163,7 +164,7 @@ async def handle_wallet_address(
     )
 
     await state.set_state(AccountRecoveryStates.waiting_for_signature)
-    await message.answer(text, parse_mode="Markdown")
+    await safe_answer(message, text, parse_mode="Markdown")
 
 
 @router.message(AccountRecoveryStates.waiting_for_signature)
@@ -283,7 +284,7 @@ async def handle_signature(
 
     await state.set_state(AccountRecoveryStates.waiting_for_additional_info)
     await state.update_data(user_id=user.id, signature=signature)
-    await message.answer(text, parse_mode="Markdown")
+    await safe_answer(message, text, parse_mode="Markdown")
 
 
 @router.message(AccountRecoveryStates.waiting_for_additional_info)
@@ -378,7 +379,7 @@ async def handle_additional_info(
         "Теперь вы можете использовать все функции бота."
     )
 
-    await message.answer(text, parse_mode="Markdown")
+    await safe_answer(message, text, parse_mode="Markdown")
     await state.clear()
 
     # Show main menu

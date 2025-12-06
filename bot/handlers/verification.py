@@ -17,6 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User
 from app.services.user_service import UserService
 from bot.keyboards.reply import main_menu_reply_keyboard
+from bot.utils.formatters import escape_md
+from bot.utils.safe_message import safe_answer
 
 router = Router(name="verification")
 
@@ -104,9 +106,10 @@ async def start_verification(
         )
         if not allowed:
             # R2-10: Improved error message for rate limit
-            await message.answer(
+            await safe_answer(
+                message,
                 f"❌ **Превышен лимит попыток верификации**\n\n"
-                f"{error_msg or 'Слишком много попыток верификации'}\n\n"
+                f"{escape_md(error_msg) if error_msg else 'Слишком много попыток верификации'}\n\n"
                 f"Попробуйте позже или обратитесь в поддержку, если проблема сохраняется.",
                 parse_mode="Markdown",
             )
@@ -143,9 +146,10 @@ async def start_verification(
                     "error": str(e),
                 },
             )
-            await message.answer(
+            await safe_answer(
+                message,
                 f"❌ **Ошибка верификации**\n\n"
-                f"Не удалось сохранить данные верификации: {str(e)}\n\n"
+                f"Не удалось сохранить данные верификации: {escape_md(str(e))}\n\n"
                 f"Попробуйте еще раз или обратитесь в поддержку.",
                 parse_mode="Markdown",
             )
@@ -160,7 +164,8 @@ async def start_verification(
                     "error": str(e),
                 },
             )
-            await message.answer(
+            await safe_answer(
+                message,
                 "❌ **Системная ошибка**\n\n"
                 "Не удалось завершить верификацию из-за технической ошибки.\n\n"
                 "Попробуйте позже или обратитесь в поддержку.",
@@ -177,7 +182,8 @@ async def start_verification(
                 "error": str(e),
             },
         )
-        await message.answer(
+        await safe_answer(
+            message,
             "❌ **Ошибка генерации пароля**\n\n"
             "Не удалось сгенерировать финансовый пароль.\n\n"
             "Попробуйте еще раз или обратитесь в поддержку.",
@@ -209,7 +215,8 @@ async def start_verification(
     from app.repositories.blacklist_repository import BlacklistRepository
     blacklist_repo = BlacklistRepository(session)
     blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
-    await message.answer(
+    await safe_answer(
+        message,
         password_message,
         parse_mode="Markdown",
         reply_markup=main_menu_reply_keyboard(

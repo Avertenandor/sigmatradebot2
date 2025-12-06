@@ -35,6 +35,7 @@ from bot.keyboards.reply import (
 from bot.utils.formatters import escape_md, format_tx_hash_with_link
 from bot.utils.menu_buttons import is_menu_button
 from bot.utils.admin_utils import clear_state_preserve_admin_token
+from bot.utils.safe_message import safe_answer, safe_send_message, safe_edit_text
 
 router = Router()
 
@@ -87,7 +88,8 @@ async def show_financial_list(
         "Формат: `User | Ввод | Вывод`"
     )
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="MarkdownV2",
         reply_markup=admin_financial_list_keyboard(users, page, total_pages),
@@ -131,7 +133,8 @@ async def handle_pagination(
         "Выберите пользователя для просмотра детальной информации:"
     )
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="MarkdownV2",
         reply_markup=admin_financial_list_keyboard(users, current_page, total_pages),
@@ -194,7 +197,8 @@ async def handle_user_selection(
     await state.set_state(AdminFinancialStates.viewing_user)
     await state.update_data(selected_user_id=user_id)
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="MarkdownV2",
         reply_markup=admin_user_financial_keyboard(),
@@ -239,7 +243,8 @@ async def show_user_withdrawals(
 
     await state.set_state(AdminFinancialStates.viewing_withdrawals)
     # Use simple back keyboard for this leaf view
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="MarkdownV2",
         reply_markup=admin_back_keyboard(),
@@ -292,7 +297,7 @@ async def handle_back(
                     "Выберите действие:"
                 )
                 await state.set_state(AdminFinancialStates.viewing_user)
-                await message.answer(text, parse_mode="MarkdownV2", reply_markup=admin_user_financial_keyboard())
+                await safe_answer(message, text, parse_mode="MarkdownV2", reply_markup=admin_user_financial_keyboard())
                 return
 
     # Default: Back to List
@@ -336,8 +341,9 @@ async def show_user_financial_detail(
     
     # Форматируем детальную карточку
     text = _format_user_financial_detail(dto)
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_user_financial_detail_keyboard(),
@@ -434,7 +440,8 @@ async def show_all_deposits(
     
     text = _format_deposits_page(dto.deposits, page, per_page, total_pages)
     
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_deposits_list_keyboard(page, total_pages),
@@ -505,7 +512,8 @@ async def show_all_withdrawals(
     
     text = _format_withdrawals_page(dto.withdrawals, page, per_page, total_pages)
     
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_withdrawals_list_keyboard(page, total_pages),
@@ -575,7 +583,8 @@ async def show_wallet_history(
             f"   Новый: `{new_short}`\n\n"
         )
     
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_wallet_history_keyboard()
@@ -637,7 +646,8 @@ async def handle_deposits_pagination(
     per_page = 10
     text = _format_deposits_page(dto.deposits, current_page, per_page, total_pages)
     
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_deposits_list_keyboard(current_page, total_pages),
@@ -672,8 +682,9 @@ async def back_to_card_from_deposits(
     
     await state.set_state(AdminFinancialStates.viewing_user_detail)
     text = _format_user_financial_detail(dto)
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_user_financial_detail_keyboard(),
@@ -722,7 +733,8 @@ async def handle_withdrawals_pagination(
     per_page = 10
     text = _format_withdrawals_page(dto.withdrawals, current_page, per_page, total_pages)
     
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_withdrawals_list_keyboard(current_page, total_pages),
@@ -757,8 +769,9 @@ async def back_to_card_from_withdrawals(
     
     await state.set_state(AdminFinancialStates.viewing_user_detail)
     text = _format_user_financial_detail(dto)
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_user_financial_detail_keyboard(),
@@ -793,8 +806,9 @@ async def back_to_card_from_wallet_history(
     
     await state.set_state(AdminFinancialStates.viewing_user_detail)
     text = _format_user_financial_detail(dto)
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_user_financial_detail_keyboard(),

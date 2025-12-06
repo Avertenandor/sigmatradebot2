@@ -12,6 +12,7 @@ from app.models.user import User
 from bot.keyboards.reply import support_keyboard
 from bot.states.support import SupportStates
 from bot.utils.formatters import escape_md
+from bot.utils.safe_message import safe_answer, safe_send_message
 
 router = Router(name="support")
 
@@ -27,8 +28,8 @@ async def handle_support_menu(
 
     text = "💬 *Служба поддержки*\n\nВыберите действие из меню ниже:"
 
-    await message.answer(
-        text, reply_markup=support_keyboard(), parse_mode="Markdown"
+    await safe_answer(
+        message, text, reply_markup=support_keyboard(), parse_mode="Markdown"
     )
 
 
@@ -65,7 +66,7 @@ async def handle_create_ticket(
     )
 
     await state.set_state(SupportStates.awaiting_input)
-    await message.answer(text, parse_mode="Markdown")
+    await safe_answer(message, text, parse_mode="Markdown")
 
 
 @router.message(SupportStates.awaiting_input)
@@ -137,7 +138,8 @@ async def process_ticket_message(
             # Transaction closed here
 
         if error or not ticket:
-            await message.answer(
+            await safe_answer(
+                message,
                 f"❌ Ошибка при создании обращения:\n{error}",
                 parse_mode="Markdown",
             )
@@ -153,8 +155,8 @@ async def process_ticket_message(
             f"Мы ответим вам в ближайшее время."
         )
 
-        await message.answer(
-            text, parse_mode="Markdown", reply_markup=support_keyboard()
+        await safe_answer(
+            message, text, parse_mode="Markdown", reply_markup=support_keyboard()
         )
 
         # Notify admins
@@ -189,8 +191,8 @@ async def process_ticket_message(
 
             for admin_id in settings.get_admin_ids():
                 try:
-                    await bot_instance.send_message(
-                        admin_id, admin_text, parse_mode="Markdown"
+                    await safe_send_message(
+                        bot_instance, admin_id, admin_text, parse_mode="Markdown"
                     )
                 except Exception as e:
                     logger.error(f"Failed to notify admin {admin_id}: {e}")
@@ -281,8 +283,8 @@ async def handle_my_tickets(
                 f"   Создано: {created_date}\n\n"
             )
 
-    await message.answer(
-        text, parse_mode="Markdown", reply_markup=support_keyboard()
+    await safe_answer(
+        message, text, parse_mode="Markdown", reply_markup=support_keyboard()
     )
 
 
@@ -306,6 +308,6 @@ async def handle_faq(
         "Для других вопросов создайте обращение в поддержку."
     )
 
-    await message.answer(
-        text, parse_mode="Markdown", reply_markup=support_keyboard()
+    await safe_answer(
+        message, text, parse_mode="Markdown", reply_markup=support_keyboard()
     )

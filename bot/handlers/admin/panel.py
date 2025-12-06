@@ -27,7 +27,8 @@ from bot.keyboards.reply import (
 )
 from bot.states.admin_states import AdminStates
 from bot.utils.admin_utils import clear_state_preserve_admin_token
-from bot.utils.formatters import format_usdt
+from bot.utils.formatters import escape_md, format_usdt
+from bot.utils.safe_message import safe_answer, safe_edit_text, safe_send_message
 
 router = Router(name="admin_panel")
 
@@ -102,7 +103,8 @@ async def handle_master_key_input(
     )
 
     if error or not session_obj or not admin_obj:
-        await message.answer(
+        await safe_answer(
+            message,
             f"❌ {error or 'Ошибка аутентификации'}\n\n"
             "Попробуйте ввести мастер-ключ еще раз:",
             parse_mode="Markdown",
@@ -127,7 +129,8 @@ async def handle_master_key_input(
             f"restoring state {previous_state}"
         )
 
-        await message.answer(
+        await safe_answer(
+            message,
             "✅ **Аутентификация успешна!**\n\n"
             "Вы вернулись в предыдущее меню. Пожалуйста, повторите ваше действие.",
             parse_mode="Markdown",
@@ -215,7 +218,8 @@ async def handle_master_key_input(
         session, telegram_id, data
     )
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_keyboard(
@@ -258,7 +262,8 @@ async def cmd_admin_panel(
     admin: Admin | None = data.get("admin")
     is_super_admin = admin.is_super_admin if admin else False
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_keyboard(
@@ -306,7 +311,8 @@ async def handle_admin_panel_button(
     # Get admin and role flags for keyboard
     admin, _ = await get_admin_and_super_status(session, telegram_id, data)
     # AdminAuthMiddleware уже положил is_extended_admin / is_super_admin в data
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=get_admin_keyboard_from_data(data),
@@ -377,7 +383,7 @@ async def cmd_retention(
             f"{cohort['deposited']} деп ({cohort['conversion_rate']}%)\n"
         )
 
-    await message.answer(text, parse_mode="Markdown")
+    await safe_answer(message, text, parse_mode="Markdown")
 
 
 @router.message(Command("dashboard"))
@@ -481,7 +487,7 @@ async def cmd_dashboard(
         f"_Обновлено: {datetime.now(UTC).strftime('%H:%M UTC')}_"
     )
 
-    await message.answer(text, parse_mode="Markdown")
+    await safe_answer(message, text, parse_mode="Markdown")
 
 
 @router.message(F.text == "📊 Статистика")
@@ -617,7 +623,8 @@ async def handle_admin_stats(
         session, telegram_id, data
     )
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_keyboard(
@@ -705,9 +712,9 @@ async def show_withdrawal_page(
     keyboard = InlineKeyboardMarkup(inline_keyboard=[buttons] if buttons else [])
 
     if edit and hasattr(message, "edit_text"):
-        await message.edit_text(text, parse_mode="Markdown", reply_markup=keyboard)
+        await safe_edit_text(message, text, parse_mode="Markdown", reply_markup=keyboard)
     else:
-        await message.answer(text, parse_mode="Markdown", reply_markup=keyboard)
+        await safe_answer(message, text, parse_mode="Markdown", reply_markup=keyboard)
 
 
 @router.callback_query(F.data.startswith("wd_page:"))
@@ -798,8 +805,9 @@ async def handle_admin_users_menu(
     text = """👥 **Управление пользователями**
 
 Выберите действие:"""
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_users_keyboard(),

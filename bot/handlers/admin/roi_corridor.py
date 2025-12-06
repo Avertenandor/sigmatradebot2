@@ -32,6 +32,7 @@ from bot.keyboards.reply import (
 )
 from bot.states.admin import AdminRoiCorridorStates
 from bot.utils.admin_utils import clear_state_preserve_admin_token
+from bot.utils.safe_message import safe_answer, safe_send_message, safe_edit_text
 
 router = Router(name="admin_roi_corridor")
 
@@ -98,13 +99,14 @@ async def show_level_roi_config(
     await state.set_state(AdminRoiCorridorStates.selecting_mode)
     
     logger.info(f"[ROI_CORRIDOR] Sending mode selection keyboard for level {level}")
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_roi_mode_select_keyboard(),
     )
-    
+
     logger.info(f"[ROI_CORRIDOR] Mode selection message sent successfully")
 
 
@@ -140,7 +142,8 @@ async def show_roi_corridor_menu(
         "Выберите действие:"
     )
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_roi_corridor_menu_keyboard(),
@@ -221,8 +224,9 @@ async def process_level_amount_selection(
 
     await state.update_data(level=level, current_amount=current_amount)
     await state.set_state(AdminRoiCorridorStates.setting_level_amount)
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         f"**Уровень {level} выбран.**\n"
         f"Текущая сумма: **{current_amount}**\n\n"
         "Введите новую сумму в USDT (например: `100`):",
@@ -269,7 +273,8 @@ async def process_amount_input(
     await state.update_data(new_amount=float(amount))
     await state.set_state(AdminRoiCorridorStates.confirming_level_amount)
 
-    await message.answer(
+    await safe_answer(
+        message,
         f"⚠️ **Подтверждение изменения суммы**\n\n"
         f"**Уровень:** {level}\n"
         f"**Текущая сумма:** {current_amount}\n"
@@ -331,14 +336,15 @@ async def process_amount_confirmation(
     )
 
     if success:
-        await message.answer(
+        await safe_answer(
+            message,
             f"✅ **Сумма успешно обновлена!**\n\n"
             f"**Уровень:** {level}\n"
             f"**Новая сумма:** {amount} USDT\n\n"
             "Изменения вступят в силу для новых депозитов.",
             parse_mode="Markdown",
         )
-        
+
         # Notify other admins? Maybe later.
         
     else:
@@ -407,7 +413,8 @@ async def process_level_selection(
 
     await state.update_data(level=level)
     await state.set_state(AdminRoiCorridorStates.selecting_mode)
-    await message.answer(
+    await safe_answer(
+        message,
         f"**Уровень {level} выбран.**\n\nВыберите режим начисления:",
         parse_mode="Markdown",
         reply_markup=admin_roi_mode_select_keyboard(),
@@ -464,7 +471,8 @@ async def process_mode_selection(
     # Immediately ask for values based on mode
     if mode == "custom":
         await state.set_state(AdminRoiCorridorStates.entering_min)
-        await message.answer(
+        await safe_answer(
+            message,
             f"**Режим:** {mode_text}\n\n"
             "**Шаг 1/4: Введите минимальный процент коридора**\n\n"
             "Например: `0.8` (для 0.8% в период)\n\n"
@@ -473,7 +481,8 @@ async def process_mode_selection(
         )
     else:
         await state.set_state(AdminRoiCorridorStates.entering_fixed)
-        await message.answer(
+        await safe_answer(
+            message,
             f"**Режим:** {mode_text}\n\n"
             "**Шаг 1/3: Введите фиксированный процент для всех**\n\n"
             "Например: `5.5` (для 5.5% в период)\n\n"
@@ -525,7 +534,8 @@ async def process_applies_to(
 
     # After selecting when to apply, ask for optional reason/comment
     await state.set_state(AdminRoiCorridorStates.entering_reason)
-    await message.answer(
+    await safe_answer(
+        message,
         "📝 **Шаг 3: Введите причину изменения (опционально)**\n\n"
         "Пример: `Экстренное снижение доходности` или `Плановое повышение`\n\n"
         "Если не хотите указывать причину, отправьте `Пропустить`.",
@@ -578,7 +588,8 @@ async def process_min_input(
         if roi_min < 0:
             raise ValueError("Negative value")
     except Exception:
-        await message.answer(
+        await safe_answer(
+            message,
             "❌ Неверный формат. Введите число (например: `0.8`):",
             parse_mode="Markdown",
         )
@@ -587,7 +598,8 @@ async def process_min_input(
     # Convert Decimal to float for JSON serialization in FSM state
     await state.update_data(roi_min=float(roi_min))
     await state.set_state(AdminRoiCorridorStates.entering_max)
-    await message.answer(
+    await safe_answer(
+        message,
         f"**Минимум:** {roi_min}%\n\n"
         "**Введите максимальный процент коридора**\n\n"
         "Например: `10` (для 10% в период)\n\n"
@@ -617,7 +629,8 @@ async def process_max_input(
         if roi_max < 0:
             raise ValueError("Negative value")
     except Exception:
-        await message.answer(
+        await safe_answer(
+            message,
             "❌ Неверный формат. Введите число (например: `10`):",
             parse_mode="Markdown",
         )
@@ -636,10 +649,11 @@ async def process_max_input(
 
     # Convert Decimal to float for JSON serialization in FSM state
     await state.update_data(roi_max=float(roi_max))
-    
+
     # After entering corridor, ask when to apply
     await state.set_state(AdminRoiCorridorStates.selecting_applies_to)
-    await message.answer(
+    await safe_answer(
+        message,
         f"**Коридор:** {roi_min}% - {roi_max}%\n\n"
         "**Шаг 2/4: Когда применить изменения?**\n\n"
         "⚡️ **Текущая сессия** - изменения применятся к ближайшему "
@@ -672,7 +686,8 @@ async def process_fixed_input(
         if roi_fixed < 0:
             raise ValueError("Negative value")
     except Exception:
-        await message.answer(
+        await safe_answer(
+            message,
             "❌ Неверный формат. Введите число (например: `5.5`):",
             parse_mode="Markdown",
         )
@@ -680,10 +695,11 @@ async def process_fixed_input(
 
     # Convert Decimal to float for JSON serialization in FSM state
     await state.update_data(roi_fixed=float(roi_fixed))
-    
+
     # After entering fixed rate, ask when to apply
     await state.set_state(AdminRoiCorridorStates.selecting_applies_to)
-    await message.answer(
+    await safe_answer(
+        message,
         f"**Фиксированный процент:** {roi_fixed}%\n\n"
         "**Шаг 2/3: Когда применить изменения?**\n\n"
         "⚡️ **Текущая сессия** - изменения применятся к ближайшему "
@@ -768,7 +784,8 @@ async def show_confirmation(
     )
 
     await state.set_state(AdminRoiCorridorStates.confirming)
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_roi_confirmation_keyboard(),
@@ -843,7 +860,8 @@ async def process_confirmation(
         else:
             config_text = f"{state_data['roi_fixed']}%"
 
-        await message.answer(
+        await safe_answer(
+            message,
             f"✅ **Настройки успешно применены!**\n\n"
             f"**Уровень:** {level}\n"
             f"**Режим:** {mode_text}\n"
@@ -939,7 +957,8 @@ async def show_current_settings(
     period = await corridor_service.get_accrual_period_hours()
     text += f"⏱ **Период начисления:** {period} часов"
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_roi_corridor_menu_keyboard(),
@@ -1061,7 +1080,8 @@ async def show_level_history(
     if len(history) > 10:
         text += f"... и еще {len(history) - 10} записей"
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_roi_corridor_menu_keyboard(),
@@ -1089,7 +1109,8 @@ async def start_period_setup(
     current_period = await corridor_service.get_accrual_period_hours()
 
     await state.set_state(AdminRoiCorridorStates.setting_period)
-    await message.answer(
+    await safe_answer(
+        message,
         f"⏱ **Настройка периода начисления**\n\n"
         f"**Текущий период:** {current_period} часов\n\n"
         "Введите новый период в часах (от 1 до 24):\n\n"
@@ -1130,7 +1151,8 @@ async def process_period_input(
     await state.update_data(new_period_hours=hours)
     await state.set_state(AdminRoiCorridorStates.confirming_period)
 
-    await message.answer(
+    await safe_answer(
+        message,
         f"⚠️ **Подтверждение изменений**\n\n"
         f"Новый период начисления: **{hours} часов**\n\n"
         "❗️ **ВНИМАНИЕ:**\n"
@@ -1185,7 +1207,8 @@ async def process_period_confirmation(
     )
 
     if success:
-        await message.answer(
+        await safe_answer(
+            message,
             f"✅ **Период начисления обновлён!**\n\n"
             f"Новый период: {hours} часов\n\n"
             "Изменения вступят в силу при следующем автоматическом начислении.",

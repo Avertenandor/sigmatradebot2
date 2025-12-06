@@ -35,7 +35,8 @@ from bot.keyboards.reply import (
     cancel_keyboard,
 )
 from bot.states.admin import AdminDepositManagementStates
-from bot.utils.formatters import format_usdt
+from bot.utils.formatters import format_usdt, escape_md
+from bot.utils.safe_message import safe_answer
 
 router = Router(name="admin_deposit_management")
 
@@ -64,8 +65,9 @@ async def show_deposit_management_menu(
 
 Выберите действие:
     """.strip()
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_deposit_management_keyboard(),
@@ -150,8 +152,9 @@ Pending: {stats.pending}
         text += f"{emoji} Уровень {level_num}: {count} депозитов ({format_usdt(total_amount)})\n"
     
     text += f"\n💰 **Общая сумма:** {format_usdt(grand_total)}"
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_deposit_management_keyboard(),
@@ -178,8 +181,9 @@ async def start_search_user_deposits(
         return
     
     await state.set_state(AdminDepositManagementStates.searching_user_deposits)
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         "🔍 **Поиск депозитов пользователя**\n\n"
         "Введите Telegram ID пользователя:",
         parse_mode="Markdown",
@@ -243,7 +247,8 @@ async def process_user_id_for_deposits(
     user = await user_repo.get_by(telegram_id=telegram_id)
     
     if not user:
-        await message.answer(
+        await safe_answer(
+            message,
             f"❌ Пользователь с ID `{telegram_id}` не найден.",
             parse_mode="Markdown",
             reply_markup=admin_deposit_management_keyboard(),
@@ -256,7 +261,8 @@ async def process_user_id_for_deposits(
     deposits = await deposit_repo.find_by(user_id=user.id)
     
     if not deposits:
-        await message.answer(
+        await safe_answer(
+            message,
             f"ℹ️ У пользователя `{telegram_id}` нет депозитов.",
             parse_mode="Markdown",
             reply_markup=admin_deposit_management_keyboard(),
@@ -266,7 +272,8 @@ async def process_user_id_for_deposits(
     
     # Format deposits
     text = f"📋 **Депозиты пользователя {telegram_id}**\n"
-    text += f"Username: @{user.username or 'N/A'}\n\n"
+    username = escape_md(user.username) if user.username else 'N/A'
+    text += f"Username: @{username}\n\n"
     
     for deposit in deposits:
         status_emoji = {
@@ -294,8 +301,9 @@ async def process_user_id_for_deposits(
             f"   Заработано: {format_usdt(deposit.roi_paid_amount)} USDT\n"
             f"   Дата: {deposit.created_at.strftime('%Y-%m-%d %H:%M')}\n\n"
         )
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_deposit_management_keyboard(),
@@ -344,10 +352,11 @@ async def show_levels_management(
         
         emoji = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"][level_num - 1]
         text += f"{emoji} **Уровень {level_num}** ({amount}): {status}\n"
-    
+
     text += "\n💡 Выберите уровень для управления:"
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_deposit_levels_keyboard(),
@@ -400,8 +409,9 @@ ROI Cap: {current_version.roi_cap_percent}%
 
 Выберите действие:
     """.strip()
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_deposit_level_actions_keyboard(level, is_active),
@@ -468,8 +478,9 @@ async def start_max_level_change(
     current_max = settings.max_open_deposit_level
 
     await state.set_state(AdminDepositManagementStates.setting_max_level)
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         f"🔢 **Изменение максимального уровня**\n\n"
         f"Текущий макс. уровень: **{current_max}**\n\n"
         "Введите новое значение (1-5):\n"
@@ -521,14 +532,15 @@ async def process_max_level_change(
     global_settings_repo = GlobalSettingsRepository(session)
     await global_settings_repo.update_settings(max_open_deposit_level=new_max)
     await session.commit()
-    
+
     logger.info(f"Max open deposit level changed to {new_max} by {admin_info}")
 
-    await message.answer(
+    await safe_answer(
+        message,
         f"✅ Максимальный уровень успешно изменён на **{new_max}**.",
         parse_mode="Markdown",
     )
-    
+
     await clear_state_preserve_admin_token(state)
     await show_levels_management(message, session, **data)
 
@@ -779,10 +791,11 @@ async def show_pending_deposits(
     for deposit in pending_deposits[:10]:  # Limit to 10
         # Get user info
         user = deposit.user
-        
+        username = escape_md(user.username) if user.username else 'N/A'
+
         text += (
             f"🆔 Deposit ID: `{deposit.id}`\n"
-            f"👤 User: {user.telegram_id} (@{user.username or 'N/A'})\n"
+            f"👤 User: {user.telegram_id} (@{username})\n"
             f"📊 Уровень: {deposit.level}\n"
             f"💰 Сумма: {format_usdt(deposit.amount)}\n"
             f"📅 Дата: {deposit.created_at.strftime('%Y-%m-%d %H:%M')}\n"
@@ -795,8 +808,9 @@ async def show_pending_deposits(
     
     if len(pending_deposits) > 10:
         text += f"\n... и ещё {len(pending_deposits) - 10} депозитов"
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_deposit_management_keyboard(),
@@ -865,8 +879,9 @@ async def show_roi_statistics(
     
     if text == "📈 **ROI Статистика**\n\n":
         text += "ℹ️ Нет активных депозитов с незавершённым ROI."
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_deposit_management_keyboard(),

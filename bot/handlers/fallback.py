@@ -11,6 +11,7 @@ from aiogram.types import Message, ReplyKeyboardRemove
 
 from bot.keyboards.reply import main_menu_reply_keyboard
 from bot.utils.menu_buttons import CONFIRMATION_BUTTONS
+from bot.utils.safe_message import safe_answer
 
 router = Router()
 
@@ -26,7 +27,8 @@ async def handle_orphaned_confirmation(message: Message, **data) -> None:
     # Get is_admin from middleware data to ensure admin button is shown
     is_admin = data.get("is_admin", False)
     
-    await message.answer(
+    await safe_answer(
+        message,
         "⚠️ **Действие отменено или устарело**\n\n"
         "Состояние диалога было сброшено (возможно, из-за обновления бота). "
         "Пожалуйста, начните действие заново через меню.",
@@ -41,7 +43,8 @@ async def handle_orphaned_confirmation(message: Message, **data) -> None:
 @router.message(F.text.in_(["25%", "50%", "MAX"]))
 async def handle_orphaned_wallet_buttons(message: Message) -> None:
     """Handle wallet quick amount buttons when state is lost."""
-    await message.answer(
+    await safe_answer(
+        message,
         "⚠️ **Действие устарело**\n\n"
         "Пожалуйста, вернитесь в меню управления кошельком.",
         parse_mode="Markdown",

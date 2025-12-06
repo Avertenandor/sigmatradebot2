@@ -17,6 +17,7 @@ from bot.keyboards.reply import (
     deposit_keyboard,
     main_menu_reply_keyboard,
 )
+from bot.utils.safe_message import safe_answer
 
 router = Router()
 
@@ -107,7 +108,8 @@ async def show_instructions(
             "Используйте кнопку '📝 Регистрация' или команду /start."
         )
 
-        await message.answer(
+        await safe_answer(
+            message,
             instructions_text,
             parse_mode="Markdown",
             reply_markup=main_menu_reply_keyboard(
@@ -166,7 +168,8 @@ async def show_instructions(
     validation_service = DepositValidationService(session)
     levels_status = await validation_service.get_available_levels(user.id)
     
-    await message.answer(
+    await safe_answer(
+        message,
         instructions_text,
         parse_mode="Markdown",
         reply_markup=deposit_keyboard(levels_status=levels_status),

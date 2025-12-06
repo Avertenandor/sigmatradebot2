@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.global_settings_repository import GlobalSettingsRepository
 from bot.keyboards.reply import get_admin_keyboard_from_data
+from bot.utils.safe_message import safe_answer
 
 router = Router()
 
@@ -65,7 +66,8 @@ async def show_emergency_menu(
         "окружения (переменные EMERGENCY_STOP_* в .env)."
     )
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=get_admin_keyboard_from_data(data),
