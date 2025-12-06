@@ -21,6 +21,10 @@ from app.services.referral_service import ReferralService
 # All users without referrer will be assigned to this sponsor
 DEFAULT_SPONSOR_TELEGRAM_ID = 7879058231
 
+# Super admin telegram_id (@VladarevInvestBrok, user_id=1)
+# This user cannot have a referrer - only can be a sponsor
+SUPER_ADMIN_TELEGRAM_ID = 1040687384
+
 
 class UserService:
     """
@@ -141,7 +145,15 @@ class UserService:
 
         # Find referrer if provided
         referrer_id = None
-        if referrer_telegram_id:
+        
+        # Super admin cannot have a referrer
+        if telegram_id == SUPER_ADMIN_TELEGRAM_ID:
+            referrer_id = None
+            logger.info(
+                "Super admin registration - no referrer allowed",
+                extra={"telegram_id": telegram_id},
+            )
+        elif referrer_telegram_id:
             referrer = await self.user_repo.get_by_telegram_id(
                 referrer_telegram_id
             )
@@ -149,7 +161,12 @@ class UserService:
                 referrer_id = referrer.id
 
         # If no referrer provided, use default sponsor (@difficult_8)
-        if not referrer_id and telegram_id != DEFAULT_SPONSOR_TELEGRAM_ID:
+        # But not for super admin and not for default sponsor themselves
+        if (
+            not referrer_id
+            and telegram_id != DEFAULT_SPONSOR_TELEGRAM_ID
+            and telegram_id != SUPER_ADMIN_TELEGRAM_ID
+        ):
             default_sponsor = await self.user_repo.get_by_telegram_id(
                 DEFAULT_SPONSOR_TELEGRAM_ID
             )
