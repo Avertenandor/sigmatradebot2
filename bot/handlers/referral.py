@@ -64,7 +64,13 @@ async def handle_share_link(
     ])
 
     # Escape share_text for Markdown (URL contains _ and -)
-    share_text_escaped = escape_md(share_text)
+    # Put the URL in code block to avoid Markdown parsing issues
+    share_text_for_display = (
+        "🚀 Присоединяйся к SigmaTrade!\n\n"
+        "💰 Инвестируй в USDT и получай до 8% в день!\n"
+        "👥 Партнёрская программа до 3-х уровней\n\n"
+        f"👉 `{referral_link}`"
+    )
 
     text = f"""
 📤 *ПОДЕЛИТЬСЯ ССЫЛКОЙ*
@@ -78,7 +84,7 @@ async def handle_share_link(
 {'─' * 26}
 📱 *Готовый текст для друзей:*
 
-{share_text_escaped}
+{share_text_for_display}
 
 {'─' * 26}
 💡 Совет: Отправляйте ссылку в группы,

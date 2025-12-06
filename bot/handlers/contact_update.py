@@ -111,7 +111,9 @@ async def home_from_choice(
 
     from bot.handlers.menu import show_main_menu
 
-    await show_main_menu(message, session, user, state, **data)
+    # Remove user from data to avoid duplicate argument
+    safe_data = {k: v for k, v in data.items() if k != "user"}
+    await show_main_menu(message, session, user, state, **safe_data)
 
 
 @router.message(
@@ -285,7 +287,9 @@ async def home_from_phone(
 
     from bot.handlers.menu import show_main_menu
 
-    await show_main_menu(message, session, user, state, **data)
+    # Remove user from data to avoid duplicate argument
+    safe_data = {k: v for k, v in data.items() if k != "user"}
+    await show_main_menu(message, session, user, state, **safe_data)
 
 
 @router.message(ProfileUpdateStates.waiting_for_phone)
@@ -422,7 +426,9 @@ async def home_from_email(
 
     from bot.handlers.menu import show_main_menu
 
-    await show_main_menu(message, session, user, state, **data)
+    # Remove user from data to avoid duplicate argument
+    safe_data = {k: v for k, v in data.items() if k != "user"}
+    await show_main_menu(message, session, user, state, **safe_data)
 
 
 @router.message(ProfileUpdateStates.waiting_for_email)
