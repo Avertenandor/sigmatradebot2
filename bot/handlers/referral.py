@@ -63,37 +63,36 @@ async def handle_share_link(
         ],
     ])
 
-    # Escape share_text for Markdown (URL contains _ and -)
-    # Put the URL in code block to avoid Markdown parsing issues
+    # Create display text without Markdown to avoid parsing errors
+    separator = "━" * 26
+    separator2 = "─" * 26
+    
     share_text_for_display = (
         "🚀 Присоединяйся к SigmaTrade!\n\n"
         "💰 Инвестируй в USDT и получай до 8% в день!\n"
         "👥 Партнёрская программа до 3-х уровней\n\n"
-        f"👉 `{referral_link}`"
+        f"👉 {referral_link}"
     )
 
-    text = f"""
-📤 *ПОДЕЛИТЬСЯ ССЫЛКОЙ*
-{'━' * 26}
+    text = f"""📤 ПОДЕЛИТЬСЯ ССЫЛКОЙ
+{separator}
 
-🔗 *Ваша реферальная ссылка:*
-`{referral_link}`
+🔗 Ваша реферальная ссылка:
+{referral_link}
 
 👆 Нажмите на ссылку чтобы скопировать
 
-{'─' * 26}
-📱 *Готовый текст для друзей:*
+{separator2}
+📱 Готовый текст для друзей:
 
 {share_text_for_display}
 
-{'─' * 26}
+{separator2}
 💡 Совет: Отправляйте ссылку в группы,
-чаты и друзьям напрямую!
-    """.strip()
+чаты и друзьям напрямую!"""
 
     await message.answer(
         text,
-        parse_mode="Markdown",
         reply_markup=referral_keyboard(),
     )
 
