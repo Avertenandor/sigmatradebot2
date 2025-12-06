@@ -23,6 +23,7 @@ from app.services.user_service import UserService
 from bot.i18n.loader import get_translator, get_user_language
 from bot.keyboards.reply import main_menu_reply_keyboard
 from bot.states.registration import RegistrationStates
+from bot.utils.safe_message import safe_answer
 
 router = Router()
 

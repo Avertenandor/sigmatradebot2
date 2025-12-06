@@ -29,6 +29,7 @@ from bot.keyboards.reply import (
 )
 from bot.states.registration import RegistrationStates
 from bot.utils.text_utils import escape_markdown
+from bot.utils.safe_message import safe_answer
 
 router = Router()
 
@@ -101,7 +102,8 @@ async def show_main_menu(
     )
     logger.info(f"[MENU] Sending main menu to user {user.telegram_id}")
     
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         reply_markup=keyboard,
         parse_mode="Markdown",
