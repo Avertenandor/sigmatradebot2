@@ -29,8 +29,9 @@ from bot.keyboards.reply import (
     admin_withdrawal_detail_keyboard,
 )
 from bot.states.admin_states import AdminStates
-from bot.utils.formatters import format_usdt
+from bot.utils.formatters import format_usdt, escape_md
 from bot.utils.admin_utils import clear_state_preserve_admin_token
+from bot.utils.safe_message import safe_answer
 
 WITHDRAWALS_PER_PAGE = 8
 
@@ -80,7 +81,8 @@ async def handle_pending_withdrawals(
         "Нажмите на заявку для просмотра деталей:"
     )
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=withdrawal_list_keyboard(
@@ -131,15 +133,16 @@ async def handle_prev_page(
     page_withdrawals = pending[start_idx:end_idx]
     
     await state.update_data(page=page)
-    
+
     text = (
         f"⏳ **Ожидающие заявки на вывод**\n\n"
         f"📋 Всего заявок: {total}\n"
         f"📄 Страница: {page}/{total_pages}\n\n"
         "Нажмите на заявку для просмотра деталей:"
     )
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=withdrawal_list_keyboard(
@@ -177,15 +180,16 @@ async def handle_next_page(
     page_withdrawals = pending[start_idx:end_idx]
     
     await state.update_data(page=page)
-    
+
     text = (
         f"⏳ **Ожидающие заявки на вывод**\n\n"
         f"📋 Всего заявок: {total}\n"
         f"📄 Страница: {page}/{total_pages}\n\n"
         "Нажмите на заявку для просмотра деталей:"
     )
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=withdrawal_list_keyboard(
@@ -250,8 +254,8 @@ async def handle_withdrawal_selection(
     # Get user info and stats
     user_service = UserService(session)
     user = await user_service.find_by_id(withdrawal.user_id)
-    username = f"@{user.username}" if user and user.username else f"ID: {withdrawal.user_id}"
-    
+    username = f"@{escape_md(user.username)}" if user and user.username else f"ID: {withdrawal.user_id}"
+
     user_balance = await user_service.get_user_balance(withdrawal.user_id)
     history_text = ""
     if user_balance:
@@ -266,12 +270,13 @@ async def handle_withdrawal_selection(
         f"👤 Пользователь: {username}\n"
         f"{history_text}"
         f"💰 Сумма: `{format_usdt(withdrawal.amount)} USDT`\n"
-        f"💳 Кошелек: `{withdrawal.to_address}`\n"
+        f"💳 Кошелек: `{escape_md(withdrawal.to_address)}`\n"
         f"📅 Дата: {date}\n\n"
         "Выберите действие:"
     )
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_withdrawal_detail_keyboard(),
@@ -334,7 +339,8 @@ async def _show_confirmation(
 
         await state.set_state(AdminStates.confirming_withdrawal_action)
 
-        await message.answer(
+        await safe_answer(
+            message,
             f"{action_emoji} **Подтверждение: {action_text}**\n\n"
             f"📝 Заявка: #{withdrawal_id}\n\n"
             f"Вы уверены, что хотите **{action_text.lower()}** эту заявку?",
@@ -384,7 +390,8 @@ async def handle_confirm_withdrawal_action(
             from app.config.settings import settings
 
             if settings.blockchain_maintenance_mode:
-                await message.answer(
+                await safe_answer(
+                    message,
                     "⚠️ **Blockchain в режиме обслуживания**\n\n"
                     "Операции с блокчейном временно недоступны.",
                     parse_mode="Markdown",
@@ -491,10 +498,11 @@ async def handle_confirm_withdrawal_action(
             else:
                 logger.warning(f"User {withdrawal.user_id} not found for notification")
 
-            await message.answer(
+            await safe_answer(
+                message,
                 f"✅ **Заявка #{withdrawal_id} одобрена!**\n\n"
                 f"💰 Сумма: {format_usdt(withdrawal.amount)} USDT\n"
-                f"🔗 TX: `{tx_hash}`\n\n"
+                f"🔗 TX: `{escape_md(tx_hash)}`\n\n"
                 "Средства отправлены пользователю.",
                 parse_mode="Markdown",
                 reply_markup=admin_withdrawals_keyboard(),
@@ -529,7 +537,8 @@ async def handle_confirm_withdrawal_action(
                     user.telegram_id, float(withdrawal.amount)
                 )
 
-            await message.answer(
+            await safe_answer(
+                message,
                 f"❌ **Заявка #{withdrawal_id} отклонена**\n\n"
                 f"💰 Сумма: {format_usdt(withdrawal.amount)} USDT\n\n"
                 "Средства возвращены на баланс пользователя.",
@@ -593,12 +602,13 @@ async def handle_approved_withdrawals(
                 text += f"**{idx}. Заявка #{withdrawal.id}**\n"
                 text += f"💰 Сумма: {format_usdt(withdrawal.amount)} USDT\n"
                 text += f"👤 Пользователь ID: {withdrawal.user_id}\n"
-                text += f"💳 Кошелек: `{withdrawal.to_address}`\n"
+                text += f"💳 Кошелек: `{escape_md(withdrawal.to_address)}`\n"
                 if withdrawal.tx_hash:
-                    text += f"🔗 TX: `{withdrawal.tx_hash}`\n"
+                    text += f"🔗 TX: `{escape_md(withdrawal.tx_hash)}`\n"
                 text += f"📅 Дата: {date}\n\n"
 
-        await message.answer(
+        await safe_answer(
+            message,
             text,
             parse_mode="Markdown",
             reply_markup=admin_withdrawals_keyboard(),
@@ -649,10 +659,11 @@ async def handle_rejected_withdrawals(
                 text += f"**{idx}. Заявка #{withdrawal.id}**\n"
                 text += f"💰 Сумма: {format_usdt(withdrawal.amount)} USDT\n"
                 text += f"👤 Пользователь ID: {withdrawal.user_id}\n"
-                text += f"💳 Кошелек: `{withdrawal.to_address}`\n"
+                text += f"💳 Кошелек: `{escape_md(withdrawal.to_address)}`\n"
                 text += f"📅 Дата: {date}\n\n"
 
-        await message.answer(
+        await safe_answer(
+            message,
             text,
             parse_mode="Markdown",
             reply_markup=admin_withdrawals_keyboard(),

@@ -21,6 +21,7 @@ from bot.keyboards.reply import (
     transaction_history_type_keyboard,
 )
 from bot.utils.formatters import format_transaction_hash, format_usdt, escape_md
+from bot.utils.safe_message import safe_answer
 from app.services.report_service import ReportService
 from aiogram.types import BufferedInputFile
 from datetime import datetime
@@ -191,7 +192,8 @@ async def _show_transaction_history(
         has_next=has_more,
     )
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=keyboard,

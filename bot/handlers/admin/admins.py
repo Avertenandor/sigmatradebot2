@@ -22,6 +22,8 @@ from bot.keyboards.reply import (
 )
 from bot.states.admin import AdminManagementStates
 from bot.utils.admin_utils import clear_state_preserve_admin_token
+from bot.utils.safe_message import safe_answer, safe_send_message
+from bot.utils.formatters import escape_md
 
 router = Router(name="admin_admins")
 
@@ -56,7 +58,8 @@ async def show_admin_management(
 Выберите действие:
     """.strip()
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_management_keyboard(),
@@ -89,7 +92,8 @@ async def handle_create_admin(
         return
 
     await state.set_state(AdminManagementStates.awaiting_admin_telegram_id)
-    await message.answer(
+    await safe_answer(
+        message,
         "👤 **Создание нового админа**\n\n"
         "Введите Telegram ID нового админа:",
         parse_mode="Markdown",
@@ -170,7 +174,8 @@ async def handle_admin_telegram_id(
     await state.update_data(new_admin_telegram_id=telegram_id)
     await state.set_state(AdminManagementStates.awaiting_admin_role)
 
-    await message.answer(
+    await safe_answer(
+        message,
         "👤 **Выбор роли**\n\n"
         "Выберите роль для нового админа:\n\n"
         "1️⃣ `admin` - Базовые права\n"
@@ -276,7 +281,8 @@ async def handle_admin_role_selection(
         "super_admin": "Super Admin",
     }.get(role, role)
 
-    await message.answer(
+    await safe_answer(
+        message,
         f"✅ **Админ успешно создан**\n\n"
         f"Telegram ID: `{telegram_id}`\n"
         f"Роль: `{role_display}`\n\n"
@@ -303,9 +309,10 @@ async def handle_admin_role_selection(
             "Для входа в админ-панель используйте команду `/admin`."
         )
 
-        await bot.send_message(
-            chat_id=telegram_id,
-            text=master_key_message,
+        await safe_send_message(
+            bot,
+            telegram_id,
+            master_key_message,
             parse_mode="Markdown",
         )
 
@@ -315,7 +322,8 @@ async def handle_admin_role_selection(
         )
 
         # Send full key to the creating admin only
-        await message.answer(
+        await safe_answer(
+            message,
             f"🔐 **Полный мастер-ключ для нового админа**\n\n"
             f"Мастер-ключ: `{master_key}`\n\n"
             f"⚠️ Передайте этот ключ администратору {telegram_id} лично.",
@@ -327,7 +335,8 @@ async def handle_admin_role_selection(
             f"Failed to send master key to new admin {new_admin.id}: {e}"
         )
         # Still show full key to creating admin for manual sending
-        await message.answer(
+        await safe_answer(
+            message,
             f"⚠️ **Не удалось отправить уведомление новому админу**\n\n"
             f"Мастер-ключ: `{master_key}`\n\n"
             f"Передайте этот ключ администратору {telegram_id} лично.",
@@ -387,7 +396,8 @@ async def handle_list_admins(
             f"   Роль: `{role_display}`{creator_info}\n\n"
         )
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_management_keyboard(),
@@ -448,7 +458,8 @@ async def handle_delete_admin(
 
         text += f"{idx}. {a.display_name} (ID: `{a.telegram_id}`, {role_display})\n"
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=cancel_keyboard(),
@@ -548,10 +559,11 @@ async def handle_delete_admin_telegram_id(
         f"(telegram_id={telegram_id})"
     )
 
-    await message.answer(
+    await safe_answer(
+        message,
         f"✅ **Админ удален**\n\n"
         f"Telegram ID: `{telegram_id}`\n"
-        f"Имя: {admin_to_delete.display_name}",
+        f"Имя: {escape_md(admin_to_delete.display_name)}",
         parse_mode="Markdown",
         reply_markup=admin_management_keyboard(),
     )
@@ -618,7 +630,8 @@ async def handle_emergency_block_admin(
 
         text += f"{idx}. {a.display_name} (ID: `{a.telegram_id}`, {role_display})\n"
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=cancel_keyboard(),
@@ -777,10 +790,10 @@ async def handle_emergency_block_admin_telegram_id(
             bot = Bot(token=settings.telegram_bot_token)
             notification_text = (
                 f"🚨 **Экстренная блокировка админа**\n\n"
-                f"Админ {admin.display_name} (ID: {admin.id}) "
+                f"Админ {escape_md(admin.display_name)} (ID: {admin.id}) "
                 f"экстренно заблокировал админа:\n\n"
                 f"• Telegram ID: `{telegram_id}`\n"
-                f"• Имя: {admin_to_block.display_name}\n"
+                f"• Имя: {escape_md(admin_to_block.display_name)}\n"
                 f"• Роль: {admin_to_block.role}\n"
                 f"• Причина: Compromised admin account\n\n"
                 f"Действия выполнены:\n"
@@ -792,9 +805,10 @@ async def handle_emergency_block_admin_telegram_id(
             for super_admin in super_admins:
                 if super_admin.id != admin.id:
                     try:
-                        await bot.send_message(
-                            chat_id=super_admin.telegram_id,
-                            text=notification_text,
+                        await safe_send_message(
+                            bot,
+                            super_admin.telegram_id,
+                            notification_text,
                             parse_mode="Markdown",
                         )
                     except Exception as e:
@@ -807,10 +821,11 @@ async def handle_emergency_block_admin_telegram_id(
         except Exception as e:
             logger.error(f"Failed to send notifications: {e}")
 
-        await message.answer(
+        await safe_answer(
+            message,
             f"✅ **Админ экстренно заблокирован**\n\n"
             f"Telegram ID: `{telegram_id}`\n"
-            f"Имя: {admin_to_block.display_name}\n"
+            f"Имя: {escape_md(admin_to_block.display_name)}\n"
             f"Роль: {admin_to_block.role}\n\n"
             f"Выполнено:\n"
             f"✅ Админ удален из системы\n"

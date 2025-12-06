@@ -18,6 +18,8 @@ from app.repositories.deposit_level_version_repository import (
 from app.repositories.global_settings_repository import GlobalSettingsRepository
 from app.services.admin_log_service import AdminLogService
 from bot.keyboards.reply import admin_deposit_settings_keyboard
+from bot.utils.safe_message import safe_answer
+from bot.utils.formatters import escape_md
 
 router = Router()
 
@@ -51,7 +53,7 @@ async def show_deposit_settings(
 
     text = (
         "⚙️ **Настройки депозитов**\n\n"
-        f"Максимальный открытый уровень: **{max_level}**\n\n"
+        f"Максимальный открытый уровень: **{escape_md(str(max_level))}**\n\n"
         "**Статус уровней:**\n"
         + "\n".join(levels_status)
         + "\n\n"
@@ -66,7 +68,8 @@ async def show_deposit_settings(
         "• `отключить 5`"
     )
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_deposit_settings_keyboard(),
@@ -229,7 +232,7 @@ async def show_level_status(
         return
 
     version_repo = DepositLevelVersionRepository(session)
-    
+
     status_lines = []
     for level_num in range(1, 6):
         current_version = await version_repo.get_current_version(level_num)
@@ -238,17 +241,18 @@ async def show_level_status(
             status_text = "Активен" if current_version.is_active else "Отключен"
             status_lines.append(
                 f"{status_icon} **Уровень {level_num}**: {status_text}\n"
-                f"   Сумма: {current_version.amount} USDT\n"
-                f"   ROI: {current_version.roi_percent}%/день\n"
-                f"   Кап: {current_version.roi_cap_percent}%\n"
-                f"   Версия: {current_version.version}"
+                f"   Сумма: {escape_md(str(current_version.amount))} USDT\n"
+                f"   ROI: {escape_md(str(current_version.roi_percent))}%/день\n"
+                f"   Кап: {escape_md(str(current_version.roi_cap_percent))}%\n"
+                f"   Версия: {escape_md(str(current_version.version))}"
             )
         else:
             status_lines.append(f"⚠️ **Уровень {level_num}**: Не настроен")
 
     text = "📊 **Статус уровней депозитов**\n\n" + "\n\n".join(status_lines)
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_deposit_settings_keyboard(),

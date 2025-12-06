@@ -18,6 +18,8 @@ from bot.keyboards.reply import admin_blacklist_keyboard, admin_keyboard, cancel
 from bot.states.admin import BlacklistStates
 from bot.states.admin_states import AdminStates
 from bot.utils.admin_utils import clear_state_preserve_admin_token
+from bot.utils.safe_message import safe_answer
+from bot.utils.formatters import escape_md
 
 router = Router()
 
@@ -76,7 +78,8 @@ async def show_blacklist(
         text += "• `Просмотр #ID` - детали записи\n"
         text += "• `Разблокировать #ID` - удалить из черного списка"
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_blacklist_keyboard(),
@@ -96,7 +99,8 @@ async def start_add_to_blacklist(
         await message.answer("❌ Эта функция доступна только администраторам")
         return
 
-    await message.answer(
+    await safe_answer(
+        message,
         "➕ **Добавление в черный список**\n\n"
         "Введите Telegram ID или BSC wallet address:",
         parse_mode="Markdown",
@@ -251,12 +255,13 @@ async def process_blacklist_reason(
             BlacklistActionType.BLOCKED: "Блокировка",
         }.get(entry.action_type, entry.action_type)
 
-        await message.answer(
+        await safe_answer(
+            message,
             f"✅ **Добавлено в черный список!**\n\n"
             f"ID: #{entry.id}\n"
             f"Telegram ID: {telegram_id or 'N/A'}\n"
             f"Тип: {action_type_text}\n"
-            f"Причина: {reason}",
+            f"Причина: {escape_md(reason)}",
             parse_mode="Markdown",
             reply_markup=admin_blacklist_keyboard(),
         )
@@ -284,7 +289,8 @@ async def start_remove_from_blacklist(
         await message.answer("❌ Эта функция доступна только администраторам")
         return
 
-    await message.answer(
+    await safe_answer(
+        message,
         "🗑️ **Удаление из черного списка**\n\n"
         "Введите Telegram ID или wallet address для удаления:",
         parse_mode="Markdown",
@@ -362,7 +368,8 @@ async def process_blacklist_removal(
     await session.commit()
 
     if success:
-        await message.answer(
+        await safe_answer(
+            message,
             "✅ **Удалено из черного списка!**\n\n"
             "Пользователь снова может использовать бота.",
             parse_mode="Markdown",
@@ -429,15 +436,15 @@ async def handle_view_blacklist_entry(
             added_by_text = f"@{admin.username or 'N/A'} (ID: {admin.id})"
         else:
             added_by_text = f"Admin ID: {entry.added_by_admin_id}"
-    
+
     text = (
         f"📋 **Запись черного списка #{entry.id}**\n\n"
         f"{status_emoji} Статус: {status_text}\n"
         f"👤 Telegram ID: {entry.telegram_id or 'N/A'}\n"
-        f"💳 Wallet: {entry.wallet_address or 'N/A'}\n"
+        f"💳 Wallet: {escape_md(entry.wallet_address or 'N/A')}\n"
         f"📋 Тип действия: {action_type_text}\n"
-        f"📝 Причина: {entry.reason or 'N/A'}\n"
-        f"👨‍💼 Добавил: {added_by_text}\n"
+        f"📝 Причина: {escape_md(entry.reason or 'N/A')}\n"
+        f"👨‍💼 Добавил: {escape_md(added_by_text)}\n"
         f"📅 Создано: {entry.created_at.strftime('%d.%m.%Y %H:%M')}\n"
         f"🔄 Обновлено: {entry.updated_at.strftime('%d.%m.%Y %H:%M')}\n"
     )
@@ -449,8 +456,9 @@ async def handle_view_blacklist_entry(
             text += f"⏰ Срок апелляции: {deadline_str}\n"
         else:
             text += "⏰ Срок апелляции: не установлен\n"
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_blacklist_keyboard(),
@@ -499,11 +507,12 @@ async def handle_unban_user(
     await state.update_data(blacklist_entry_id=entry_id)
     await state.set_state(AdminStates.awaiting_user_to_unban)
     
-    await message.answer(
+    await safe_answer(
+        message,
         f"❓ **Подтвердите разблокировку**\n\n"
-        f"Пользователь: {user_label}\n"
+        f"Пользователь: {escape_md(user_label)}\n"
         f"Тип: {entry.action_type}\n"
-        f"Причина: {entry.reason or 'N/A'}\n\n"
+        f"Причина: {escape_md(entry.reason or 'N/A')}\n\n"
         "Пользователь снова сможет использовать бота.\n\n"
         "Подтвердите действие:",
         parse_mode="Markdown",
@@ -584,7 +593,8 @@ async def handle_unban_confirm(
                 except Exception as e:
                     logger.warning(f"Failed to notify user about unban: {e}")
         
-        await message.answer(
+        await safe_answer(
+            message,
             f"✅ **Пользователь разблокирован!**\n\n"
             f"Запись #{entry_id} удалена из черного списка.",
             parse_mode="Markdown",
@@ -628,14 +638,15 @@ async def handle_edit_notification_texts(
     
     text = (
         f"📝 **Редактирование текстов уведомлений**\n\n"
-        f"**Текущий текст блокировки:**\n{block_text}\n\n"
-        f"**Текущий текст терминации:**\n{terminate_text}\n\n"
+        f"**Текущий текст блокировки:**\n{escape_md(block_text)}\n\n"
+        f"**Текущий текст терминации:**\n{escape_md(terminate_text)}\n\n"
         f"Выберите текст для редактирования:\n"
         f"• `Изменить текст блокировки`\n"
         f"• `Изменить текст терминации`"
     )
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_blacklist_keyboard(),
@@ -667,9 +678,10 @@ async def handle_start_edit_block_text(
     
     await state.set_state(AdminStates.awaiting_block_notification_text)
     
-    await message.answer(
+    await safe_answer(
+        message,
         f"📝 **Редактирование текста блокировки**\n\n"
-        f"Текущий текст:\n{current_text}\n\n"
+        f"Текущий текст:\n{escape_md(current_text)}\n\n"
         f"Введите новый текст уведомления о блокировке:",
         parse_mode="Markdown",
         reply_markup=cancel_keyboard(),
@@ -711,9 +723,10 @@ async def handle_save_block_text(
     await setting_repo.set_value("blacklist_block_notification_text", new_text)
     await session.commit()
     
-    await message.answer(
+    await safe_answer(
+        message,
         f"✅ **Текст блокировки обновлён!**\n\n"
-        f"Новый текст:\n{new_text}",
+        f"Новый текст:\n{escape_md(new_text)}",
         parse_mode="Markdown",
         reply_markup=admin_blacklist_keyboard(),
     )
@@ -745,9 +758,10 @@ async def handle_start_edit_terminate_text(
     
     await state.set_state(AdminStates.awaiting_terminate_notification_text)
     
-    await message.answer(
+    await safe_answer(
+        message,
         f"📝 **Редактирование текста терминации**\n\n"
-        f"Текущий текст:\n{current_text}\n\n"
+        f"Текущий текст:\n{escape_md(current_text)}\n\n"
         f"Введите новый текст уведомления о терминации:",
         parse_mode="Markdown",
         reply_markup=cancel_keyboard(),
@@ -789,9 +803,10 @@ async def handle_save_terminate_text(
     await setting_repo.set_value("blacklist_terminate_notification_text", new_text)
     await session.commit()
     
-    await message.answer(
+    await safe_answer(
+        message,
         f"✅ **Текст терминации обновлён!**\n\n"
-        f"Новый текст:\n{new_text}",
+        f"Новый текст:\n{escape_md(new_text)}",
         parse_mode="Markdown",
         reply_markup=admin_blacklist_keyboard(),
     )

@@ -21,6 +21,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import settings
 from bot.utils.admin_utils import clear_state_preserve_admin_token
+from bot.utils.safe_message import safe_answer
+from bot.utils.formatters import escape_md
 
 router = Router()
 
@@ -83,9 +85,10 @@ async def start_input_wallet_setup(message: Message, state: FSMContext, **data: 
         return
 
     from bot.keyboards.reply import cancel_keyboard
-    
+
     await state.set_state(WalletSetupStates.setting_input_wallet)
-    await message.answer(
+    await safe_answer(
+        message,
         "📥 **НАСТРОЙКА КОШЕЛЬКА ДЛЯ ВХОДА**\n\n"
         "Этот кошелек будет показываться пользователям для пополнения.\n"
         "Система будет **только мониторить** поступления на этот адрес.\n\n"
@@ -121,13 +124,14 @@ async def process_input_wallet(message: Message, state: FSMContext):
 
     # Save to state
     await state.update_data(new_input_wallet=checksum_address)
-    
+
     from bot.keyboards.reply import confirmation_keyboard
-    
+
     await state.set_state(WalletSetupStates.confirming_input)
-    await message.answer(
+    await safe_answer(
+        message,
         f"📥 **Подтверждение ВХОДНОГО кошелька**\n\n"
-        f"Адрес: `{checksum_address}`\n\n"
+        f"Адрес: `{escape_md(checksum_address)}`\n\n"
         "✅ Пользователи будут отправлять средства на этот адрес.\n"
         "✅ Бот будет отслеживать входящие транзакции.\n"
         "❌ Бот НЕ сможет выводить средства с этого адреса (нет приватного ключа).\n\n"
@@ -158,8 +162,9 @@ async def confirm_input_wallet(message: Message, state: FSMContext):
         
         # Update settings in memory (hacky but works until restart)
         settings.system_wallet_address = new_address
-        
-        await message.answer(
+
+        await safe_answer(
+            message,
             "✅ **Кошелек для входа успешно обновлен!**\n\n"
             "Для полного применения изменений рекомендуется перезапуск.",
             parse_mode="Markdown",
@@ -183,9 +188,10 @@ async def start_output_wallet_setup(message: Message, state: FSMContext, **data:
         return
 
     from bot.keyboards.reply import cancel_keyboard
-    
+
     await state.set_state(WalletSetupStates.setting_output_key)
-    await message.answer(
+    await safe_answer(
+        message,
         "📤 **НАСТРОЙКА КОШЕЛЬКА ДЛЯ ВЫДАЧИ**\n\n"
         "⚠️ **ВНИМАНИЕ! КРИТИЧЕСКАЯ ОПЕРАЦИЯ**\n"
         "Этот кошелек используется для автоматических выплат.\n"
@@ -241,7 +247,8 @@ async def process_output_key(message: Message, state: FSMContext):
                 
                 from bot.keyboards.reply import cancel_keyboard
                 await state.set_state(WalletSetupStates.setting_derivation_index)
-                await message.answer(
+                await safe_answer(
+                    message,
                     "🌱 **Обнаружена Seed-фраза**\n\n"
                     "Для HD-кошельков (Trust Wallet, Metamask, Ledger) можно выбрать адрес.\n"
                     "Путь деривации: `m/44'/60'/0'/0/{index}`\n\n"
@@ -254,7 +261,8 @@ async def process_output_key(message: Message, state: FSMContext):
             pass
 
     if not private_key or not wallet_address:
-        await message.answer(
+        await safe_answer(
+            message,
             "❌ **Невалидный ключ или seed фраза.**\n"
             "Попробуйте еще раз или нажмите Отмена.",
             parse_mode="Markdown",
@@ -263,13 +271,14 @@ async def process_output_key(message: Message, state: FSMContext):
 
     # Save to state (Private Key flow)
     await state.update_data(new_private_key=private_key, new_output_address=wallet_address)
-    
+
     from bot.keyboards.reply import confirmation_keyboard
-    
+
     await state.set_state(WalletSetupStates.confirming_output)
-    await message.answer(
+    await safe_answer(
+        message,
         f"📤 **Подтверждение ВЫХОДНОГО кошелька**\n\n"
-        f"Адрес: `{wallet_address}`\n\n"
+        f"Адрес: `{escape_md(wallet_address)}`\n\n"
         "✅ Ключ валиден.\n"
         "✅ Этот кошелек будет использоваться для выплат.\n"
         "⚠️ Убедитесь, что на этом кошельке есть BNB для газа и USDT для выплат.\n\n"
@@ -322,14 +331,15 @@ async def process_derivation_index(message: Message, state: FSMContext):
         
         # Save to state
         await state.update_data(new_private_key=private_key, new_output_address=wallet_address)
-        
+
         from bot.keyboards.reply import confirmation_keyboard
-        
+
         await state.set_state(WalletSetupStates.confirming_output)
-        await message.answer(
+        await safe_answer(
+            message,
             f"📤 **Подтверждение ВЫХОДНОГО кошелька**\n\n"
             f"🌱 Seed-фраза (Index: {index})\n"
-            f"Адрес: `{wallet_address}`\n\n"
+            f"Адрес: `{escape_md(wallet_address)}`\n\n"
             "✅ Ключ успешно деривирован.\n"
             "✅ Этот кошелек будет использоваться для выплат.\n\n"
             "Подтвердить сохранение?",
@@ -364,7 +374,8 @@ async def confirm_output_wallet(message: Message, state: FSMContext):
         update_env_variable("wallet_address", address)
         
         # Force restart via exit
-        await message.answer(
+        await safe_answer(
+            message,
             "✅ **Кошелек для выдачи сохранен!**\n\n"
             "🔄 Бот перезапускается для применения нового ключа...",
             parse_mode="Markdown",

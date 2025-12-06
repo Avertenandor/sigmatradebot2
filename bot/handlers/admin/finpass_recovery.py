@@ -24,6 +24,8 @@ from bot.keyboards.reply import (
 )
 from bot.states.admin import AdminFinpassRecoveryStates
 from bot.utils.admin_utils import clear_state_preserve_admin_token
+from bot.utils.safe_message import safe_answer, safe_send_message
+from bot.utils.formatters import escape_md
 
 router = Router()
 
@@ -53,7 +55,8 @@ async def show_recovery_requests(
     logger.info(f"[ADMIN] Found {len(requests)} pending requests")
 
     if not requests:
-        await message.answer(
+        await safe_answer(
+            message,
             "🔑 **Запросы на восстановление пароля**\n\n"
             "Нет ожидающих запросов.",
             parse_mode="Markdown",
@@ -83,7 +86,8 @@ async def show_recovery_requests(
     await state.set_state(AdminFinpassRecoveryStates.viewing_list)
     await state.update_data(current_page=page, total_pages=total_pages)
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_finpass_request_list_keyboard(page_requests, page, total_pages),
@@ -110,15 +114,6 @@ async def handle_view_request(
     await show_request_details(message, session, state, request_id)
 
 
-def escape_markdown(text: str) -> str:
-    """Escape special Markdown characters in user input."""
-    if not text:
-        return ""
-    # Escape Markdown special chars: _ * [ ] ( ) ~ ` > # + - = | { } . !
-    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
-    for char in special_chars:
-        text = text.replace(char, f'\\{char}')
-    return text
 
 
 async def show_request_details(
@@ -145,7 +140,7 @@ async def show_request_details(
         user = await user_service.get_user_by_id(request.user_id)
 
         if user:
-            username = escape_markdown(user.username) if user.username else str(user.telegram_id)
+            username = escape_md(user.username) if user.username else str(user.telegram_id)
             user_label = f"{username} (ID: {user.id})"
             telegram_link = f"TG: {user.telegram_id}"
         else:
@@ -153,7 +148,7 @@ async def show_request_details(
             telegram_link = "TG: Неизвестно"
 
         # Escape user-provided reason to prevent Markdown parsing errors
-        safe_reason = escape_markdown(request.reason or "Не указана")
+        safe_reason = escape_md(request.reason or "Не указана")
 
         text = (
             f"🔑 *Запрос на восстановление #{request.id}*\n\n"
@@ -167,7 +162,8 @@ async def show_request_details(
         await state.update_data(current_request_id=request_id)
         await state.set_state(AdminFinpassRecoveryStates.viewing_request)
 
-        await message.answer(
+        await safe_answer(
+            message,
             text,
             parse_mode="Markdown",
             reply_markup=admin_finpass_request_actions_keyboard(),
@@ -243,9 +239,10 @@ async def approve_request_action(
         notification_sent = False
         try:
             logger.info(f"Sending new password to user telegram_id={user.telegram_id}")
-            await message.bot.send_message(
-                user.telegram_id,
-                f"✅ *Ваш запрос на восстановление пароля одобрен!*\n\n"
+            await safe_send_message(
+                message.bot,
+                chat_id=user.telegram_id,
+                text=f"✅ *Ваш запрос на восстановление пароля одобрен!*\n\n"
                 f"Новый финансовый пароль: `{new_password}`\n\n"
                 f"⚠️ *Важно:*\n"
                 f"• Сохраните этот пароль в надёжном месте\n"
@@ -267,7 +264,8 @@ async def approve_request_action(
 
         # Always show password to admin for backup
         if notification_sent:
-            await message.answer(
+            await safe_answer(
+                message,
                 f"✅ Запрос #{request_id} успешно одобрен.\n"
                 f"Новый пароль отправлен пользователю.\n\n"
                 f"📋 *Резервная копия (для админа):*\n"
@@ -276,7 +274,8 @@ async def approve_request_action(
                 reply_markup=get_admin_keyboard_from_data(data),
             )
         else:
-            await message.answer(
+            await safe_answer(
+                message,
                 f"⚠️ Запрос #{request_id} одобрен, но НЕ удалось отправить пользователю!\n\n"
                 f"📋 *Передайте пароль вручную:*\n"
                 f"Пароль: `{new_password}`\n"
@@ -410,7 +409,8 @@ async def handle_pagination(
     )
 
     await state.update_data(current_page=current_page, total_pages=total_pages)
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_finpass_request_list_keyboard(page_requests, current_page, total_pages),

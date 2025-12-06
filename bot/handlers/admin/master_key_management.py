@@ -26,6 +26,8 @@ from app.services.admin_log_service import AdminLogService
 from bot.keyboards.reply import master_key_management_reply_keyboard, main_menu_reply_keyboard
 from bot.states.admin import AdminMasterKeyStates
 from bot.utils.admin_utils import clear_state_preserve_admin_token
+from bot.utils.safe_message import safe_answer
+from bot.utils.formatters import escape_md
 
 # SUPER_ADMIN_TELEGRAM_ID - only this user can manage master keys
 SUPER_ADMIN_TELEGRAM_ID = 1040687384
@@ -164,8 +166,9 @@ async def show_master_key_menu(
         f"[MASTER_KEY] Super admin {telegram_id} opened master key menu "
         f"(has_key={has_master_key})"
     )
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         reply_markup=master_key_management_reply_keyboard(),
         parse_mode="Markdown"
@@ -193,9 +196,10 @@ async def show_master_key_status(
     
     admin_service = AdminService(session)
     admin = await admin_service.get_admin_by_telegram_id(telegram_id)
-    
+
     if not admin or not admin.master_key:
-        await message.answer(
+        await safe_answer(
+            message,
             "⚠️ **Мастер-ключ не установлен**\n\n"
             "Используйте кнопку '🔄 Сгенерировать новый ключ' для создания.",
             parse_mode="Markdown",
@@ -222,10 +226,11 @@ async def show_master_key_status(
     ]
     
     text = "\n".join(text_lines)
-    
+
     logger.info(f"[MASTER_KEY] Super admin {telegram_id} viewed key status")
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=master_key_management_reply_keyboard()
@@ -269,9 +274,9 @@ async def confirm_regenerate_master_key(
             "Введите слово **ПОДТВЕРЖДАЮ** для продолжения\n"
             "или нажмите '◀️ Главное меню' для отмены."
         )
-        
+
         await state.set_state(AdminMasterKeyStates.awaiting_confirmation)
-        await message.answer(text, parse_mode="Markdown", reply_markup=master_key_management_reply_keyboard())
+        await safe_answer(message, text, parse_mode="Markdown", reply_markup=master_key_management_reply_keyboard())
     else:
         # First time - generate immediately
         await regenerate_master_key(message, session, state, **data)
@@ -387,12 +392,13 @@ async def regenerate_master_key(
     ]
     
     text = "\n".join(text_lines)
-    
-    await message.answer(text, parse_mode="Markdown")
-    
+
+    await safe_answer(message, text, parse_mode="Markdown")
+
     # Send key in separate message for easy copying
-    await message.answer(
-        f"📋 **Мастер-ключ для копирования:**\n\n`{plain_master_key}`",
+    await safe_answer(
+        message,
+        f"📋 **Мастер-ключ для копирования:**\n\n`{escape_md(plain_master_key)}`",
         parse_mode="Markdown"
     )
     
@@ -400,7 +406,7 @@ async def regenerate_master_key(
     user = data.get("user")
     blacklist_entry = data.get("blacklist_entry")
     is_admin = data.get("is_admin", False)
-    
+
     await message.answer(
         "ℹ️ **Как использовать:**\n\n"
         "1. Нажмите кнопку '👑 Админ-панель' в главном меню\n"
@@ -430,12 +436,13 @@ async def back_to_main_menu(
     user = data.get("user")
     blacklist_entry = data.get("blacklist_entry")
     is_admin = data.get("is_admin", False)
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         "📊 **Главное меню**\n\n"
         "Выберите действие:",
         parse_mode="Markdown",
         reply_markup=main_menu_reply_keyboard(user=user, blacklist_entry=blacklist_entry, is_admin=is_admin)
     )
-    
+
     logger.info(f"[MASTER_KEY] Super admin {telegram_id} returned to main menu")

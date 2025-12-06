@@ -30,6 +30,7 @@ from bot.keyboards.reply import (
 from bot.states.profile_update import ProfileUpdateStates
 from bot.states.registration import RegistrationStates
 from bot.utils.text_utils import escape_markdown
+from bot.utils.safe_message import safe_answer, safe_send_message, safe_edit_text
 
 router = Router()
 
@@ -101,8 +102,9 @@ async def show_main_menu(
         user=user, blacklist_entry=blacklist_entry, is_admin=is_admin
     )
     logger.info(f"[MENU] Sending main menu to user {user.telegram_id}")
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         reply_markup=keyboard,
         parse_mode="Markdown",
@@ -140,7 +142,8 @@ async def handle_main_menu(
         logger.info(f"[MENU] Fallback menu with is_admin={is_admin}")
         # R13-3: Use i18n for fallback menu
         _ = get_translator("ru")  # Default to Russian for fallback
-        await message.answer(
+        await safe_answer(
+            message,
             _("welcome.message"),
             reply_markup=main_menu_reply_keyboard(
                 user=None, blacklist_entry=None, is_admin=is_admin
@@ -239,7 +242,7 @@ async def show_balance(
     if pending_withdrawals > 0:
         text += f"🔄 В обработке (выводы): `{pending_withdrawals:.2f} USDT`\n"
 
-    await message.answer(text, parse_mode="Markdown")
+    await safe_answer(message, text, parse_mode="Markdown")
 
 
 @router.message(StateFilter('*'), F.text == "💰 Депозит")
@@ -313,8 +316,8 @@ async def show_deposit_menu(
 
     logger.info(f"[MENU] Sending deposit menu response to user {telegram_id}")
     try:
-        await message.answer(
-            text, reply_markup=deposit_keyboard(levels_status=levels_status), parse_mode="Markdown"
+        await safe_answer(
+            message, text, reply_markup=deposit_keyboard(levels_status=levels_status), parse_mode="Markdown"
         )
         logger.info(f"[MENU] Deposit menu response sent successfully to user {telegram_id}")
     except Exception as e:
@@ -371,8 +374,8 @@ async def show_withdrawal_menu(
 
     logger.info(f"[MENU] Sending withdrawal menu response to user {telegram_id}")
     try:
-        await message.answer(
-            text, reply_markup=withdrawal_keyboard(), parse_mode="Markdown"
+        await safe_answer(
+            message, text, reply_markup=withdrawal_keyboard(), parse_mode="Markdown"
         )
         logger.info(f"[MENU] Withdrawal menu response sent successfully to user {telegram_id}")
     except Exception as e:
@@ -419,8 +422,8 @@ async def show_referral_menu(
         f"Приглашайте друзей и получайте вознаграждение!"
     )
 
-    await message.answer(
-        text, reply_markup=referral_keyboard(), parse_mode="Markdown"
+    await safe_answer(
+        message, text, reply_markup=referral_keyboard(), parse_mode="Markdown"
     )
 
 
@@ -455,8 +458,8 @@ async def show_settings_menu(
 
     text = "⚙️ *Настройки*\n\nВыберите раздел:"
 
-    await message.answer(
-        text, reply_markup=settings_keyboard(), parse_mode="Markdown"
+    await safe_answer(
+        message, text, reply_markup=settings_keyboard(), parse_mode="Markdown"
     )
 
 
@@ -620,7 +623,7 @@ async def show_my_profile(
         f"📅 Дата регистрации: {user.created_at.strftime('%d.%m.%Y')}"
     )
 
-    await message.answer(text, parse_mode="Markdown", reply_markup=profile_keyboard())
+    await safe_answer(message, text, parse_mode="Markdown", reply_markup=profile_keyboard())
 
 
 @router.message(StateFilter('*'), F.text == "📂 Скачать отчет")
@@ -698,10 +701,10 @@ async def show_my_wallet(
             date_str = h.changed_at.strftime("%d.%m.%Y %H:%M")
             text += f"• {date_str}\n  `{old_short}` → `{new_short}`\n"
         text += "\n"
-    
+
     text += "⚠️ Сохраните приватный ключ в безопасном месте!"
 
-    await message.answer(text, parse_mode="Markdown", reply_markup=wallet_menu_keyboard())
+    await safe_answer(message, text, parse_mode="Markdown", reply_markup=wallet_menu_keyboard())
 
 
 @router.message(StateFilter('*'), F.text == "📝 Регистрация")
@@ -761,14 +764,15 @@ async def start_registration(
     )
     
     from aiogram.types import ReplyKeyboardRemove
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         welcome_text,
         parse_mode="Markdown",
         disable_web_page_preview=False,
         reply_markup=ReplyKeyboardRemove(),
     )
-    
+
     # Start registration FSM
     await state.set_state(RegistrationStates.waiting_for_wallet)
 
@@ -805,7 +809,8 @@ async def show_my_deposits(
         is_admin = data.get("is_admin", False)
         blacklist_repo = BlacklistRepository(session)
         blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
-        await message.answer(
+        await safe_answer(
+            message,
             "📦 *Мои депозиты*\n\n"
             "У вас пока нет активных депозитов.\n\n"
             "Создайте депозит через меню '💰 Депозит'.",
@@ -857,8 +862,9 @@ async def show_my_deposits(
     is_admin = data.get("is_admin", False)
     blacklist_repo = BlacklistRepository(session)
     blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=main_menu_reply_keyboard(
@@ -900,7 +906,7 @@ async def show_notification_settings(
     withdrawal_status = "✅ Включены" if settings.withdrawal_notifications else "❌ Выключены"
     roi_status = "✅ Включены" if getattr(settings, 'roi_notifications', True) else "❌ Выключены"
     marketing_status = "✅ Включены" if settings.marketing_notifications else "❌ Выключены"
-    
+
     text = (
         f"🔔 *Настройки уведомлений*\n\n"
         f"Управляйте уведомлениями, которые вы хотите получать:\n\n"
@@ -910,8 +916,9 @@ async def show_notification_settings(
         f"📢 Маркетинговые уведомления: {marketing_status}\n\n"
         f"Используйте кнопки ниже для изменения настроек."
     )
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=notification_settings_reply_keyboard(
@@ -953,13 +960,13 @@ async def toggle_deposit_notification(
     
     # Refresh settings
     settings = await notification_service.get_settings(user.id)
-    
+
     # Update message
     deposit_status = "✅ Включены" if settings.deposit_notifications else "❌ Выключены"
     withdrawal_status = "✅ Включены" if settings.withdrawal_notifications else "❌ Выключены"
     roi_status = "✅ Включены" if getattr(settings, 'roi_notifications', True) else "❌ Выключены"
     marketing_status = "✅ Включены" if settings.marketing_notifications else "❌ Выключены"
-    
+
     text = (
         f"🔔 *Настройки уведомлений*\n\n"
         f"Управляйте уведомлениями, которые вы хотите получать:\n\n"
@@ -969,8 +976,9 @@ async def toggle_deposit_notification(
         f"📢 Маркетинговые уведомления: {marketing_status}\n\n"
         f"Используйте кнопки ниже для изменения настроек."
     )
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=notification_settings_reply_keyboard(
@@ -1012,13 +1020,13 @@ async def toggle_withdrawal_notification(
     
     # Refresh settings
     settings = await notification_service.get_settings(user.id)
-    
+
     # Update message
     deposit_status = "✅ Включены" if settings.deposit_notifications else "❌ Выключены"
     withdrawal_status = "✅ Включены" if settings.withdrawal_notifications else "❌ Выключены"
     roi_status = "✅ Включены" if getattr(settings, 'roi_notifications', True) else "❌ Выключены"
     marketing_status = "✅ Включены" if settings.marketing_notifications else "❌ Выключены"
-    
+
     text = (
         f"🔔 *Настройки уведомлений*\n\n"
         f"Управляйте уведомлениями, которые вы хотите получать:\n\n"
@@ -1028,8 +1036,9 @@ async def toggle_withdrawal_notification(
         f"📢 Маркетинговые уведомления: {marketing_status}\n\n"
         f"Используйте кнопки ниже для изменения настроек."
     )
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=notification_settings_reply_keyboard(
@@ -1072,13 +1081,13 @@ async def toggle_roi_notification(
     
     # Refresh settings
     settings = await notification_service.get_settings(user.id)
-    
+
     # Update message
     deposit_status = "✅ Включены" if settings.deposit_notifications else "❌ Выключены"
     withdrawal_status = "✅ Включены" if settings.withdrawal_notifications else "❌ Выключены"
     roi_status = "✅ Включены" if getattr(settings, 'roi_notifications', True) else "❌ Выключены"
     marketing_status = "✅ Включены" if settings.marketing_notifications else "❌ Выключены"
-    
+
     text = (
         f"🔔 *Настройки уведомлений*\n\n"
         f"Управляйте уведомлениями, которые вы хотите получать:\n\n"
@@ -1088,8 +1097,9 @@ async def toggle_roi_notification(
         f"📢 Маркетинговые уведомления: {marketing_status}\n\n"
         f"Используйте кнопки ниже для изменения настроек."
     )
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=notification_settings_reply_keyboard(
@@ -1131,13 +1141,13 @@ async def toggle_marketing_notification(
     
     # Refresh settings
     settings = await notification_service.get_settings(user.id)
-    
+
     # Update message
     deposit_status = "✅ Включены" if settings.deposit_notifications else "❌ Выключены"
     withdrawal_status = "✅ Включены" if settings.withdrawal_notifications else "❌ Выключены"
     roi_status = "✅ Включены" if getattr(settings, 'roi_notifications', True) else "❌ Выключены"
     marketing_status = "✅ Включены" if settings.marketing_notifications else "❌ Выключены"
-    
+
     text = (
         f"🔔 *Настройки уведомлений*\n\n"
         f"Управляйте уведомлениями, которые вы хотите получать:\n\n"
@@ -1147,8 +1157,9 @@ async def toggle_marketing_notification(
         f"📢 Маркетинговые уведомления: {marketing_status}\n\n"
         f"Используйте кнопки ниже для изменения настроек."
     )
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=notification_settings_reply_keyboard(

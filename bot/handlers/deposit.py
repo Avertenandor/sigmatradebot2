@@ -19,6 +19,7 @@ from bot.i18n.loader import get_translator, get_user_language
 from bot.keyboards.reply import deposit_keyboard, main_menu_reply_keyboard
 from bot.states.deposit import DepositStates
 from bot.utils.menu_buttons import is_menu_button
+from bot.utils.safe_message import safe_answer
 
 router = Router()
 
@@ -119,7 +120,8 @@ async def select_deposit_level(
 
     # R3-3: Handle active level - prohibit duplicate purchase
     if is_active_level or (levels_status and levels_status.get(level, {}).get("status") == "active"):
-        await message.answer(
+        await safe_answer(
+            message,
             f"ℹ️ **Уровень {level} уже активен**\n\n"
             f"У вас уже есть активный депозит уровня {level}.\n"
             f"Повторная покупка того же уровня не разрешена.\n\n"
@@ -158,8 +160,9 @@ async def select_deposit_level(
                 error_text += "Попробуйте выбрать другой уровень депозита."
         else:
             error_text += "Попробуйте выбрать другой уровень депозита."
-        
-        await message.answer(
+
+        await safe_answer(
+            message,
             error_text,
             parse_mode="Markdown",
             reply_markup=deposit_keyboard(levels_status=levels_status),
@@ -202,7 +205,7 @@ async def select_deposit_level(
         "После отправки введите hash транзакции:"
     )
 
-    await message.answer(text, parse_mode="Markdown")
+    await safe_answer(message, text, parse_mode="Markdown")
     await state.set_state(DepositStates.waiting_for_tx_hash)
 
 
@@ -403,8 +406,9 @@ async def process_tx_hash(
     elif user and data.get("session"):
         blacklist_repo = BlacklistRepository(data.get("session"))
         blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=main_menu_reply_keyboard(

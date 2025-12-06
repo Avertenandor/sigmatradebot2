@@ -14,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.admin import Admin
 from app.services.wallet_admin_service import WalletAdminService
 from bot.keyboards.reply import admin_keyboard, get_admin_keyboard_from_data
+from bot.utils.safe_message import safe_answer
+from bot.utils.formatters import escape_md
 
 router = Router()
 
@@ -38,8 +40,8 @@ async def show_wallet_management(
     text = (
         "💼 **Управление кошельками**\n\n"
         "**Текущие адреса:**\n"
-        f"🏦 System: `{settings.system_wallet_address}`\n"
-        f"💸 Payout: `{settings.payout_wallet_address}`\n\n"
+        f"🏦 System: `{escape_md(settings.system_wallet_address)}`\n"
+        f"💸 Payout: `{escape_md(settings.payout_wallet_address)}`\n\n"
     )
 
     if pending_requests:
@@ -50,7 +52,8 @@ async def show_wallet_management(
             "Для отклонения заявки введите: **отклонить кошелек <ID>**\n"
         )
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=get_admin_keyboard_from_data(data),
@@ -73,7 +76,8 @@ async def show_wallet_requests(
     requests = await wallet_service.get_pending_requests()
 
     if not requests:
-        await message.answer(
+        await safe_answer(
+            message,
             "⏳ **Запросы на изменение кошельков**\n\n"
             "Нет ожидающих запросов.",
             parse_mode="Markdown",
@@ -89,7 +93,7 @@ async def show_wallet_requests(
         text += (
             f"ID: #{req.id}\n"
             f"Тип: {req.wallet_type}\n"
-            f"Новый адрес: `{req.new_address}`\n"
+            f"Новый адрес: `{escape_md(req.new_address)}`\n"
             f"Запросил: {req.requested_by_admin_id}\n"
             f"Причина: {req.reason}\n\n"
         )
@@ -100,7 +104,8 @@ async def show_wallet_requests(
         "Пример: `одобрить кошелек 123` или `отклонить кошелек 123`"
     )
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_keyboard(),

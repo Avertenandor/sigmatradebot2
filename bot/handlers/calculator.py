@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User
 from bot.keyboards.reply import main_menu_reply_keyboard
 from bot.utils.menu_buttons import is_menu_button
+from bot.utils.safe_message import safe_answer
 
 router = Router(name="calculator")
 
@@ -202,7 +203,8 @@ async def show_calculator(
 👇 *Выберите уровень для расчёта:*
     """.strip()
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=calculator_keyboard(levels),
@@ -288,7 +290,8 @@ async def show_comparison(
     text += "━━━━━━━━━━━━━━━━━━━━━━━\n"
     text += "_Выберите уровень для деталей_"
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=calculator_keyboard(levels),
@@ -426,7 +429,8 @@ async def show_level_details(
 🚀 _Начните инвестировать сейчас!_
     """.strip()
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=calculator_keyboard(levels),
@@ -502,7 +506,8 @@ async def show_locked_level(
 {'━' * 28}
     """.strip()
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=calculator_keyboard(levels),
@@ -539,7 +544,8 @@ async def start_custom_calculation(
 _Минимум: 10 USDT_
     """.strip()
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=builder.as_markup(resize_keyboard=True),
@@ -588,7 +594,8 @@ async def calculate_custom_amount(
         text_clean = message.text.strip().replace(",", ".").replace(" ", "")
         amount = Decimal(text_clean)
     except Exception:
-        await message.answer(
+        await safe_answer(
+            message,
             "❌ Введите корректную сумму.\n\n"
             "Пример: `100` или `5000`",
             parse_mode="Markdown",
@@ -676,7 +683,8 @@ async def calculate_custom_amount(
 🚀 _Ваш капитал работает 24/7!_
     """.strip()
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=builder.as_markup(resize_keyboard=True),

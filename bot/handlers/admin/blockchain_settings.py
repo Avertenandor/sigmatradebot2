@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.repositories.global_settings_repository import GlobalSettingsRepository
 from app.services.blockchain_service import get_blockchain_service
 from bot.keyboards.inline import admin_blockchain_keyboard
+from bot.utils.safe_message import safe_answer, safe_edit_text
+from bot.utils.formatters import escape_md
 
 router = Router()
 
@@ -26,16 +28,16 @@ async def get_status_text() -> str:
     status = await bs.get_providers_status()
 
     text = "📡 *Управление Блокчейном*\n\n"
-    text += f"Текущий провайдер: *{bs.active_provider_name.upper()}*\n"
+    text += f"Текущий провайдер: *{escape_md(bs.active_provider_name.upper())}*\n"
     text += f"Авто-смена: *{'ВКЛ' if bs.is_auto_switch_enabled else 'ВЫКЛ'}*\n\n"
 
     text += "*Статус провайдеров:*\n"
     for name, data in status.items():
         icon = "✅" if data.get("connected") else "❌"
         active_mark = " (ACTIVE)" if data.get("active") else ""
-        block = data.get("block", "N/A")
-        error = f" Error: {data.get('error')}" if data.get("error") else ""
-        text += f"{icon} *{name.upper()}*{active_mark}: Block {block}{error}\n"
+        block = escape_md(str(data.get("block", "N/A")))
+        error = f" Error: {escape_md(str(data.get('error')))}" if data.get("error") else ""
+        text += f"{icon} *{escape_md(name.upper())}*{active_mark}: Block {block}{error}\n"
 
     return text
 
@@ -51,7 +53,8 @@ async def show_blockchain_settings(
     text = await get_status_text()
     bs = get_blockchain_service()
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         reply_markup=admin_blockchain_keyboard(
             bs.active_provider_name, bs.is_auto_switch_enabled
@@ -95,7 +98,8 @@ async def handle_blockchain_callback(
     # Update message
     text = await get_status_text()
     try:
-        await callback.message.edit_text(
+        await safe_edit_text(
+            callback.message,
             text,
             reply_markup=admin_blockchain_keyboard(
                 bs.active_provider_name, bs.is_auto_switch_enabled

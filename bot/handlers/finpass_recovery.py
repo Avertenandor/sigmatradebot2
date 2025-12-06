@@ -16,6 +16,8 @@ from app.models.user import User
 from app.services.finpass_recovery_service import FinpassRecoveryService
 from bot.keyboards.reply import main_menu_reply_keyboard
 from bot.states.finpass_recovery import FinpassRecoveryStates
+from bot.utils.safe_message import safe_answer, safe_send_message, safe_edit_text
+from bot.utils.formatters import escape_md
 
 router = Router()
 
@@ -66,7 +68,8 @@ async def _start_finpass_recovery_flow(
         blacklist_repo = BlacklistRepository(session)
         blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
 
-        await message.answer(
+        await safe_answer(
+            message,
             text,
             parse_mode="Markdown",
             reply_markup=main_menu_reply_keyboard(
@@ -81,17 +84,18 @@ async def _start_finpass_recovery_flow(
     if pending:
         text = (
             "⚠️ **У вас уже есть активный запрос на восстановление пароля**\n\n"
-            f"Статус: {pending.status}\n"
+            f"Статус: {escape_md(pending.status)}\n"
             f"Создан: {pending.created_at.strftime('%d.%m.%Y %H:%M')}\n\n"
             "Дождитесь рассмотрения администратором."
         )
-        
+
         is_admin = data.get("is_admin", False)
         from app.repositories.blacklist_repository import BlacklistRepository
         blacklist_repo = BlacklistRepository(session)
         blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
-        
-        await message.answer(
+
+        await safe_answer(
+            message,
             text,
             parse_mode="Markdown",
             reply_markup=main_menu_reply_keyboard(
@@ -114,13 +118,14 @@ async def _start_finpass_recovery_flow(
             "Сделайте любой вывод с новым паролем — блокировка снимется автоматически.\n\n"
             "👉 Используйте '💸 Вывод' для проверки."
         )
-        
+
         is_admin = data.get("is_admin", False)
         from app.repositories.blacklist_repository import BlacklistRepository
         blacklist_repo = BlacklistRepository(session)
         blacklist_entry = await blacklist_repo.find_by_telegram_id(user.telegram_id)
-        
-        await message.answer(
+
+        await safe_answer(
+            message,
             text,
             parse_mode="Markdown",
             reply_markup=main_menu_reply_keyboard(
@@ -138,8 +143,9 @@ async def _start_finpass_recovery_flow(
         "3️⃣ Это защищает ваши средства, если кто-то получил доступ к аккаунту\n\n"
         "📝 Укажите причину восстановления пароля:"
     )
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=finpass_recovery_keyboard(),
@@ -232,7 +238,7 @@ async def process_recovery_reason(
 
     text = (
         "📋 **Проверьте вашу заявку:**\n\n"
-        f"📝 **Причина:**\n{reason}\n\n"
+        f"📝 **Причина:**\n{escape_md(reason)}\n\n"
         "⚠️ **Напоминание:**\n"
         "• После отправки заявки выплаты будут заблокированы\n"
         "• Администратор рассмотрит запрос вручную\n"
@@ -240,7 +246,8 @@ async def process_recovery_reason(
         "Нажмите **✅ Отправить заявку** для подтверждения:"
     )
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=finpass_recovery_confirm_keyboard(),
@@ -293,7 +300,8 @@ async def process_recovery_confirmation(
 
     # Handle confirm
     if message.text != "✅ Отправить заявку":
-        await message.answer(
+        await safe_answer(
+            message,
             "❌ Пожалуйста, используйте кнопки ниже:\n"
             "• **✅ Отправить заявку** — подтвердить\n"
             "• **❌ Отменить** — отменить",
@@ -333,7 +341,8 @@ async def process_recovery_confirmation(
         except Exception:
             pass
 
-        await message.answer(
+        await safe_answer(
+            message,
             "✅ **Заявка на восстановление пароля отправлена!**\n\n"
             f"🔢 Номер заявки: **#{request.id}**\n\n"
             "📬 Что дальше:\n"

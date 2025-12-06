@@ -22,6 +22,7 @@ from bot.keyboards.reply import (
 )
 from bot.states.admin import AdminSupportStates
 from bot.states.admin_states import AdminStates
+from bot.utils.safe_message import safe_answer, safe_send_message
 
 router = Router(name="admin_support")
 
@@ -48,8 +49,9 @@ async def handle_admin_support_menu(
         "Управление обращениями пользователей.\n"
         "Выберите действие:"
     )
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_support_keyboard(),
@@ -73,7 +75,8 @@ async def handle_list_tickets(
     
     if not pending_tickets:
         text = "📋 **Список обращений**\n\nНет активных обращений."
-        await message.answer(
+        await safe_answer(
+            message,
             text,
             parse_mode="Markdown",
             reply_markup=admin_support_keyboard(),
@@ -98,7 +101,8 @@ async def handle_list_tickets(
     keyboard = admin_ticket_list_keyboard(page_tickets, page, total_pages)
 
     await state.set_state(AdminSupportStates.viewing_list)
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=keyboard,
@@ -128,8 +132,9 @@ async def handle_support_stats(
         f"⏳ Ждем ответа: **{stats['waiting_user']}**\n"
         f"⚫ Закрыто: **{stats['closed']}**"
     )
-    
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_support_keyboard(),
@@ -177,8 +182,9 @@ async def handle_my_tasks(
             f"{status_emoji} **#{ticket.id}** - {user_label}\n"
             f"👉 `Открыть #{ticket.id}`\n\n"
         )
-        
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_support_keyboard(),
@@ -282,8 +288,9 @@ async def show_ticket_details(
             text += f"{sender_icon} {msg_date}: {msg.text or '[Вложение]'}\n\n"
     else:
         text += "Нет сообщений.\n"
-        
-    await message.answer(
+
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=admin_support_ticket_keyboard(),
@@ -305,7 +312,8 @@ async def start_reply_ticket(
         return
 
     await state.set_state(AdminStates.awaiting_support_reply)
-    await message.answer(
+    await safe_answer(
+        message,
         f"📝 **Ответ на обращение #{ticket_id}**\n\n"
         "Введите текст ответа:",
         reply_markup=cancel_keyboard(),
@@ -435,7 +443,8 @@ async def process_support_reply(
                 try:
                     from bot.utils.text_utils import escape_markdown
                     safe_reply = escape_markdown(reply_text)
-                    await bot.send_message(
+                    await safe_send_message(
+                        bot,
                         chat_id=target_id,
                         text=f"📬 **Ответ на обращение #{ticket_id}**\n\n{safe_reply}",
                         parse_mode="Markdown",
