@@ -17,6 +17,7 @@ from app.services.referral_service import ReferralService
 from app.services.user_service import UserService
 from bot.keyboards.reply import referral_keyboard, referral_list_keyboard
 from bot.utils.formatters import format_usdt, escape_md
+from bot.utils.safe_message import safe_answer
 
 router = Router(name="referral")
 
@@ -91,15 +92,18 @@ async def handle_share_link(
 💡 Совет: Отправляйте ссылку в группы,
 чаты и друзьям напрямую!"""
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
+        parse_mode=None,  # No Markdown to avoid parsing errors
         reply_markup=referral_keyboard(),
     )
 
     # Send additional message with inline buttons
-    await message.answer(
-        "👇 *Быстрые действия:*",
-        parse_mode="Markdown",
+    await safe_answer(
+        message,
+        "👇 Быстрые действия:",
+        parse_mode=None,
         reply_markup=inline_kb,
     )
 
@@ -156,10 +160,8 @@ async def _show_referral_list(
             earned = ref["earned"]
             joined_at = ref["joined_at"]
 
-            username = ref_user.username or "без username"
-            # Escape Markdown
-            username = username.replace("_", "\\_")
-            username = username.replace("*", "\\*")
+            # Use escape_md for safe username display
+            username = escape_md(ref_user.username) if ref_user.username else "без username"
             date_str = joined_at.strftime("%d.%m.%y")
 
             num = idx + (page - 1) * 10
@@ -169,7 +171,8 @@ async def _show_referral_list(
         if total_pages > 1:
             text += f"\n📄 Страница *{page}* из *{total_pages}*"
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=referral_list_keyboard(
@@ -217,7 +220,8 @@ _У вас пока нет партнёров._
 └ L3: *5%* от депозитов и ROI
         """.strip()
 
-        await message.answer(
+        await safe_answer(
+            message,
             text,
             parse_mode="Markdown",
             reply_markup=referral_keyboard(),
@@ -247,7 +251,8 @@ _У вас пока нет партнёров._
 👇 *Выберите уровень для просмотра:*
     """.strip()
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=referral_list_keyboard(level=1, page=1, total_pages=1),
@@ -345,7 +350,8 @@ _У вас пока нет реферальных начислений._
 на ваш баланс!
         """.strip()
 
-        await message.answer(
+        await safe_answer(
+            message,
             text,
             parse_mode="Markdown",
             reply_markup=referral_keyboard(),
@@ -385,7 +391,8 @@ _У вас пока нет реферальных начислений._
             emoji = "✅" if e["paid"] else "⏳"
             text += f"{emoji} +{format_usdt(e['amount'])} | {date}\n"
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=referral_keyboard(),
@@ -464,7 +471,8 @@ async def handle_detailed_stats(
 💡 _Комиссии начисляются автоматически_
     """.strip()
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=referral_keyboard(),
@@ -540,7 +548,8 @@ L2: 9 чел × 2% = *ещё больше!*
 • Нет лимитов на количество партнёров
     """.strip()
 
-    await message.answer(
+    await safe_answer(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=referral_keyboard(),
